@@ -1,3 +1,41 @@
+# 🚀 프로젝트 실행 가이드 (Quick Start)
+
+본 프로젝트는 Docker를 기반으로 Oracle DB, Spring Boot, React 환경을 한 번에 구축합니다.
+
+### 💻 OS별 실행 방법
+
+#### **[Mac / Linux / Windows Git Bash]**
+1. 프로젝트 루트에 `.env` 파일을 위치시킵니다.
+2. 터미널에서 다음 명령어를 실행합니다:
+   ```bash
+   chmod +x run.sh
+   ./run.sh
+   ```
+
+#### **[Windows PowerShell / CMD]**
+1. 프로젝트 루트에 `.env` 파일을 위치시킵니다.
+2. Docker Desktop이 실행 중인지 확인합니다.
+3. 다음 명령어를 순서대로 실행합니다:
+   ```powershell
+   # 1. DB 컨테이너 실행
+   docker-compose up -d
+   
+   # 2. 백엔드 서버 실행 (새 터미널)
+   ./gradlew bootRun
+   
+   # 3. 프론트엔드 서버 실행 (새 터미널)
+   cd frontend
+   npm install  # (최초 1회)
+   npm run dev
+   ```
+
+### 🔑 주요 접속 정보
+- **Frontend**: [http://localhost:5173](http://localhost:5173)
+- **Backend API**: [http://localhost:8080](http://localhost:8080)
+- **Admin 계정**: `admin@vce.com` / `admin123`
+
+---
+
 # 클라우드 구축을 통한 취약점진단 및 모의해킹 프로젝트
 
 클라우드 내 주요 정보시스템에 대한 보안 아키텍처 수립 및 취약점 진단, 모의해킹 컨설팅을 수행하는 프로젝트입니다.
