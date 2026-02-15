@@ -1,0 +1,53 @@
+services:
+  # 1. Oracle Database (v23.4 Free - Mac M1/M2/M3 호환성 우수)
+  oracle-db:
+    image: gvenzl/oracle-free:latest
+    container_name: sk-oracle-db
+    ports:
+      - "1521:1521"
+    environment:
+      - ORACLE_PASSWORD=${DB_PASSWORD}
+      - APP_USER=${DB_USERNAME}
+      - APP_USER_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+      - ./src/main/resources/db/init.sql:/container-entrypoint-initdb.d/init.sql # 초기화 스크립트 마운트
+    healthcheck:
+      test: [ "CMD-SHELL", "echo 'exit' | sqlplus -L sys/${DB_PASSWORD}@localhost:1521/FREEPDB1 as sysdba" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # 2. Backend (Spring Boot)
+  backend:
+    build: .
+    container_name: sk-backend
+    ports:
+      - "8080:8080"
+    depends_on:
+      oracle-db:
+        condition: service_healthy
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:oracle:thin:@oracle-db:1521/FREEPDB1
+      - SPRING_DATASOURCE_USERNAME=${DB_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD}
+      - SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT=org.hibernate.dialect.OracleDialect
+      - JWT_SECRET=${JWT_SECRET}
+      - KAKAO_CLIENT_ID=${KAKAO_CLIENT_ID}
+      - KAKAO_CLIENT_SECRET=${KAKAO_CLIENT_SECRET}
+      - NAVER_CLIENT_ID=${NAVER_CLIENT_ID}
+      - NAVER_CLIENT_SECRET=${NAVER_CLIENT_SECRET}
+
+  # 3. Frontend (React)
+  frontend:
+    build: ./frontend
+    container_name: sk-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8080
+    stdin_open: true
+    tty: true
+
+volumes:
+  oracle-data:
