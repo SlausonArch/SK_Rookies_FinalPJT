@@ -11,7 +11,8 @@ services:
       - APP_USER_PASSWORD=${DB_PASSWORD}
     volumes:
       - oracle-data:/opt/oracle/oradata
-      - ./src/main/resources/db/init.sql:/container-entrypoint-initdb.d/init.sql # 초기화 스크립트 마운트
+      - ./src/main/resources/db/schema.sql:/container-entrypoint-initdb.d/01_schema.sql # DDL
+      - ./src/main/resources/db/init.sql:/container-entrypoint-initdb.d/02_init.sql # Seed data
     healthcheck:
       test: [ "CMD-SHELL", "echo 'exit' | sqlplus -L sys/${DB_PASSWORD}@localhost:1521/FREEPDB1 as sysdba" ]
       interval: 30s
