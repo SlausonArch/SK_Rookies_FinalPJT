@@ -4,6 +4,9 @@ import Signup from './pages/Signup';
 import SignupComplete from './pages/SignupComplete';
 import Home from './pages/Home';
 import OAuthCallback from './pages/OAuthCallback';
+import Community from './pages/Community';
+import CommunityDetail from './pages/community/CommunityDetail';
+import CommunityWrite from './pages/community/CommunityWrite';
 
 function App() {
   return (
@@ -13,6 +16,10 @@ function App() {
         <Route path="/signup" element={<Signup />} />
         <Route path="/signup/complete" element={<SignupComplete />} />
         <Route path="/oauth/callback" element={<OAuthCallback />} />
+        <Route path="/community" element={<Community />} />
+        <Route path="/community/write" element={<CommunityWrite />} />
+        <Route path="/community/:postId" element={<CommunityDetail />} />
+        <Route path="/community/:postId/edit" element={<CommunityWrite />} />
         <Route path="/" element={<Home />} />
       </Routes>
     </Router>
