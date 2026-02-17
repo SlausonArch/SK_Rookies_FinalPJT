@@ -57,6 +57,10 @@ public class Member {
     @Builder.Default
     private Status status = Status.PENDING;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "TIER_LEVEL")
+    private FeeTier feeTier;
+
     @CreatedDate
     @Column(name = "CREATED_AT", updatable = false)
     private LocalDateTime createdAt;

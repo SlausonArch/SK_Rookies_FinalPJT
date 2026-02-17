@@ -50,6 +50,19 @@ const AuthLink = styled(Link)`
   }
 `;
 
+const LogoutButton = styled.button`
+  color: white;
+  text-decoration: none;
+  font-size: 14px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  &:hover {
+    text-decoration: underline;
+  }
+`;
+
 const Header: React.FC = () => {
     const isLoggedIn = !!localStorage.getItem('accessToken');
 
@@ -75,9 +88,9 @@ const Header: React.FC = () => {
                 {isLoggedIn ? (
                     <>
                         <AuthLink to="/mypage">마이페이지</AuthLink>
-                        <AuthLink as="button" onClick={handleLogout} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                        <LogoutButton onClick={handleLogout}>
                             로그아웃
-                        </AuthLink>
+                        </LogoutButton>
                     </>
                 ) : (
                     <>
