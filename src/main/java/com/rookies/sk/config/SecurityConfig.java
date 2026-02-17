@@ -12,6 +12,8 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
@@ -28,6 +30,11 @@ public class SecurityConfig {
     private final CustomOAuth2UserService customOAuth2UserService;
     private final OAuth2SuccessHandler oAuth2SuccessHandler;
     private final JwtTokenProvider jwtTokenProvider;
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -52,7 +59,8 @@ public class SecurityConfig {
                                                                                                               // necessarily
                                                                                                               // here.
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/", "/login/**", "/oauth2/**", "/api/auth/**", "/error").permitAll()
+                        .requestMatchers("/", "/login/**", "/oauth2/**", "/api/auth/**", "/error", "/uploads/**")
+                        .permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/community/posts/**").permitAll()
                         .requestMatchers("/api/auth/signup/complete").hasRole("GUEST") // Need Guest role
                         .anyRequest().authenticated())
@@ -60,7 +68,12 @@ public class SecurityConfig {
                         .userInfoEndpoint(userInfo -> userInfo.userService(customOAuth2UserService))
                         .successHandler(oAuth2SuccessHandler))
                 .addFilterBefore(new JwtAuthenticationFilter(jwtTokenProvider),
-                        UsernamePasswordAuthenticationFilter.class);
+                        UsernamePasswordAuthenticationFilter.class)
+                .exceptionHandling(exception -> exception
+                        .defaultAuthenticationEntryPointFor(
+                                new org.springframework.security.web.authentication.HttpStatusEntryPoint(
+                                        org.springframework.http.HttpStatus.UNAUTHORIZED),
+                                new org.springframework.security.web.util.matcher.AntPathRequestMatcher("/api/**")));
 
         return http.build();
     }

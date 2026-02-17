@@ -13,10 +13,10 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         // /uploads/** 경로로 들어오는 요청을 로컬의 uploads/ 폴더와 연결
-        Path uploadDir = Paths.get("./uploads");
-        String uploadPath = uploadDir.toFile().getAbsolutePath();
+        Path uploadDir = Paths.get("./uploads").toAbsolutePath().normalize();
+        String uploadPath = uploadDir.toUri().toString();
 
         registry.addResourceHandler("/uploads/**")
-                .addResourceLocations("file:/" + uploadPath + "/");
+                .addResourceLocations(uploadPath);
     }
 }

@@ -40,4 +40,10 @@ public class MemberService {
         return memberRepository.findById(memberId)
                 .orElseThrow(() -> new RuntimeException("Member not found"));
     }
+
+    @Transactional(readOnly = true)
+    public Member findByEmailForLogin(String email) {
+        return memberRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Member not found"));
+    }
 }

@@ -7,7 +7,9 @@ echo "🚀 Starting Vulnerability Lab Project..."
 
 # .env 파일 로드
 if [ -f .env ]; then
-  export $(echo $(cat .env | sed 's/#.*//g' | xargs) | envsubst)
+  set -a
+  source .env
+  set +a
 fi
 # 1. Database Check (Docker)
 echo "🗄️ Checking Oracle Database..."

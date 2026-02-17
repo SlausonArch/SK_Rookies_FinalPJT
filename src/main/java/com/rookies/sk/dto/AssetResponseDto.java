@@ -13,4 +13,5 @@ public class AssetResponseDto {
     private BigDecimal balance;
     private BigDecimal lockedBalance;
     private BigDecimal availableBalance;
+    private BigDecimal averageBuyPrice;
 }

@@ -90,6 +90,12 @@ const AttachBox = styled.div`
     color: #093687;
     font-weight: 700;
   }
+
+  img, video {
+    max-width: 100%;
+    margin-top: 12px;
+    border-radius: 8px;
+  }
 `;
 
 const Actions = styled.div`
@@ -289,6 +295,19 @@ function CommunityDetail() {
                     <a href={attachmentHref} target="_blank" rel="noreferrer">
                       열기
                     </a>
+                    {(() => {
+                      const ext = post.attachmentUrl?.split('.').pop()?.toLowerCase();
+                      const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
+                      const videoExts = ['mp4', 'webm', 'ogg', 'mov'];
+
+                      if (ext && imageExts.includes(ext)) {
+                        return <img src={attachmentHref} alt="첨부 이미지" />;
+                      }
+                      if (ext && videoExts.includes(ext)) {
+                        return <video src={attachmentHref} controls />;
+                      }
+                      return null;
+                    })()}
                   </AttachBox>
                 )}
               </ContentArea>

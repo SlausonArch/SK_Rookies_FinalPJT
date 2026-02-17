@@ -71,7 +71,9 @@ export function useUpbitTicker(markets: string[]) {
     };
 
     return () => {
-      ws.close();
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
       wsRef.current = null;
     };
   }, [marketsKey]);
@@ -107,7 +109,9 @@ export function useUpbitOrderbook(market: string) {
     };
 
     return () => {
-      ws.close();
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
       wsRef.current = null;
     };
   }, [market]);
@@ -144,7 +148,9 @@ export function useUpbitTrades(market: string) {
     };
 
     return () => {
-      ws.close();
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
       wsRef.current = null;
     };
   }, [market]);

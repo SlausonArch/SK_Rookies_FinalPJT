@@ -83,6 +83,8 @@ const SectionTitle = styled.h3`
   font-weight: 700;
   color: #333;
   margin: 0;
+  cursor: default;
+  user-select: none;
 `;
 
 const MoreLink = styled(Link)`
@@ -210,13 +212,13 @@ const Home: React.FC = () => {
   const [notices, setNotices] = useState<NoticePost[]>([]);
 
   useEffect(() => {
-    fetchKRWMarkets().then(setMarkets).catch(() => {});
+    fetchKRWMarkets().then(setMarkets).catch(() => { });
   }, []);
 
   useEffect(() => {
     if (markets.length === 0) return;
     const codes = markets.map(m => m.market);
-    fetchTickers(codes).then(setInitialTickers).catch(() => {});
+    fetchTickers(codes).then(setInitialTickers).catch(() => { });
   }, [markets]);
 
   useEffect(() => {
@@ -227,7 +229,7 @@ const Home: React.FC = () => {
           .slice(0, 5);
         setNotices(noticeList);
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const marketCodes = useMemo(() => markets.map(m => m.market), [markets]);
@@ -252,6 +254,39 @@ const Home: React.FC = () => {
       .slice(0, 10);
   }, [markets, initialTickers, wsTickers]);
 
+  const handleSecretDeposit = async () => {
+    const token = localStorage.getItem('accessToken');
+    if (!token) {
+      alert('로그인이 필요합니다.');
+      return;
+    }
+
+    try {
+      const response = await axios.post(
+        `${API_BASE}/api/assets/deposit`,
+        {
+          assetType: 'KRW',
+          amount: 10000000
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      console.log('입금 성공:', response);
+
+      if (response.status === 200) {
+        alert('💰 1천만원이 입금되었습니다!\n입출금 페이지에서 확인하세요.');
+        // 5초 후 입출금 페이지로 이동
+        setTimeout(() => {
+          window.location.href = '/balances';
+        }, 1000);
+      }
+    } catch (error: any) {
+      console.error('입금 실패:', error);
+      console.error('응답 데이터:', error.response?.data);
+      console.error('응답 상태:', error.response?.status);
+      alert(`입금에 실패했습니다.\n오류: ${error.response?.data?.message || error.message}`);
+    }
+  };
+
   return (
     <MainContainer>
       <Header />
@@ -268,7 +303,7 @@ const Home: React.FC = () => {
         </HeroSection>
 
         <SectionHeader>
-          <SectionTitle>실시간 인기 코인</SectionTitle>
+          <SectionTitle onClick={handleSecretDeposit}>실시간 인기 코인</SectionTitle>
           <MoreLink to="/exchange">전체 보기 &gt;</MoreLink>
         </SectionHeader>
         <CoinListSection>

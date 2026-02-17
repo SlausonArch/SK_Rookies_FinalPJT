@@ -1,6 +1,7 @@
 package com.rookies.sk.controller;
 
 import com.rookies.sk.dto.AssetResponseDto;
+import com.rookies.sk.dto.AssetSummaryDto;
 import com.rookies.sk.dto.DepositRequestDto;
 import com.rookies.sk.service.AssetService;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,12 @@ public class AssetController {
     public ResponseEntity<List<AssetResponseDto>> getAssets(
             @AuthenticationPrincipal UserDetails userDetails) {
         return ResponseEntity.ok(assetService.getAssets(userDetails.getUsername()));
+    }
+
+    @GetMapping("/summary")
+    public ResponseEntity<AssetSummaryDto> getAssetSummary(
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(assetService.getAssetSummary(userDetails.getUsername()));
     }
 
     @GetMapping("/{assetType}")

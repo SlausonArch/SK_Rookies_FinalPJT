@@ -35,7 +35,8 @@ const TimeframeBtn = styled.button<{ $active: boolean }>`
 
 const ChartContainer = styled.div`
   flex: 1;
-  min-height: 300px;
+  min-height: 0;
+  overflow: hidden;
 `;
 
 type Timeframe = { label: string; unit: number; type: 'minute' | 'day' };
@@ -93,10 +94,11 @@ const PriceChart: React.FC<Props> = ({ market }) => {
 
     const resizeObserver = new ResizeObserver(entries => {
       for (const entry of entries) {
-        chart.applyOptions({
-          width: entry.contentRect.width,
-          height: entry.contentRect.height,
-        });
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          chart.applyOptions({ width, height });
+          chart.timeScale().fitContent();
+        }
       }
     });
     resizeObserver.observe(containerRef.current);

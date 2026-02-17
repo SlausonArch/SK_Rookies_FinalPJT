@@ -11,7 +11,9 @@ import Orderbook from './exchange/Orderbook';
 import TradeForm from './exchange/TradeForm';
 import RecentTrades from './exchange/RecentTrades';
 
-const PageContainer = styled.div`
+import axios from 'axios';
+
+const ExchangeContainer = styled.div`
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -21,7 +23,7 @@ const PageContainer = styled.div`
 const ExchangeBody = styled.div`
   display: grid;
   grid-template-columns: 260px 1fr 280px;
-  grid-template-rows: 1fr auto;
+  grid-template-rows: 1fr 350px;
   flex: 1;
   gap: 1px;
   background: #dfe7f6;
@@ -47,14 +49,10 @@ const OrderbookPanel = styled.div`
   overflow: hidden;
 `;
 
-const TradeFormPanel = styled.div`
-  background: #fff;
-  min-height: 280px;
-`;
-
 const RecentTradesPanel = styled.div`
   background: #fff;
-  min-height: 280px;
+  min-height: 350px;
+  max-height: 350px;
   overflow: hidden;
 `;
 
@@ -104,11 +102,115 @@ function formatVolume(n: number): string {
   return n.toLocaleString('ko-KR', { maximumFractionDigits: 0 });
 }
 
+// ... (기존 import 유지)
+
+const TradePanelContainer = styled.div`
+  background: white;
+  min-height: 350px;
+  max-height: 350px;
+  display: flex;
+  flex-direction: column;
+`;
+
+const TabHeader = styled.div`
+  display: flex;
+  border-bottom: 1px solid #dfe7f6;
+  background: #f8f9fa;
+`;
+
+const TabButton = styled.button<{ $active: boolean }>`
+  flex: 1;
+  padding: 12px;
+  border: none;
+  background: ${props => props.$active ? '#fff' : 'transparent'};
+  font-weight: 600;
+  color: ${props => props.$active ? '#093687' : '#666'};
+  border-bottom: ${props => props.$active ? '2px solid #093687' : 'none'};
+  cursor: pointer;
+  font-size: 14px;
+
+  &:hover {
+    color: #093687;
+  }
+`;
+
+const TabContent = styled.div`
+  flex: 1;
+  overflow-y: auto;
+`;
+
+// 내 거래내역 컴포넌트 (Exchange 내부용)
+const MyHistory = ({ market }: { market: string }) => {
+  const [data, setData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchHistory = async () => {
+      const token = localStorage.getItem('accessToken');
+      if (!token) return;
+
+      setLoading(true);
+      try {
+        const assetType = market.replace('KRW-', '');
+        const res = await axios.get(`http://localhost:8080/api/transactions?assetType=${assetType}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setData(res.data || []);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchHistory();
+  }, [market]);
+
+  if (loading) return <div style={{ padding: '20px', textAlign: 'center' }}>로딩 중...</div>;
+  if (data.length === 0) return <div style={{ padding: '20px', textAlign: 'center', color: '#999' }}>거래 내역이 없습니다.</div>;
+
+  return (
+    <div style={{ fontSize: '12px' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr style={{ background: '#f8f9fa', color: '#666', borderBottom: '1px solid #eee' }}>
+            <th style={{ padding: '8px', textAlign: 'left' }}>시간</th>
+            <th style={{ padding: '8px', textAlign: 'center' }}>종류</th>
+            <th style={{ padding: '8px', textAlign: 'right' }}>가격</th>
+            <th style={{ padding: '8px', textAlign: 'right' }}>수량</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((tx: any) => (
+            <tr key={tx.txId} style={{ borderBottom: '1px solid #f0f0f0' }}>
+              <td style={{ padding: '8px', color: '#666' }}>
+                {new Date(tx.txDate).toLocaleDateString()}<br />
+                {new Date(tx.txDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </td>
+              <td style={{ padding: '8px', textAlign: 'center' }}>
+                <span style={{
+                  color: tx.txType === 'BUY' ? '#d60000' : tx.txType === 'SELL' ? '#0051c7' : '#333',
+                  fontWeight: 'bold'
+                }}>
+                  {tx.txType === 'BUY' ? '매수' : tx.txType === 'SELL' ? '매도' : tx.txType === 'DEPOSIT' ? '입금' : '출금'}
+                </span>
+              </td>
+              <td style={{ padding: '8px', textAlign: 'right' }}>{(tx.txType === 'DEPOSIT' || tx.txType === 'WITHDRAW') ? '-' : Number(tx.price).toLocaleString()}</td>
+              <td style={{ padding: '8px', textAlign: 'right' }}>{Number(tx.amount).toFixed(4)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
 const Exchange: React.FC = () => {
   const [searchParams] = useSearchParams();
   const [markets, setMarkets] = useState<UpbitMarket[]>([]);
   const [selectedMarket, setSelectedMarket] = useState('KRW-BTC');
   const [selectedPrice, setSelectedPrice] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState<'order' | 'history'>('order');
 
   // URL 파라미터에서 마켓 설정
   useEffect(() => {
@@ -122,8 +224,8 @@ const Exchange: React.FC = () => {
       setMarkets(data);
       // 초기 시세 로드도 함께
       const codes = data.map(m => m.market);
-      fetchTickers(codes).catch(() => {});
-    }).catch(() => {});
+      fetchTickers(codes).catch(() => { });
+    }).catch(() => { });
   }, []);
 
   // WebSocket 연결
@@ -144,7 +246,7 @@ const Exchange: React.FC = () => {
   };
 
   return (
-    <PageContainer>
+    <ExchangeContainer>
       <Header />
       <MarketInfo>
         <MarketName>
@@ -189,19 +291,39 @@ const Exchange: React.FC = () => {
           <Orderbook orderbook={orderbook} onPriceClick={handlePriceClick} />
         </OrderbookPanel>
 
-        <TradeFormPanel>
-          <TradeForm
-            market={selectedMarket}
-            currentPrice={currentPrice}
-            selectedPrice={selectedPrice}
-          />
-        </TradeFormPanel>
+        <TradePanelContainer>
+          <TabHeader>
+            <TabButton
+              $active={activeTab === 'order'}
+              onClick={() => setActiveTab('order')}
+            >
+              주문
+            </TabButton>
+            <TabButton
+              $active={activeTab === 'history'}
+              onClick={() => setActiveTab('history')}
+            >
+              내역
+            </TabButton>
+          </TabHeader>
+          <TabContent>
+            {activeTab === 'order' ? (
+              <TradeForm
+                market={selectedMarket}
+                currentPrice={currentPrice}
+                selectedPrice={selectedPrice}
+              />
+            ) : (
+              <MyHistory market={selectedMarket} />
+            )}
+          </TabContent>
+        </TradePanelContainer>
 
         <RecentTradesPanel>
           <RecentTrades trades={trades} />
         </RecentTradesPanel>
       </ExchangeBody>
-    </PageContainer>
+    </ExchangeContainer>
   );
 };
 

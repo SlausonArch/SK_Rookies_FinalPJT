@@ -1,5 +1,7 @@
 package com.rookies.sk.controller;
 
+import com.rookies.sk.dto.AdminLoginRequest;
+import com.rookies.sk.dto.AdminLoginResponse;
 import com.rookies.sk.dto.SignupRequestDto;
 import com.rookies.sk.entity.Member;
 import com.rookies.sk.security.JwtTokenProvider;
@@ -10,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -22,6 +25,43 @@ public class AuthController {
     private final MemberService memberService;
     private final FileService fileService;
     private final JwtTokenProvider jwtTokenProvider;
+    private final PasswordEncoder passwordEncoder;
+
+    @PostMapping("/admin/login")
+    public ResponseEntity<?> adminLogin(@RequestBody AdminLoginRequest request) {
+        try {
+            // 이메일로 회원 조회
+            Member member = memberService.findByEmailForLogin(request.getEmail());
+
+            // 비밀번호 검증
+            if (member.getPassword() == null || !passwordEncoder.matches(request.getPassword(), member.getPassword())) {
+                return ResponseEntity.status(401).body("Invalid credentials");
+            }
+
+            // 관리자 권한 확인
+            if (member.getRole() != Member.Role.ADMIN) {
+                return ResponseEntity.status(403).body("Access denied");
+            }
+
+            // JWT 토큰 생성
+            String accessToken = jwtTokenProvider.createAccessToken(
+                    member.getEmail(),
+                    member.getRole().name(),
+                    member.getMemberId());
+
+            // 응답 생성
+            AdminLoginResponse response = new AdminLoginResponse(
+                    accessToken,
+                    member.getRole().name(),
+                    member.getEmail(),
+                    member.getName());
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Admin login failed", e);
+            return ResponseEntity.status(401).body("Login failed");
+        }
+    }
 
     @PostMapping("/signup/complete")
     public ResponseEntity<?> completeSignup(

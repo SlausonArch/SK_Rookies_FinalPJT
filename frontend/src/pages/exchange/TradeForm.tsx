@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
 
 const API_BASE = 'http://localhost:8080';
 
@@ -85,8 +86,13 @@ const PercentBtn = styled.button`
   &:hover { background: #e8edf5; }
 `;
 
+const ButtonContainer = styled.div`
+  display: flex;
+  gap: 8px;
+`;
+
 const SubmitBtn = styled.button<{ $type: 'buy' | 'sell' }>`
-  width: 100%;
+  flex: 1;
   padding: 12px;
   font-size: 14px;
   font-weight: 700;
@@ -97,6 +103,19 @@ const SubmitBtn = styled.button<{ $type: 'buy' | 'sell' }>`
   cursor: pointer;
   &:hover { opacity: 0.9; }
   &:disabled { opacity: 0.5; cursor: not-allowed; }
+`;
+
+const HistoryBtn = styled.button`
+  padding: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+  background: #fff;
+  border: 1px solid #dfe7f6;
+  border-radius: 6px;
+  cursor: pointer;
+  width: 80px;
+  &:hover { background: #f8f9fa; }
 `;
 
 const LoginMessage = styled.div`
@@ -140,6 +159,7 @@ function getToken(): string | null {
 }
 
 const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice }) => {
+  const navigate = useNavigate();
   const [tab, setTab] = useState<'buy' | 'sell'>('buy');
   const [price, setPrice] = useState('');
   const [amount, setAmount] = useState('');
@@ -152,6 +172,15 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice }) => 
   const isLoggedIn = !!token;
   const assetType = market.replace('KRW-', '');
 
+  // ... (useEffect 및 핸들러들은 그대로 유지)
+
+
+  useEffect(() => {
+    if (currentPrice > 0) {
+      setPrice(String(currentPrice));
+    }
+  }, [currentPrice, market]);
+
   useEffect(() => {
     if (selectedPrice && selectedPrice > 0) {
       setPrice(String(selectedPrice));
@@ -159,30 +188,26 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice }) => 
   }, [selectedPrice]);
 
   useEffect(() => {
-    if (currentPrice > 0 && !price) {
-      setPrice(String(currentPrice));
-    }
-  }, [currentPrice]);
-
-  useEffect(() => {
     if (!isLoggedIn) return;
     const headers = { Authorization: `Bearer ${token}` };
 
     axios.get(`${API_BASE}/api/assets/KRW`, { headers })
       .then(res => setKrwBalance(res.data.availableBalance ?? 0))
-      .catch(() => {});
+      .catch(() => { });
 
     if (assetType) {
       axios.get(`${API_BASE}/api/assets/${assetType}`, { headers })
         .then(res => setCoinBalance(res.data.availableBalance ?? 0))
-        .catch(() => {});
+        .catch(() => { });
     }
   }, [isLoggedIn, token, assetType, message]);
 
-  const total = (parseFloat(price) || 0) * (parseFloat(amount) || 0);
+  // 쉼표 제거하여 파싱
+  const parseNumber = (str: string) => parseFloat(str.replace(/,/g, '')) || 0;
+  const total = parseNumber(price) * parseNumber(amount);
 
   const handlePercent = (pct: number) => {
-    const p = parseFloat(price) || 0;
+    const p = parseNumber(price);
     if (p <= 0) return;
 
     if (tab === 'buy') {
@@ -208,8 +233,8 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice }) => 
 
   const handleSubmit = async () => {
     if (!token || loading) return;
-    const p = parseFloat(price);
-    const a = parseFloat(amount);
+    const p = parseNumber(price);
+    const a = parseNumber(amount);
     if (!p || !a || p <= 0 || a <= 0) {
       setMessage({ text: '가격과 수량을 입력해 주세요.', success: false });
       return;
@@ -277,9 +302,9 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice }) => 
         <FormRow>
           <Label>가격 (KRW)</Label>
           <Input
-            type="number"
-            value={price}
-            onChange={e => setPrice(e.target.value)}
+            type="text"
+            value={price ? parseNumber(price).toLocaleString('ko-KR') : ''}
+            onChange={e => setPrice(e.target.value.replace(/,/g, ''))}
             placeholder="주문 가격"
           />
         </FormRow>
@@ -287,9 +312,9 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice }) => 
         <FormRow>
           <Label>수량 ({assetType})</Label>
           <Input
-            type="number"
+            type="text"
             value={amount}
-            onChange={e => setAmount(e.target.value)}
+            onChange={e => setAmount(e.target.value.replace(/,/g, ''))}
             placeholder="주문 수량"
           />
         </FormRow>
@@ -305,9 +330,12 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice }) => 
           <Input type="text" value={total > 0 ? total.toLocaleString() : ''} readOnly />
         </FormRow>
 
-        <SubmitBtn $type={tab} onClick={handleSubmit} disabled={loading}>
-          {loading ? '처리 중...' : tab === 'buy' ? `${assetType} 매수` : `${assetType} 매도`}
-        </SubmitBtn>
+        <ButtonContainer>
+          <SubmitBtn $type={tab} onClick={handleSubmit} disabled={loading}>
+            {loading ? '처리 중...' : tab === 'buy' ? `${assetType} 매수` : `${assetType} 매도`}
+          </SubmitBtn>
+          <HistoryBtn onClick={() => navigate('/investments')}>내역</HistoryBtn>
+        </ButtonContainer>
 
         {message && <ResultMessage $success={message.success}>{message.text}</ResultMessage>}
       </FormBody>

@@ -60,6 +60,24 @@ public class OrderService {
             assetRepository.save(krwAsset);
 
             Asset coinAsset = assetService.findOrCreateAsset(member, assetType);
+
+            // 평단가 계산 (가중 평균)
+            BigDecimal currentBalance = coinAsset.getBalance();
+            BigDecimal currentAvg = coinAsset.getAverageBuyPrice() != null ? coinAsset.getAverageBuyPrice()
+                    : BigDecimal.ZERO;
+
+            if (currentBalance.compareTo(BigDecimal.ZERO) == 0) {
+                coinAsset.setAverageBuyPrice(price);
+            } else {
+                BigDecimal currentTotal = currentBalance.multiply(currentAvg);
+                BigDecimal newTotal = currentTotal.add(totalValue);
+                BigDecimal newBalance = currentBalance.add(amount);
+                // 0으로 나누기 방지 (이론상 newBalance는 0보다 큼)
+                if (newBalance.compareTo(BigDecimal.ZERO) > 0) {
+                    coinAsset.setAverageBuyPrice(newTotal.divide(newBalance, 8, RoundingMode.HALF_UP));
+                }
+            }
+
             coinAsset.setBalance(coinAsset.getBalance().add(amount));
             assetRepository.save(coinAsset);
 
@@ -141,7 +159,8 @@ public class OrderService {
             krwAsset.setLockedBalance(krwAsset.getLockedBalance().subtract(totalValue.add(fee)));
             assetRepository.save(krwAsset);
         } else {
-            Asset coinAsset = assetRepository.findWithLockByMember_MemberIdAndAssetType(member.getMemberId(), order.getAssetType())
+            Asset coinAsset = assetRepository
+                    .findWithLockByMember_MemberIdAndAssetType(member.getMemberId(), order.getAssetType())
                     .orElseThrow(() -> new RuntimeException("자산을 찾을 수 없습니다."));
             coinAsset.setLockedBalance(coinAsset.getLockedBalance().subtract(remainingAmount));
             assetRepository.save(coinAsset);

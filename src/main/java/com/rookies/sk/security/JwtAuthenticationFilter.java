@@ -30,18 +30,24 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         String token = resolveToken(request);
+        log.info("Request URI: {}", request.getRequestURI());
+        log.info("Resolved Token: {}", token != null ? "Token present" : "Token missing");
 
         // V-02: Weak check - just valid signature with weak key
         if (token != null && tokenProvider.validateToken(token)) {
             String email = tokenProvider.getEmail(token);
             String role = tokenProvider.getRole(token);
+            log.info("Token Valid. Email: {}, Role: {}", email, role);
 
             // Reconstruct Authentication object from Token
-            List<GrantedAuthority> authorities = Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role));
+            List<GrantedAuthority> authorities = Collections
+                    .singletonList(new SimpleGrantedAuthority(role.startsWith("ROLE_") ? role : "ROLE_" + role));
             UserDetails userDetails = new User(email, "", authorities);
             Authentication authentication = new UsernamePasswordAuthenticationToken(userDetails, "", authorities);
 
             SecurityContextHolder.getContext().setAuthentication(authentication);
+        } else if (token != null) {
+            log.warn("Token Invalid");
         }
 
         filterChain.doFilter(request, response);

@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@Table(name = "ASSETS", uniqueConstraints = @UniqueConstraint(columnNames = {"MEMBER_ID", "ASSET_TYPE"}))
+@Table(name = "ASSETS", uniqueConstraints = @UniqueConstraint(columnNames = { "MEMBER_ID", "ASSET_TYPE" }))
 public class Asset {
 
     @Id
@@ -34,6 +34,10 @@ public class Asset {
     @Column(name = "LOCKED_BALANCE", precision = 19, scale = 8)
     @Builder.Default
     private BigDecimal lockedBalance = BigDecimal.ZERO;
+
+    @Column(name = "AVERAGE_BUY_PRICE", precision = 19, scale = 8)
+    @Builder.Default
+    private BigDecimal averageBuyPrice = BigDecimal.ZERO;
 
     @Column(name = "UPDATED_AT")
     private LocalDateTime updatedAt;
