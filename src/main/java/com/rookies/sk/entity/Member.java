@@ -41,8 +41,14 @@ public class Member {
     @Column(length = 200)
     private String address;
 
+    @Column(name = "BANK_NAME", length = 30)
+    private String bankName;
+
     @Column(name = "ACCOUNT_NUMBER", length = 50)
     private String accountNumber;
+
+    @Column(name = "ACCOUNT_HOLDER", length = 50)
+    private String accountHolder;
 
     @Column(name = "ID_PHOTO_URL", length = 255)
     private String idPhotoUrl;

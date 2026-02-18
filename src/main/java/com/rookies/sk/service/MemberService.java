@@ -46,4 +46,9 @@ public class MemberService {
         return memberRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Member not found"));
     }
+
+    @Transactional
+    public Member saveMember(Member member) {
+        return memberRepository.save(member);
+    }
 }

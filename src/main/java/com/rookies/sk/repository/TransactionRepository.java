@@ -12,4 +12,6 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
     List<Transaction> findByMember_MemberIdAndAssetTypeOrderByTxDateDesc(Long memberId, String assetType);
 
     List<Transaction> findByMember_MemberIdAndTxType(Long memberId, String txType);
+
+    List<Transaction> findByMember_MemberIdAndTxTypeAndAssetType(Long memberId, String txType, String assetType);
 }

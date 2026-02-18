@@ -117,11 +117,11 @@ public class AssetService {
         public AssetSummaryDto getAssetSummary(String email) {
                 Member member = findMemberByEmail(email);
 
-                // 총 투자원금 계산 (DEPOSIT - WITHDRAW)
-                List<Transaction> depositTxs = transactionRepository.findByMember_MemberIdAndTxType(
-                                member.getMemberId(), "DEPOSIT");
-                List<Transaction> withdrawTxs = transactionRepository.findByMember_MemberIdAndTxType(
-                                member.getMemberId(), "WITHDRAW");
+                // 총 투자원금 계산 (KRW DEPOSIT - KRW WITHDRAW만 합산, 코인 입출금 제외)
+                List<Transaction> depositTxs = transactionRepository.findByMember_MemberIdAndTxTypeAndAssetType(
+                                member.getMemberId(), "DEPOSIT", "KRW");
+                List<Transaction> withdrawTxs = transactionRepository.findByMember_MemberIdAndTxTypeAndAssetType(
+                                member.getMemberId(), "WITHDRAW", "KRW");
 
                 BigDecimal totalDeposit = depositTxs.stream()
                                 .map(Transaction::getAmount)

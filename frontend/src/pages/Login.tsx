@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import styled from 'styled-components';
 import { Link } from 'react-router-dom';
+import axios from 'axios';
 
 const Container = styled.div`
   display: flex;
@@ -24,7 +25,7 @@ const LogoArea = styled.div`
   margin-bottom: 40px;
   font-size: 32px;
   font-weight: 700;
-  color: #093687; /* Upbit Blue-ish */
+  color: #093687;
 `;
 
 const Title = styled.h2`
@@ -47,10 +48,10 @@ const SocialButton = styled.a<{ provider: string }>`
   font-weight: 500;
   cursor: pointer;
   transition: opacity 0.2s;
-  
+
   color: ${props => props.provider === 'naver' ? 'white' : '#3c1e1e'};
   background-color: ${props => props.provider === 'naver' ? '#03C75A' : '#FEE500'};
-  
+
   &:hover {
     opacity: 0.9;
   }
@@ -60,7 +61,7 @@ const Divider = styled.div`
   margin: 30px 0;
   border-top: 1px solid #e1e4e8;
   position: relative;
-  
+
   &:after {
     content: "또는";
     position: absolute;
@@ -74,6 +75,44 @@ const Divider = styled.div`
   }
 `;
 
+const TestLoginButton = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 50px;
+  margin-bottom: 12px;
+  border-radius: 6px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  border: 2px solid #093687;
+  background: white;
+  color: #093687;
+
+  &:hover {
+    background: #f0f4ff;
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
+
+const TestInfo = styled.div`
+  margin-top: 8px;
+  font-size: 12px;
+  color: #999;
+  line-height: 1.5;
+`;
+
+const ErrorMsg = styled.div`
+  margin-top: 8px;
+  font-size: 13px;
+  color: #d60000;
+`;
+
 const FooterLink = styled.div`
   margin-top: 20px;
   font-size: 14px;
@@ -84,7 +123,7 @@ const FooterLink = styled.div`
     text-decoration: none;
     font-weight: 600;
     margin-left: 5px;
-    
+
     &:hover {
       text-decoration: underline;
     }
@@ -92,6 +131,27 @@ const FooterLink = styled.div`
 `;
 
 const Login: React.FC = () => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleTestLogin = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const { data } = await axios.post('http://localhost:8080/api/auth/test/login', {
+        email: 'test@vce.com',
+        password: 'test1234',
+      });
+      localStorage.setItem('accessToken', data.accessToken);
+      localStorage.setItem('refreshToken', data.refreshToken);
+      window.location.href = '/';
+    } catch (e: any) {
+      setError(e.response?.data || '로그인에 실패했습니다. 서버를 확인해주세요.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Container>
       <LoginBox>
@@ -113,11 +173,15 @@ const Login: React.FC = () => {
 
         <Divider />
 
-        <FooterLink>
-          계정이 없으신가요?
-          <Link to="/signup">회원가입</Link>
-        </FooterLink>
-        <FooterLink style={{ marginTop: '10px' }}>
+        <TestLoginButton onClick={handleTestLogin} disabled={loading}>
+          {loading ? '로그인 중...' : '테스트 계정으로 로그인'}
+        </TestLoginButton>
+        <TestInfo>
+          test@vce.com / test1234 (KRW 1,000만원)
+        </TestInfo>
+        {error && <ErrorMsg>{error}</ErrorMsg>}
+
+        <FooterLink style={{ marginTop: '16px' }}>
           <Link to="/admin/login">관리자 로그인</Link>
         </FooterLink>
       </LoginBox>

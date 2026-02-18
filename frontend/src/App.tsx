@@ -13,6 +13,7 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import Balances from './pages/Balances';
 import Investments from './pages/Investments';
 import Trends from './pages/Trends';
+import MyPage from './pages/MyPage';
 
 function App() {
   return (
@@ -30,6 +31,7 @@ function App() {
         <Route path="/balances" element={<Balances />} />
         <Route path="/investments" element={<Investments />} />
         <Route path="/trends" element={<Trends />} />
+        <Route path="/mypage" element={<MyPage />} />
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
         <Route path="/" element={<Home />} />

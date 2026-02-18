@@ -421,14 +421,14 @@ const Investments = () => {
                   >
                     <Td><strong>{symbol}</strong></Td>
                     <Td>{balance.toFixed(8)}</Td>
-                    <Td>₩{Math.round(avgPrice).toLocaleString()}</Td>
+                    <Td>{avgPrice > 0 ? `₩${Math.round(avgPrice).toLocaleString()}` : '-'}</Td>
                     <Td>₩{currentPrice.toLocaleString()}</Td>
                     <Td>₩{Math.round(valuation).toLocaleString()}</Td>
-                    <Td style={{ color: profit >= 0 ? '#d60000' : '#0051c7' }}>
-                      {profit >= 0 ? '+' : ''}₩{Math.round(profit).toLocaleString()}
+                    <Td style={{ color: avgPrice > 0 ? (profit >= 0 ? '#d60000' : '#0051c7') : '#999' }}>
+                      {avgPrice > 0 ? `${profit >= 0 ? '+' : ''}₩${Math.round(profit).toLocaleString()}` : '-'}
                     </Td>
-                    <Td style={{ color: profitRate >= 0 ? '#d60000' : '#0051c7' }}>
-                      {profitRate >= 0 ? '+' : ''}{profitRate.toFixed(2)}%
+                    <Td style={{ color: avgPrice > 0 ? (profitRate >= 0 ? '#d60000' : '#0051c7') : '#999' }}>
+                      {avgPrice > 0 ? `${profitRate >= 0 ? '+' : ''}${profitRate.toFixed(2)}%` : '-'}
                     </Td>
                   </Tr>
                 );

@@ -4,7 +4,7 @@ import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
-import { API_BASE, formatDate, getAccessToken, getAuthHeaders } from './community/common';
+import { API_BASE, formatDate, getAccessToken, getAuthHeaders, parseRoleFromToken } from './community/common';
 import type { Post } from './community/common';
 
 type TabType = 'all' | 'notice' | 'general';
@@ -204,6 +204,8 @@ const PageButton = styled.button<{ active: boolean }>`
 function Community() {
   const navigate = useNavigate();
   const token = getAccessToken();
+  const role = parseRoleFromToken(token);
+  const isAdmin = role === 'ADMIN';
   const authHeaders = getAuthHeaders(token);
 
   const [posts, setPosts] = useState<Post[]>([]);
@@ -293,7 +295,9 @@ function Community() {
 
           <ActionRow>
             <Count>총 {filteredPosts.length}개 글</Count>
-            <PrimaryButton type="button" onClick={onClickWrite}>글쓰기</PrimaryButton>
+            {(tab !== 'notice' || isAdmin) && (
+              <PrimaryButton type="button" onClick={onClickWrite}>글쓰기</PrimaryButton>
+            )}
           </ActionRow>
 
           <Table>

@@ -27,6 +27,36 @@ public class AuthController {
     private final JwtTokenProvider jwtTokenProvider;
     private final PasswordEncoder passwordEncoder;
 
+    @PostMapping("/test/login")
+    public ResponseEntity<?> testLogin(@RequestBody AdminLoginRequest request) {
+        try {
+            Member member = memberService.findByEmailForLogin(request.getEmail());
+
+            if (member.getPassword() == null || !passwordEncoder.matches(request.getPassword(), member.getPassword())) {
+                return ResponseEntity.status(401).body("이메일 또는 비밀번호가 올바르지 않습니다.");
+            }
+
+            if (member.getRole() == Member.Role.GUEST) {
+                return ResponseEntity.status(403).body("회원가입이 완료되지 않은 계정입니다.");
+            }
+
+            String accessToken = jwtTokenProvider.createAccessToken(
+                    member.getEmail(), member.getRole().name(), member.getMemberId());
+            String refreshToken = jwtTokenProvider.createRefreshToken(member.getEmail());
+
+            return ResponseEntity.ok(java.util.Map.of(
+                    "accessToken", accessToken,
+                    "refreshToken", refreshToken,
+                    "role", member.getRole().name(),
+                    "email", member.getEmail(),
+                    "name", member.getName()
+            ));
+        } catch (Exception e) {
+            log.error("Test login failed", e);
+            return ResponseEntity.status(401).body("로그인 실패");
+        }
+    }
+
     @PostMapping("/admin/login")
     public ResponseEntity<?> adminLogin(@RequestBody AdminLoginRequest request) {
         try {
@@ -60,6 +90,47 @@ public class AuthController {
         } catch (Exception e) {
             log.error("Admin login failed", e);
             return ResponseEntity.status(401).body("Login failed");
+        }
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<?> getMyInfo(@AuthenticationPrincipal UserDetails userDetails) {
+        try {
+            Member member = memberService.findByEmailForLogin(userDetails.getUsername());
+            java.util.Map<String, Object> result = new java.util.LinkedHashMap<>();
+            result.put("memberId", member.getMemberId());
+            result.put("email", member.getEmail());
+            result.put("name", member.getName());
+            result.put("phoneNumber", member.getPhoneNumber() != null ? member.getPhoneNumber() : "");
+            result.put("address", member.getAddress() != null ? member.getAddress() : "");
+            result.put("bankName", member.getBankName() != null ? member.getBankName() : "");
+            result.put("accountNumber", member.getAccountNumber() != null ? member.getAccountNumber() : "");
+            result.put("accountHolder", member.getAccountHolder() != null ? member.getAccountHolder() : "");
+            result.put("role", member.getRole().name());
+            result.put("status", member.getStatus().name());
+            result.put("createdAt", member.getCreatedAt() != null ? member.getCreatedAt().toString() : "");
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.status(404).body("회원 정보를 찾을 수 없습니다.");
+        }
+    }
+
+    @PutMapping("/me")
+    public ResponseEntity<?> updateMyInfo(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestBody java.util.Map<String, String> body) {
+        try {
+            Member member = memberService.findByEmailForLogin(userDetails.getUsername());
+            if (body.containsKey("name")) member.setName(body.get("name"));
+            if (body.containsKey("phoneNumber")) member.setPhoneNumber(body.get("phoneNumber"));
+            if (body.containsKey("address")) member.setAddress(body.get("address"));
+            if (body.containsKey("bankName")) member.setBankName(body.get("bankName"));
+            if (body.containsKey("accountNumber")) member.setAccountNumber(body.get("accountNumber"));
+            if (body.containsKey("accountHolder")) member.setAccountHolder(body.get("accountHolder"));
+            memberService.saveMember(member);
+            return ResponseEntity.ok(java.util.Map.of("message", "회원 정보가 수정되었습니다."));
+        } catch (Exception e) {
+            return ResponseEntity.status(400).body("회원 정보 수정에 실패했습니다.");
         }
     }
 

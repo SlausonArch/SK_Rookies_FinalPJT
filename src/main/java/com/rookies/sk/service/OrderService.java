@@ -61,18 +61,19 @@ public class OrderService {
 
             Asset coinAsset = assetService.findOrCreateAsset(member, assetType);
 
-            // 평단가 계산 (가중 평균)
+            // 평단가 계산 (가중 평균, 수수료 포함한 실제 비용 기준)
             BigDecimal currentBalance = coinAsset.getBalance();
             BigDecimal currentAvg = coinAsset.getAverageBuyPrice() != null ? coinAsset.getAverageBuyPrice()
                     : BigDecimal.ZERO;
+            BigDecimal costWithFee = totalValue.add(fee); // 수수료 포함 실비용
 
             if (currentBalance.compareTo(BigDecimal.ZERO) == 0) {
-                coinAsset.setAverageBuyPrice(price);
+                // 첫 매수: 수수료 포함 단가 = (가격*수량+수수료) / 수량
+                coinAsset.setAverageBuyPrice(costWithFee.divide(amount, 8, RoundingMode.HALF_UP));
             } else {
                 BigDecimal currentTotal = currentBalance.multiply(currentAvg);
-                BigDecimal newTotal = currentTotal.add(totalValue);
+                BigDecimal newTotal = currentTotal.add(costWithFee);
                 BigDecimal newBalance = currentBalance.add(amount);
-                // 0으로 나누기 방지 (이론상 newBalance는 0보다 큼)
                 if (newBalance.compareTo(BigDecimal.ZERO) > 0) {
                     coinAsset.setAverageBuyPrice(newTotal.divide(newBalance, 8, RoundingMode.HALF_UP));
                 }
