@@ -117,6 +117,9 @@ const Login: React.FC = () => {
           계정이 없으신가요?
           <Link to="/signup">회원가입</Link>
         </FooterLink>
+        <FooterLink style={{ marginTop: '10px' }}>
+          <Link to="/admin/login">관리자 로그인</Link>
+        </FooterLink>
       </LoginBox>
     </Container>
   );

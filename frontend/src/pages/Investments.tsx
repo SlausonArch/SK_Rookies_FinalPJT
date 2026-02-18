@@ -214,7 +214,6 @@ const Investments = () => {
         const assetsData = Array.isArray(balanceResponse.data) ? balanceResponse.data : [];
         setAssets(assetsData);
 
-        const krw = assetsData.find((a: any) => a.assetType === 'KRW');
         // 투자원금 및 KRW 잔고 조회
         const summaryResponse = await axios.get('http://localhost:8080/api/assets/summary', { headers });
         console.log('투자원금 API 응답:', summaryResponse.data);

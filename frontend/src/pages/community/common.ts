@@ -27,7 +27,7 @@ export interface Comment {
 export const API_BASE = 'http://localhost:8080';
 
 export function getAccessToken(): string | null {
-  return localStorage.getItem('accessToken');
+  return localStorage.getItem('accessToken') || localStorage.getItem('token');
 }
 
 export function getAuthHeaders(token: string | null): Record<string, string> {

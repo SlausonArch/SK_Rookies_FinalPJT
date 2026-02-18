@@ -248,11 +248,6 @@ const Balances = () => {
           console.warn('자산 데이터가 비어있습니다.');
         }
 
-        const krw = assets.find((a: any) => a.assetType === 'KRW');
-        if (assetsData.length === 0) {
-          console.warn('자산 데이터가 비어있습니다.');
-        }
-
         // 투자원금 및 KRW 잔고 조회 (summaryResponse가 더 정확함)
         const summaryResponse = await axios.get('http://localhost:8080/api/assets/summary', { headers });
         console.log('투자원금 API 응답:', summaryResponse.data);
