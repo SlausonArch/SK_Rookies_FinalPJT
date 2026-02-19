@@ -9,24 +9,6 @@ import java.util.List;
 
 public interface PostRepository extends JpaRepository<Post, Long> {
 
-    @Query(
-            value = "SELECT * " +
-                    "FROM POSTS " +
-                    "WHERE (:keyword IS NULL " +
-                    "  OR LOWER(TITLE) LIKE LOWER('%' || :keyword || '%') " +
-                    "  OR DBMS_LOB.INSTR(CONTENT, :keyword) > 0) " +
-                    "AND IS_HIDDEN = 'N' " +
-                    "ORDER BY IS_NOTICE DESC, CREATED_AT DESC",
-            nativeQuery = true)
-    List<Post> searchVisiblePosts(@Param("keyword") String keyword);
-
-    @Query(
-            value = "SELECT * " +
-                    "FROM POSTS " +
-                    "WHERE (:keyword IS NULL " +
-                    "  OR LOWER(TITLE) LIKE LOWER('%' || :keyword || '%') " +
-                    "  OR DBMS_LOB.INSTR(CONTENT, :keyword) > 0) " +
-                    "ORDER BY IS_NOTICE DESC, CREATED_AT DESC",
-            nativeQuery = true)
-    List<Post> searchAllPostsForAdmin(@Param("keyword") String keyword);
+    // 공개 게시글만 조회
+    List<Post> findByIsHidden(String isHidden);
 }

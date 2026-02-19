@@ -13,6 +13,7 @@ export interface Post {
   updatedAt: string | null;
   canEdit: boolean;
   canDelete: boolean;
+  userLiked?: boolean;
 }
 
 export interface Comment {

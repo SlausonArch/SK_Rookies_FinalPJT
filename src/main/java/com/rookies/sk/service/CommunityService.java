@@ -10,12 +10,16 @@ import com.rookies.sk.repository.CommunityLikeRepository;
 import com.rookies.sk.repository.MemberRepository;
 import com.rookies.sk.repository.PostRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.Query;
 import java.util.List;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class CommunityService {
@@ -24,6 +28,7 @@ public class CommunityService {
     private final CommentRepository commentRepository;
     private final CommunityLikeRepository communityLikeRepository;
     private final MemberRepository memberRepository;
+    private final EntityManager entityManager;
 
     @Transactional(readOnly = true)
     public List<PostResponseDto> getPosts(String keyword, String currentEmail) {
@@ -31,9 +36,46 @@ public class CommunityService {
         boolean isAdmin = currentMember != null && isAdmin(currentMember);
         Long currentMemberId = currentMember != null ? currentMember.getMemberId() : null;
 
-        List<Post> posts = isAdmin
-                ? postRepository.searchAllPostsForAdmin(normalizeKeyword(keyword))
-                : postRepository.searchVisiblePosts(normalizeKeyword(keyword));
+        log.info("=== Community Search ===");
+        log.info("Keyword: {}", keyword);
+        log.info("IsAdmin: {}", isAdmin);
+
+        List<Post> posts;
+        
+        // V-20 (SQL Injection): 사용자 입력이 검증 없이 SQL 쿼리에 직접 포함됨
+        if (keyword == null || keyword.isBlank()) {
+            if (isAdmin) {
+                posts = postRepository.findAll();
+            } else {
+                posts = postRepository.findByIsHidden("N");
+            }
+        } else {
+            // V-20: SQL Injection 취약점 - 사용자 입력을 직접 JPQL에 포함
+            String jpql;
+            if (isAdmin) {
+                jpql = "SELECT p FROM Post p WHERE LOWER(p.title) LIKE LOWER('%" + keyword + "%') " +
+                       "OR p.content LIKE '%" + keyword + "%' " +
+                       "ORDER BY CASE WHEN p.isNotice = 'Y' THEN 0 ELSE 1 END, p.createdAt DESC";
+            } else {
+                jpql = "SELECT p FROM Post p WHERE (LOWER(p.title) LIKE LOWER('%" + keyword + "%') " +
+                       "OR p.content LIKE '%" + keyword + "%') " +
+                       "AND p.isHidden = 'N' " +
+                       "ORDER BY CASE WHEN p.isNotice = 'Y' THEN 0 ELSE 1 END, p.createdAt DESC";
+            }
+            
+            log.info("Constructed JPQL Query:");
+            log.info("{}", jpql);
+            
+            try {
+                posts = entityManager.createQuery(jpql, Post.class).getResultList();
+                log.info("Query executed successfully. Found {} posts", posts.size());
+            } catch (Exception e) {
+                log.error("QUERY ERROR: {}", e.getMessage());
+                log.error("Error cause: {}", e.getCause());
+                // SQL 오류 발생시 빈 목록 반환
+                posts = List.of();
+            }
+        }
 
         return posts.stream()
                 .map(post -> toPostResponse(post, currentMemberId, isAdmin))
@@ -212,6 +254,7 @@ public class CommunityService {
                 .updatedAt(post.getUpdatedAt())
                 .canEdit(canEdit)
                 .canDelete(canEdit)
+                .userLiked(hasUserLiked(post.getPostId(), currentMemberId))
                 .build();
     }
 
@@ -283,5 +326,12 @@ public class CommunityService {
         }
 
         return "알수없음";
+    }
+
+    private boolean hasUserLiked(Long postId, Long memberId) {
+        if (memberId == null) {
+            return false;
+        }
+        return communityLikeRepository.existsByTargetTypeAndTargetIdAndMember_MemberId("POST", postId, memberId);
     }
 }

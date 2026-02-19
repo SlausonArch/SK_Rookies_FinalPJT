@@ -22,4 +22,5 @@ public class PostResponseDto {
     private LocalDateTime updatedAt;
     private boolean canEdit;
     private boolean canDelete;
+    private boolean userLiked;
 }

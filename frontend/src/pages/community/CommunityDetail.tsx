@@ -100,8 +100,8 @@ const AttachBox = styled.div`
 
 const Actions = styled.div`
   display: flex;
-  justify-content: space-between;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: center;
   gap: 10px;
   padding: 0 24px 20px;
 `;
@@ -119,6 +119,20 @@ const Button = styled.button`
   color: #fff;
   font-weight: 700;
   cursor: pointer;
+  transition: all 0.2s;
+  
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  
+  &:hover:not(:disabled) {
+    transform: scale(1.05);
+  }
+`;
+
+const LikedButton = styled(Button)`
+  background: #ff6b6b;
 `;
 
 const GrayButton = styled(Button)`
@@ -184,6 +198,7 @@ function CommunityDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [savingComment, setSavingComment] = useState(false);
+  const [savingLike, setSavingLike] = useState(false);
 
   const numericPostId = Number(postId);
 
@@ -221,14 +236,30 @@ function CommunityDetail() {
   };
 
   const onLike = async () => {
-    if (!post) return;
+    if (!post || savingLike) return;
     if (!token) {
       alert('로그인이 필요합니다.');
       navigate('/login');
       return;
     }
-    await axios.post(`${API_BASE}/api/community/posts/${post.postId}/like`, {}, { headers: authHeaders });
-    await loadDetail();
+    if (post.userLiked) {
+      alert('이미 좋아요한 게시글입니다.');
+      return;
+    }
+    // 낙관적 UI 업데이트 - 즉시 UI 업데이트
+    setSavingLike(true);
+    const previousPost = post;
+    setPost(prev => prev ? { ...prev, likeCount: prev.likeCount + 1, userLiked: true } : null);
+    
+    try {
+      await axios.post(`${API_BASE}/api/community/posts/${post.postId}/like`, {}, { headers: authHeaders });
+    } catch (error) {
+      // 실패 시 원래 상태로 복구
+      setPost(previousPost);
+      alert('좋아요 처리 중 오류가 발생했습니다.');
+    } finally {
+      setSavingLike(false);
+    }
   };
 
   const onSubmitComment = async (e: FormEvent) => {
@@ -312,11 +343,13 @@ function CommunityDetail() {
                 )}
               </ContentArea>
               <Actions>
+                {post.userLiked ? (
+                  <LikedButton type="button" disabled>👍 이미 좋아요함 {post.likeCount}</LikedButton>
+                ) : (
+                  <Button type="button" onClick={onLike} disabled={savingLike}>👍 {savingLike ? '저장 중...' : `좋아요 ${post.likeCount}`}</Button>
+                )}
                 <Row>
-                  <Button type="button" onClick={onLike}>좋아요</Button>
                   <GrayButton type="button" onClick={() => navigate('/community')}>목록</GrayButton>
-                </Row>
-                <Row>
                   {post.canEdit && (
                     <GrayButton type="button" onClick={() => navigate(`/community/${post.postId}/edit`)}>
                       수정

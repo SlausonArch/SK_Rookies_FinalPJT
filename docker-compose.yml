@@ -31,7 +31,10 @@ services:
     depends_on:
       oracle-db:
         condition: service_healthy
+    volumes:
+      - uploads:/app/uploads
     environment:
+      - UPLOAD_DIR=/app/uploads
       - SPRING_DATASOURCE_URL=jdbc:oracle:thin:@oracle-db:1521/FREEPDB1
       - SPRING_DATASOURCE_USERNAME=${DB_USERNAME}
       - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD}
@@ -55,3 +58,4 @@ services:
 
 volumes:
   oracle-data:
+  uploads:
