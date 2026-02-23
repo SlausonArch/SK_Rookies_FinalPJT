@@ -167,6 +167,74 @@ const Loading = styled.div`
   color: #999;
 `;
 
+const WithdrawButton = styled.button`
+  margin-top: 32px;
+  width: 100%;
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid #ff4d4f;
+  background: white;
+  color: #ff4d4f;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background: #fff1f0;
+  }
+`;
+
+const ModalOverlay = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+`;
+
+const ModalContainer = styled.div`
+  background: white;
+  border-radius: 12px;
+  width: 400px;
+  max-width: 90%;
+  padding: 32px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+`;
+
+const ModalTitle = styled.h2`
+  font-size: 20px;
+  color: #1a2e57;
+  margin-top: 0;
+  margin-bottom: 16px;
+`;
+
+const ModalText = styled.div`
+  font-size: 14px;
+  color: #333;
+  line-height: 1.6;
+  margin-bottom: 24px;
+  background: #f8f9fa;
+  padding: 16px;
+  border-radius: 8px;
+`;
+
+const ModalButtonGroup = styled.div`
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+`;
+
+const ModalButton = styled(Button)`
+  padding: 10px 20px;
+  min-width: 80px;
+`;
+
 /* ── types ── */
 
 interface MemberInfo {
@@ -196,6 +264,8 @@ const MyPage: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const [totalVolume, setTotalVolume] = useState<number>(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
 
   // 수정 폼 상태
   const [form, setForm] = useState({
@@ -286,6 +356,26 @@ const MyPage: React.FC = () => {
 
   const handleChange = (field: string, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleWithdrawAccount = async () => {
+    const token = getToken();
+    if (!token) return;
+
+    setWithdrawing(true);
+    try {
+      await axios.post('http://localhost:8080/api/auth/withdraw', {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('token');
+      navigate('/withdrawal-complete', { replace: true });
+    } catch (err: any) {
+      alert(err.response?.data?.message || '회원 탈퇴 처리에 실패했습니다. 잔여 코인이나 미체결 주문을 확인해주세요.');
+    } finally {
+      setWithdrawing(false);
+      setIsWithdrawModalOpen(false);
+    }
   };
 
   const formatDate = (dateStr: string) => {
@@ -410,7 +500,40 @@ const MyPage: React.FC = () => {
             <Label>은행명</Label>
             <Value>
               {editing
-                ? <Input value={form.bankName} onChange={e => handleChange('bankName', e.target.value)} placeholder="은행명 입력" />
+                ? (
+                  <select
+                    value={form.bankName}
+                    onChange={e => handleChange('bankName', e.target.value)}
+                    style={{
+                      width: '100%', padding: '8px 12px', border: '1px solid #d1d5db',
+                      borderRadius: '6px', fontSize: '14px', color: '#333', outline: 'none'
+                    }}
+                  >
+                    <option value="">은행 선택</option>
+                    <option value="NH농협은행">NH농협은행</option>
+                    <option value="우리은행">우리은행</option>
+                    <option value="신한은행">신한은행</option>
+                    <option value="KB국민은행">KB국민은행</option>
+                    <option value="하나은행">하나은행</option>
+                    <option value="카카오뱅크">카카오뱅크</option>
+                    <option value="케이뱅크">케이뱅크</option>
+                    <option value="토스뱅크">토스뱅크</option>
+                    <option value="IBK기업은행">IBK기업은행</option>
+                    <option value="SC제일은행">SC제일은행</option>
+                    <option value="경남은행">경남은행</option>
+                    <option value="광주은행">광주은행</option>
+                    <option value="대구은행">대구은행</option>
+                    <option value="부산은행">부산은행</option>
+                    <option value="전북은행">전북은행</option>
+                    <option value="제주은행">제주은행</option>
+                    <option value="수협은행">수협은행</option>
+                    <option value="산업은행">산업은행</option>
+                    <option value="우체국">우체국</option>
+                    <option value="새마을금고">새마을금고</option>
+                    <option value="신협">신협</option>
+                    <option value="기타">기타</option>
+                  </select>
+                )
                 : member.bankName || '-'}
             </Value>
           </InfoRow>
@@ -426,8 +549,8 @@ const MyPage: React.FC = () => {
             <Label>예금주</Label>
             <Value>
               {editing
-                ? <Input value={form.accountHolder} onChange={e => handleChange('accountHolder', e.target.value)} placeholder="예금주 입력" />
-                : member.accountHolder || '-'}
+                ? <Input value={form.name} disabled style={{ backgroundColor: '#f5f5f5', color: '#888' }} />
+                : member.name || '-'}
             </Value>
           </InfoRow>
         </Card>
@@ -437,6 +560,38 @@ const MyPage: React.FC = () => {
           onClose={() => setIsModalOpen(false)}
           currentVolume={totalVolume}
         />
+
+        <WithdrawButton onClick={() => setIsWithdrawModalOpen(true)}>
+          회원 탈퇴
+        </WithdrawButton>
+
+        {isWithdrawModalOpen && (
+          <ModalOverlay>
+            <ModalContainer>
+              <ModalTitle>회원 탈퇴 안내</ModalTitle>
+              <ModalText>
+                <strong>회원 탈퇴를 진행하시겠습니까?</strong><br /><br />
+                - 탈퇴 시 귀하의 개인정보 및 거래 내역, 추천인 코드 정보가 파기되거나 익명화 처리됩니다.<br />
+                - 보유 중인 암호화폐 잔여 잔고 및 원화(KRW) 전액이 소멸됩니다.<br />
+                - 미체결 주문은 모두 취소 처리됩니다.<br />
+                - 파기된 데이터는 어떠한 경우에도 복구할 수 없습니다.<br /><br />
+                위 약관에 동의하며 탈퇴를 진행합니다.
+              </ModalText>
+              <ModalButtonGroup>
+                <ModalButton disabled={withdrawing} onClick={() => setIsWithdrawModalOpen(false)}>
+                  취소
+                </ModalButton>
+                <ModalButton
+                  style={{ background: '#ff4d4f', color: 'white', border: 'none' }}
+                  disabled={withdrawing}
+                  onClick={handleWithdrawAccount}
+                >
+                  {withdrawing ? '처리 중...' : '동의하고 탈퇴하기'}
+                </ModalButton>
+              </ModalButtonGroup>
+            </ModalContainer>
+          </ModalOverlay>
+        )}
       </Main>
       <Footer />
     </Container>

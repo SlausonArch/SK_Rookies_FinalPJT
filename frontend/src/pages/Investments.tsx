@@ -454,17 +454,17 @@ const Investments = () => {
         <StatsGrid>
           <StatCard $positive={todayProfit >= 0}>
             <StatLabel>오늘의 수익</StatLabel>
-            <StatValue>{todayProfit >= 0 ? '+' : ''}₩{Math.round(todayProfit).toLocaleString()}</StatValue>
+            <StatValue>{todayProfit >= 0 ? '+' : ''}≈ {Math.round(todayProfit).toLocaleString()} KRW</StatValue>
             <StatChange>{todayProfit >= 0 ? '수익' : '손실'}</StatChange>
           </StatCard>
           <StatCard>
             <StatLabel>오늘의 거래금액</StatLabel>
-            <StatValue>₩{todayTradeAmount.toLocaleString()}</StatValue>
+            <StatValue>≈ {Math.round(todayTradeAmount).toLocaleString()} KRW</StatValue>
             <StatChange>{todayTrades.length}건 거래</StatChange>
           </StatCard>
           <StatCard>
             <StatLabel>총 보유 자산</StatLabel>
-            <StatValue>₩{Math.round(totalAssets).toLocaleString()}</StatValue>
+            <StatValue>≈ {Math.round(totalAssets).toLocaleString()} KRW</StatValue>
             <StatChange>현금 + 코인</StatChange>
           </StatCard>
           <StatCard>
@@ -516,12 +516,12 @@ const Investments = () => {
                         {symbol}
                       </SymbolButton>
                     </Td>
-                    <Td>{balance.toFixed(8)}</Td>
+                    <Td>{balance.toFixed(5)}</Td>
                     <Td>{formatAverageBuyPrice(avgPrice)}</Td>
-                    <Td>₩{currentPrice.toLocaleString()}</Td>
-                    <Td>₩{Math.round(valuation).toLocaleString()}</Td>
+                    <Td>≈ {Math.round(currentPrice).toLocaleString()} KRW</Td>
+                    <Td>≈ {Math.round(valuation).toLocaleString()} KRW</Td>
                     <Td style={{ color: avgPrice > 0 ? (profit >= 0 ? '#d60000' : '#0051c7') : '#999' }}>
-                      {avgPrice > 0 ? `${profit >= 0 ? '+' : ''}₩${Math.round(profit).toLocaleString()}` : '-'}
+                      {avgPrice > 0 ? `${profit >= 0 ? '+' : ''}≈ ${Math.round(profit).toLocaleString()} KRW` : '-'}
                     </Td>
                     <Td style={{ color: avgPrice > 0 ? (profitRate >= 0 ? '#d60000' : '#0051c7') : '#999' }}>
                       {avgPrice > 0 ? `${profitRate >= 0 ? '+' : ''}${profitRate.toFixed(2)}%` : '-'}
@@ -571,12 +571,12 @@ const Investments = () => {
                       </Badge>
                     </Td>
                     <Td><strong>{tx.assetType}</strong></Td>
-                    <Td>{tx.amount.toLocaleString()}</Td>
+                    <Td>{Number(tx.amount).toFixed(5)}</Td>
                     <Td>
-                      {(tx.txType === 'DEPOSIT' || tx.txType === 'WITHDRAW') ? '-' : `₩${tx.price?.toLocaleString()}`}
+                      {(tx.txType === 'DEPOSIT' || tx.txType === 'WITHDRAW') ? '-' : `≈ ${Math.round(tx.price || 0).toLocaleString()} KRW`}
                     </Td>
-                    <Td>₩{tx.totalValue.toLocaleString()}</Td>
-                    <Td>{tx.fee ? `수수료 ₩${tx.fee.toLocaleString()}` : '-'}</Td>
+                    <Td>≈ {Math.round(tx.totalValue).toLocaleString()} KRW</Td>
+                    <Td>{tx.fee ? `수수료 ≈ ${Math.round(tx.fee).toLocaleString()} KRW` : '-'}</Td>
                   </Tr>
                 ))}
               </Tbody>

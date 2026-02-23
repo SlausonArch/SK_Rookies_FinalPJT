@@ -425,11 +425,11 @@ const Balances = () => {
         <TopSection>
           <BalanceRow>
             <BalanceLabel>보유 현금</BalanceLabel>
-            <BalanceValue>₩{Math.round(krwBalance).toLocaleString()}</BalanceValue>
+            <BalanceValue>≈ {Math.round(krwBalance).toLocaleString()} KRW</BalanceValue>
           </BalanceRow>
           <BalanceRow>
             <BalanceLabel>총 보유 자산</BalanceLabel>
-            <BalanceValue>₩{Math.round(totalAssets).toLocaleString()}</BalanceValue>
+            <BalanceValue>≈ {Math.round(totalAssets).toLocaleString()} KRW</BalanceValue>
           </BalanceRow>
           <Subtitle>
             <span>투자 수익률</span>
@@ -537,10 +537,10 @@ const Balances = () => {
                 return (
                   <Tr key={symbol}>
                     <Td><strong>{symbol}</strong></Td>
-                    <Td>{balance.toLocaleString()} {symbol}</Td>
+                    <Td>{balance.toFixed(5)} {symbol}</Td>
                     <Td>{formatAverageBuyPrice(avgPrice)}</Td>
-                    <Td>₩{price.toLocaleString()}</Td>
-                    <Td>₩{Math.round(value).toLocaleString()}</Td>
+                    <Td>≈ {Math.round(price).toLocaleString()} KRW</Td>
+                    <Td>≈ {Math.round(value).toLocaleString()} KRW</Td>
                     <Td style={{ color: profitRate > 0 ? '#d60000' : profitRate < 0 ? '#0051c7' : '#333' }}>
                       {profitRate > 0 ? '+' : ''}{profitRate.toFixed(2)}%
                     </Td>

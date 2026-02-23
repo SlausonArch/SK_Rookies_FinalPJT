@@ -11,6 +11,7 @@ public class SignupRequestDto {
     // Based on DB it's 'RRN_PREFIX'.
     private String phoneNumber;
     private String address;
+    private String bankName;
     private String accountNumber;
     private String referredByCode;
 }

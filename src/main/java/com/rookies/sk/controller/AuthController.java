@@ -110,6 +110,10 @@ public class AuthController {
         try {
             Member member = memberService.findByEmailForLogin(userDetails.getUsername());
 
+            if (member.getReferralCode() == null || member.getReferralCode().isEmpty()) {
+                memberService.assignReferralCode(member);
+            }
+
             BigDecimal totalVolume = transactionRepository.sumTotalVolumeByMemberId(member.getMemberId());
             if (totalVolume == null) {
                 totalVolume = BigDecimal.ZERO;
@@ -219,5 +223,16 @@ public class AuthController {
                 updatedMember.getRole().name(), updatedMember.getMemberId());
 
         return ResponseEntity.ok(newAccessToken);
+    }
+
+    @PostMapping("/withdraw")
+    public ResponseEntity<?> withdrawAccount(@AuthenticationPrincipal UserDetails userDetails) {
+        try {
+            Member member = memberService.findByEmailForLogin(userDetails.getUsername());
+            memberService.withdrawMember(member);
+            return ResponseEntity.ok(java.util.Map.of("message", "회원 탈퇴가 완료되었습니다."));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(java.util.Map.of("message", "회원 탈퇴 실패: " + e.getMessage()));
+        }
     }
 }

@@ -14,6 +14,7 @@ import Balances from './pages/Balances';
 import Investments from './pages/Investments';
 import Trends from './pages/Trends';
 import MyPage from './pages/MyPage';
+import WithdrawalComplete from './pages/WithdrawalComplete';
 
 function App() {
   return (
@@ -32,6 +33,7 @@ function App() {
         <Route path="/investments" element={<Investments />} />
         <Route path="/trends" element={<Trends />} />
         <Route path="/mypage" element={<MyPage />} />
+        <Route path="/withdrawal-complete" element={<WithdrawalComplete />} />
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
         <Route path="/" element={<Home />} />

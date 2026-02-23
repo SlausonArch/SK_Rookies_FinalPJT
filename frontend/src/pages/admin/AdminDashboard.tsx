@@ -252,14 +252,70 @@ const Msg = styled.div<{ $ok: boolean }>`
   color: ${p => p.$ok ? '#22c55e' : '#ef4444'};
 `;
 
-interface MemberRow { memberId: number; email: string; name: string; phoneNumber: string|null; role: string; status: string; createdAt: string|null; }
-interface OrderRow { orderId: number; memberEmail: string; memberName: string; orderType: string; assetType: string; price: number; amount: number; filledAmount: number; status: string; createdAt: string|null; }
+const ModalOverlay = styled.div`
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+`;
+
+const ModalContainer = styled.div`
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 12px;
+  width: 500px;
+  max-width: 90%;
+  padding: 32px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+`;
+
+const ModalTitle = styled.h2`
+  font-size: 20px;
+  color: #fff;
+  margin-top: 0;
+  margin-bottom: 8px;
+`;
+
+const ModalText = styled.div`
+  font-size: 14px;
+  color: #ccc;
+  line-height: 1.6;
+  margin-bottom: 24px;
+  background: #2a2a2a;
+  padding: 16px;
+  border-radius: 8px;
+  white-space: pre-wrap;
+  max-height: 400px;
+  overflow-y: auto;
+`;
+
+const ModalButtonGroup = styled.div`
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+`;
+
+const ModalButton = styled.button`
+  padding: 10px 20px;
+  background: #333;
+  color: #fff;
+  border: 1px solid #444;
+  border-radius: 6px;
+  cursor: pointer;
+  &:hover { background: #444; }
+`;
+
+interface MemberRow { memberId: number; email: string; name: string; phoneNumber: string | null; role: string; status: string; createdAt: string | null; }
+interface OrderRow { orderId: number; memberEmail: string; memberName: string; orderType: string; assetType: string; price: number; amount: number; filledAmount: number; status: string; createdAt: string | null; }
 interface AssetRow { assetId: number; memberEmail: string; memberName: string; assetType: string; balance: number; lockedBalance: number; }
-interface TxRow { txId: number; memberEmail: string; memberName: string; txType: string; assetType: string; amount: number; price: number|null; totalValue: number|null; fee: number|null; txDate: string|null; }
+interface TxRow { txId: number; memberEmail: string; memberName: string; txType: string; assetType: string; amount: number; price: number | null; totalValue: number | null; fee: number | null; txDate: string | null; }
 interface Stats { totalMembers: number; activeMembers: number; totalOrders: number; totalKrwBalance: number; totalTransactions: number; }
 
 function fmt(n: number, d = 0) { return n.toLocaleString('ko-KR', { maximumFractionDigits: d }); }
-function fmtDate(v: string|null) { if (!v) return '-'; return new Date(v).toLocaleString('ko-KR'); }
+function fmtDate(v: string | null) { if (!v) return '-'; return new Date(v).toLocaleString('ko-KR'); }
 
 function statusColor(s: string) {
   if (s === 'ACTIVE') return '#22c55e';
@@ -282,13 +338,15 @@ const AdminDashboard = () => {
   const userName = localStorage.getItem('name') || '관리자';
   const token = localStorage.getItem('token');
 
-  const [stats, setStats] = useState<Stats|null>(null);
+  const [stats, setStats] = useState<Stats | null>(null);
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [assets, setAssets] = useState<AssetRow[]>([]);
   const [transactions, setTransactions] = useState<TxRow[]>([]);
   const [posts, setPosts] = useState<any[]>([]);
-  const [settingsMsg, setSettingsMsg] = useState<{text: string; ok: boolean}|null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedPost, setSelectedPost] = useState<any>(null);
+  const [settingsMsg, setSettingsMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [newPw, setNewPw] = useState('');
 
   useEffect(() => {
@@ -303,17 +361,17 @@ const AdminDashboard = () => {
     if (!token) return;
     const h = { Authorization: `Bearer ${token}` };
     if (activeMenu === 'dashboard') {
-      axios.get(`${API_BASE}/api/admin/stats`, { headers: h }).then(r => setStats(r.data)).catch(() => {});
+      axios.get(`${API_BASE}/api/admin/stats`, { headers: h }).then(r => setStats(r.data)).catch(() => { });
     } else if (activeMenu === 'members') {
-      axios.get(`${API_BASE}/api/admin/members`, { headers: h }).then(r => setMembers(r.data)).catch(() => {});
+      axios.get(`${API_BASE}/api/admin/members`, { headers: h }).then(r => setMembers(r.data)).catch(() => { });
     } else if (activeMenu === 'orders') {
-      axios.get(`${API_BASE}/api/admin/orders`, { headers: h }).then(r => setOrders(r.data)).catch(() => {});
+      axios.get(`${API_BASE}/api/admin/orders`, { headers: h }).then(r => setOrders(r.data)).catch(() => { });
     } else if (activeMenu === 'assets') {
-      axios.get(`${API_BASE}/api/admin/assets`, { headers: h }).then(r => setAssets(r.data)).catch(() => {});
+      axios.get(`${API_BASE}/api/admin/assets`, { headers: h }).then(r => setAssets(r.data)).catch(() => { });
     } else if (activeMenu === 'deposits') {
-      axios.get(`${API_BASE}/api/admin/transactions`, { headers: h }).then(r => setTransactions(r.data)).catch(() => {});
+      axios.get(`${API_BASE}/api/admin/transactions`, { headers: h }).then(r => setTransactions(r.data)).catch(() => { });
     } else if (activeMenu === 'community') {
-      axios.get(`${API_BASE}/api/community/posts`).then(r => setPosts(r.data.content || r.data)).catch(() => {});
+      axios.get(`${API_BASE}/api/community/posts`).then(r => setPosts(r.data.content || r.data)).catch(() => { });
     }
   }, [activeMenu, token]);
 
@@ -484,17 +542,36 @@ const AdminDashboard = () => {
         );
 
       case 'community':
+        const filteredPosts = posts.filter(p => {
+          const term = searchTerm.toLowerCase();
+          return (p.title?.toLowerCase() || '').includes(term) ||
+            (p.content?.toLowerCase() || '').includes(term) ||
+            (p.authorName?.toLowerCase() || p.author?.toLowerCase() || '').includes(term);
+        });
         return (
           <Card>
             <CardTitle>게시글 관리 ({posts.length}건)</CardTitle>
-            {posts.length === 0 ? <EmptyState>게시글이 없습니다.</EmptyState> : (
+            <div style={{ marginBottom: 16 }}>
+              <Input
+                placeholder="제목, 내용, 작성자 검색"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{ maxWidth: 300 }}
+              />
+            </div>
+            {filteredPosts.length === 0 ? <EmptyState>게시글이 없습니다.</EmptyState> : (
               <Table>
                 <thead><tr><th>ID</th><th>제목</th><th>작성자</th><th>공지</th><th>작성일</th><th>삭제</th></tr></thead>
                 <tbody>
-                  {posts.map((p: any) => (
+                  {filteredPosts.map((p: any) => (
                     <tr key={p.postId}>
                       <td>{p.postId}</td>
-                      <td style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</td>
+                      <td
+                        style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer', color: '#60a5fa', textDecoration: 'underline' }}
+                        onClick={() => setSelectedPost(p)}
+                      >
+                        {p.title}
+                      </td>
                       <td>{p.authorName || p.author}</td>
                       <td>{p.notice ? <Badge $color="#f59e0b">공지</Badge> : '-'}</td>
                       <td>{fmtDate(p.createdAt)}</td>
@@ -576,6 +653,30 @@ const AdminDashboard = () => {
         </HeaderBar>
         <Main>{renderContent()}</Main>
       </ContentArea>
+
+      {selectedPost && (
+        <ModalOverlay onClick={() => setSelectedPost(null)}>
+          <ModalContainer onClick={e => e.stopPropagation()}>
+            <ModalTitle>{selectedPost.title}</ModalTitle>
+            <div style={{ marginBottom: 16, fontSize: 13, color: '#999' }}>
+              작성자: {selectedPost.authorName || selectedPost.author} | 작성일: {fmtDate(selectedPost.createdAt)}
+            </div>
+            <ModalText>{selectedPost.content}</ModalText>
+            <ModalButtonGroup>
+              <ModalButton onClick={() => setSelectedPost(null)}>닫기</ModalButton>
+              <ModalButton
+                onClick={() => {
+                  handleDeletePost(selectedPost.postId);
+                  setSelectedPost(null);
+                }}
+                style={{ background: '#ef4444', borderColor: '#ef4444' }}
+              >
+                게시글 삭제
+              </ModalButton>
+            </ModalButtonGroup>
+          </ModalContainer>
+        </ModalOverlay>
+      )}
     </Container>
   );
 };

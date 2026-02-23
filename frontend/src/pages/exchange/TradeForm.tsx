@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import TierModal from '../../components/TierModal';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
@@ -16,7 +15,7 @@ interface Props {
 const Container = styled.div`
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  height: 100%;
 `;
 
 
@@ -24,36 +23,15 @@ const Container = styled.div`
 const FormBody = styled.div`
   padding: 12px;
   flex: 1;
-`;
-
-const TierInfoBox = styled.div`
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 11px;
-  background: #f8f9fa;
-  padding: 8px 10px;
-  margin-bottom: 10px;
-  border-radius: 4px;
+  flex-direction: column;
+  justify-content: space-evenly;
+  min-height: 0;
 `;
 
-const PolicyBtn = styled.button`
-  background: none;
-  border: none;
-  color: #093687;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 0;
-  text-decoration: underline;
-`;
-
-const VolumeText = styled.span`
-  color: #333;
-  font-weight: 600;
-`;
 
 const FormRow = styled.div`
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 `;
 
 const Label = styled.label`
@@ -77,14 +55,14 @@ const Input = styled.input`
 const BalanceInfo = styled.div`
   font-size: 11px;
   color: #999;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   span { color: #333; font-weight: 600; }
 `;
 
 const PercentBtns = styled.div`
   display: flex;
   gap: 4px;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 `;
 
 const PercentBtn = styled.button`
@@ -109,7 +87,7 @@ const SubmitBtn = styled.button<{ $type: 'buy' | 'sell' }>`
   font-size: 14px;
   font-weight: 700;
   color: #fff;
-  background: ${p => p.$type === 'buy' ? '#d60000' : '#0051c7'};
+  background: ${(p: { $type: 'buy' | 'sell' }) => p.$type === 'buy' ? '#d60000' : '#0051c7'};
   border: none;
   border-radius: 6px;
   cursor: pointer;
@@ -148,8 +126,8 @@ const ResultMessage = styled.div<{ $success: boolean }>`
   border-radius: 4px;
   font-size: 12px;
   text-align: center;
-  background: ${p => p.$success ? '#e8f5e8' : '#fde8e8'};
-  color: ${p => p.$success ? '#2e7d32' : '#c62828'};
+  background: ${(p: { $success: boolean }) => p.$success ? '#e8f5e8' : '#fde8e8'};
+  color: ${(p: { $success: boolean }) => p.$success ? '#2e7d32' : '#c62828'};
 `;
 
 const DepositBtn = styled.button`
@@ -197,10 +175,6 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
   const [message, setMessage] = useState<{ text: string; success: boolean } | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const [totalVolume, setTotalVolume] = useState<number>(0);
-  const [nextTierVolume, setNextTierVolume] = useState<number>(100000000);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-
   const token = getToken();
   const isLoggedIn = !!token;
   const assetType = market.replace('KRW-', '');
@@ -225,29 +199,16 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
     const headers = { Authorization: `Bearer ${token}` };
 
     axios.get(`${API_BASE}/api/assets/KRW`, { headers })
-      .then(res => setKrwBalance(res.data.availableBalance ?? 0))
+      .then((res: any) => setKrwBalance(res.data.availableBalance ?? 0))
       .catch(() => { });
 
     if (assetType) {
       axios.get(`${API_BASE}/api/assets/${assetType}`, { headers })
-        .then(res => setCoinBalance(res.data.availableBalance ?? 0))
+        .then((res: any) => setCoinBalance(res.data.availableBalance ?? 0))
         .catch(() => { });
     }
 
     axios.get(`${API_BASE}/api/auth/me`, { headers })
-      .then(res => {
-        const volume = Number(res.data.totalVolume) || 0;
-        setTotalVolume(volume);
-        if (volume < 100000000) {
-          setNextTierVolume(100000000);
-        } else if (volume < 2000000000) {
-          setNextTierVolume(2000000000);
-        } else if (volume < 20000000000) {
-          setNextTierVolume(20000000000);
-        } else {
-          setNextTierVolume(volume); // VIP
-        }
-      })
       .catch(() => { });
   }, [isLoggedIn, token, assetType, message]);
 
@@ -260,21 +221,14 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
     if (p <= 0) return;
 
     if (tradeType === 'buy') {
-      // 등급별 수수료율 계산
-      let feeRate = 0.0008; // BRONZE
-      if (totalVolume >= 20000000000) feeRate = 0.0001; // VIP
-      else if (totalVolume >= 2000000000) feeRate = 0.0003; // GOLD
-      else if (totalVolume >= 100000000) feeRate = 0.0005; // SILVER
-
       // 매수 시: 필요한 총 KRW = (현재가 * 수량) + (현재가 * 수량 * 수수료율)
-      // 즉, 잔액 배분: 잔액 = 수량 * 현재가 * (1 + 수수료율)
-      // 최대 수량 = (할당할 잔액) / (현재가 * (1 + 수수료율))
+      const feeRate = 0.0005; // 임시 기본 수수료
       const allocatedBalance = krwBalance * (pct / 100);
       const maxAmount = allocatedBalance / (p * (1 + feeRate));
 
-      setAmount(maxAmount.toFixed(8));
+      setAmount(maxAmount.toFixed(5));
     } else {
-      setAmount((coinBalance * pct / 100).toFixed(8));
+      setAmount((coinBalance * pct / 100).toFixed(5));
     }
   };
 
@@ -344,28 +298,11 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
   return (
     <Container>
       <FormBody>
-        <TierInfoBox>
-          <PolicyBtn onClick={() => setIsModalOpen(true)}>수수료 정책 보기</PolicyBtn>
-          <VolumeText>
-            {totalVolume >= 20000000000 ? (
-              `${totalVolume.toLocaleString()} / VIP 달성 (KRW)`
-            ) : (
-              `${totalVolume.toLocaleString()} / ${nextTierVolume.toLocaleString()} (KRW)`
-            )}
-          </VolumeText>
-        </TierInfoBox>
-
-        <TierModal
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          currentVolume={totalVolume}
-        />
-
         <BalanceInfo>
           {tradeType === 'buy' ? (
-            <>주문가능: <span>{Number(krwBalance).toLocaleString()} KRW</span></>
+            <>주문가능: <span>≈ {Math.round(krwBalance).toLocaleString()} KRW</span></>
           ) : (
-            <>주문가능: <span>{Number(coinBalance).toFixed(8)} {assetType}</span></>
+            <>주문가능: <span>{Number(coinBalance).toFixed(5)} {assetType}</span></>
           )}
         </BalanceInfo>
 
@@ -378,7 +315,7 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
           <Input
             type="text"
             value={price ? parseNumber(price).toLocaleString('ko-KR') : ''}
-            onChange={e => setPrice(e.target.value.replace(/,/g, ''))}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPrice(e.target.value.replace(/,/g, ''))}
             placeholder="주문 가격"
           />
         </FormRow>
@@ -388,7 +325,7 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
           <Input
             type="text"
             value={amount}
-            onChange={e => setAmount(e.target.value.replace(/,/g, ''))}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAmount(e.target.value.replace(/,/g, ''))}
             placeholder="주문 수량"
           />
         </FormRow>
@@ -401,7 +338,7 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
 
         <FormRow>
           <Label>총액 (KRW)</Label>
-          <Input type="text" value={total > 0 ? total.toLocaleString() : ''} readOnly />
+          <Input type="text" value={total > 0 ? `≈ ${Math.round(total).toLocaleString()}` : ''} readOnly />
         </FormRow>
 
         <ButtonContainer>

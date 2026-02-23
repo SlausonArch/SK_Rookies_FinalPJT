@@ -23,7 +23,8 @@ const ExchangeContainer = styled.div`
 const ExchangeBody = styled.div`
   display: grid;
   grid-template-columns: 260px 1fr 280px;
-  grid-template-rows: 1fr 350px;
+  grid-template-rows: 60% 40%;
+
   flex: 1;
   gap: 1px;
   background: #dfe7f6;
@@ -51,8 +52,9 @@ const OrderbookPanel = styled.div`
 
 const RecentTradesPanel = styled.div`
   background: #fff;
-  min-height: 350px;
-  max-height: 350px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 `;
 
@@ -106,10 +108,10 @@ function formatVolume(n: number): string {
 
 const TradePanelContainer = styled.div`
   background: white;
-  min-height: 350px;
-  max-height: 350px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 `;
 
 const TabHeader = styled.div`
@@ -136,7 +138,9 @@ const TabButton = styled.button<{ $active: boolean }>`
 
 const TabContent = styled.div`
   flex: 1;
-  overflow-y: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 `;
 
 // 내 거래내역 컴포넌트 (Exchange 내부용)
@@ -195,8 +199,8 @@ const MyHistory = ({ market }: { market: string }) => {
                   {tx.txType === 'BUY' ? '매수' : tx.txType === 'SELL' ? '매도' : tx.txType === 'DEPOSIT' ? '입금' : '출금'}
                 </span>
               </td>
-              <td style={{ padding: '8px', textAlign: 'right' }}>{(tx.txType === 'DEPOSIT' || tx.txType === 'WITHDRAW') ? '-' : Number(tx.price).toLocaleString()}</td>
-              <td style={{ padding: '8px', textAlign: 'right' }}>{Number(tx.amount).toFixed(4)}</td>
+              <td style={{ padding: '8px', textAlign: 'right' }}>{(tx.txType === 'DEPOSIT' || tx.txType === 'WITHDRAW') ? '-' : `≈ ${Math.round(tx.price).toLocaleString()}`}</td>
+              <td style={{ padding: '8px', textAlign: 'right' }}>{Number(tx.amount).toFixed(5)}</td>
             </tr>
           ))}
         </tbody>
