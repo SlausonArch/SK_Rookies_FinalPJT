@@ -322,6 +322,21 @@ const Balances = () => {
     ? ((totalAssets - totalInvestment) / totalInvestment * 100).toFixed(2)
     : '0.00';
 
+  const formatAverageBuyPrice = (price: number) => {
+    if (!Number.isFinite(price) || price <= 0) return '-';
+
+    let options: Intl.NumberFormatOptions;
+    if (price >= 1000) {
+      options = { maximumFractionDigits: 0 };
+    } else if (price >= 1) {
+      options = { minimumFractionDigits: 2, maximumFractionDigits: 4 };
+    } else {
+      options = { minimumFractionDigits: 3, maximumFractionDigits: 8 };
+    }
+
+    return `₩${price.toLocaleString('ko-KR', options)}`;
+  };
+
   const handleCashDeposit = async () => {
     const token = localStorage.getItem('accessToken');
     if (!token) return;
@@ -509,7 +524,7 @@ const Balances = () => {
                   <Tr key={symbol}>
                     <Td><strong>{symbol}</strong></Td>
                     <Td>{balance.toLocaleString()} {symbol}</Td>
-                    <Td>₩{Math.round(avgPrice).toLocaleString()}</Td>
+                    <Td>{formatAverageBuyPrice(avgPrice)}</Td>
                     <Td>₩{price.toLocaleString()}</Td>
                     <Td>₩{Math.round(value).toLocaleString()}</Td>
                     <Td style={{ color: profitRate > 0 ? '#d60000' : profitRate < 0 ? '#0051c7' : '#333' }}>

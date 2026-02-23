@@ -327,6 +327,21 @@ const Investments = () => {
     ? ((totalAssets - totalInvestment) / totalInvestment * 100).toFixed(2)
     : '0.00';
 
+  const formatAverageBuyPrice = (price: number) => {
+    if (!Number.isFinite(price) || price <= 0) return '-';
+
+    let options: Intl.NumberFormatOptions;
+    if (price >= 1000) {
+      options = { maximumFractionDigits: 0 };
+    } else if (price >= 1) {
+      options = { minimumFractionDigits: 2, maximumFractionDigits: 4 };
+    } else {
+      options = { minimumFractionDigits: 3, maximumFractionDigits: 8 };
+    }
+
+    return `₩${price.toLocaleString('ko-KR', options)}`;
+  };
+
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleString('ko-KR', {
@@ -421,7 +436,7 @@ const Investments = () => {
                   >
                     <Td><strong>{symbol}</strong></Td>
                     <Td>{balance.toFixed(8)}</Td>
-                    <Td>{avgPrice > 0 ? `₩${Math.round(avgPrice).toLocaleString()}` : '-'}</Td>
+                    <Td>{formatAverageBuyPrice(avgPrice)}</Td>
                     <Td>₩{currentPrice.toLocaleString()}</Td>
                     <Td>₩{Math.round(valuation).toLocaleString()}</Td>
                     <Td style={{ color: avgPrice > 0 ? (profit >= 0 ? '#d60000' : '#0051c7') : '#999' }}>
