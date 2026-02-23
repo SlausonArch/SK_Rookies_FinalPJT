@@ -125,6 +125,21 @@ const Td = styled.td`
   color: #333;
 `;
 
+const SymbolButton = styled.button`
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #093687;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
+`;
+
 const Badge = styled.span<{ type: string }>`
   display: inline-block;
   padding: 4px 12px;
@@ -481,6 +496,7 @@ const Investments = () => {
             <Tbody>
               {assets.filter((a: any) => a.assetType !== 'KRW' && a.balance > 0).map((asset: any) => {
                 const symbol = asset.assetType;
+                const market = symbol.startsWith('KRW-') ? symbol : `KRW-${symbol}`;
                 const balance = asset.balance;
                 const avgPrice = asset.averageBuyPrice || 0;
                 const coinInfo = coinPrices[symbol] || { price: 0, changePrice: 0 };
@@ -492,7 +508,14 @@ const Investments = () => {
 
                 return (
                   <Tr key={symbol}>
-                    <Td><strong>{symbol}</strong></Td>
+                    <Td>
+                      <SymbolButton
+                        type='button'
+                        onClick={() => navigate(`/exchange?market=${encodeURIComponent(market)}`)}
+                      >
+                        {symbol}
+                      </SymbolButton>
+                    </Td>
                     <Td>{balance.toFixed(8)}</Td>
                     <Td>{formatAverageBuyPrice(avgPrice)}</Td>
                     <Td>₩{currentPrice.toLocaleString()}</Td>
