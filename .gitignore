@@ -60,3 +60,9 @@ oracle-data/
 *.log
 
 docker-compose.yml
+# cache
+node_modules
+.vite
+.dist
+build
+.cache
