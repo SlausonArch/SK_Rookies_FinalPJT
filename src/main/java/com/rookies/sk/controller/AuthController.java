@@ -7,6 +7,7 @@ import com.rookies.sk.entity.Member;
 import com.rookies.sk.security.JwtTokenProvider;
 import com.rookies.sk.service.FileService;
 import com.rookies.sk.service.MemberService;
+import com.rookies.sk.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +16,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import java.math.BigDecimal;
 
 @Slf4j
 @RestController
@@ -26,6 +28,7 @@ public class AuthController {
     private final FileService fileService;
     private final JwtTokenProvider jwtTokenProvider;
     private final PasswordEncoder passwordEncoder;
+    private final TransactionRepository transactionRepository;
 
     @PostMapping("/test/login")
     public ResponseEntity<?> testLogin(@RequestBody AdminLoginRequest request) {
@@ -49,8 +52,7 @@ public class AuthController {
                     "refreshToken", refreshToken,
                     "role", member.getRole().name(),
                     "email", member.getEmail(),
-                    "name", member.getName()
-            ));
+                    "name", member.getName()));
         } catch (Exception e) {
             log.error("Test login failed", e);
             return ResponseEntity.status(401).body("로그인 실패");
@@ -97,6 +99,23 @@ public class AuthController {
     public ResponseEntity<?> getMyInfo(@AuthenticationPrincipal UserDetails userDetails) {
         try {
             Member member = memberService.findByEmailForLogin(userDetails.getUsername());
+
+            BigDecimal totalVolume = transactionRepository.sumTotalVolumeByMemberId(member.getMemberId());
+            if (totalVolume == null) {
+                totalVolume = BigDecimal.ZERO;
+            }
+
+            BigDecimal nextTierVolume;
+            if (totalVolume.compareTo(new BigDecimal("100000000")) < 0) {
+                nextTierVolume = new BigDecimal("100000000"); // 1억 (Silver)
+            } else if (totalVolume.compareTo(new BigDecimal("2000000000")) < 0) {
+                nextTierVolume = new BigDecimal("2000000000"); // 20억 (Gold)
+            } else if (totalVolume.compareTo(new BigDecimal("20000000000")) < 0) {
+                nextTierVolume = new BigDecimal("20000000000"); // 200억 (VIP)
+            } else {
+                nextTierVolume = new BigDecimal("20000000000"); // VIP MAX
+            }
+
             java.util.Map<String, Object> result = new java.util.LinkedHashMap<>();
             result.put("memberId", member.getMemberId());
             result.put("email", member.getEmail());
@@ -109,6 +128,9 @@ public class AuthController {
             result.put("role", member.getRole().name());
             result.put("status", member.getStatus().name());
             result.put("createdAt", member.getCreatedAt() != null ? member.getCreatedAt().toString() : "");
+            result.put("totalVolume", totalVolume.toString());
+            result.put("nextTierVolume", nextTierVolume.toString());
+            result.put("referralCode", member.getReferralCode());
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             return ResponseEntity.status(404).body("회원 정보를 찾을 수 없습니다.");
@@ -121,12 +143,18 @@ public class AuthController {
             @RequestBody java.util.Map<String, String> body) {
         try {
             Member member = memberService.findByEmailForLogin(userDetails.getUsername());
-            if (body.containsKey("name")) member.setName(body.get("name"));
-            if (body.containsKey("phoneNumber")) member.setPhoneNumber(body.get("phoneNumber"));
-            if (body.containsKey("address")) member.setAddress(body.get("address"));
-            if (body.containsKey("bankName")) member.setBankName(body.get("bankName"));
-            if (body.containsKey("accountNumber")) member.setAccountNumber(body.get("accountNumber"));
-            if (body.containsKey("accountHolder")) member.setAccountHolder(body.get("accountHolder"));
+            if (body.containsKey("name"))
+                member.setName(body.get("name"));
+            if (body.containsKey("phoneNumber"))
+                member.setPhoneNumber(body.get("phoneNumber"));
+            if (body.containsKey("address"))
+                member.setAddress(body.get("address"));
+            if (body.containsKey("bankName"))
+                member.setBankName(body.get("bankName"));
+            if (body.containsKey("accountNumber"))
+                member.setAccountNumber(body.get("accountNumber"));
+            if (body.containsKey("accountHolder"))
+                member.setAccountHolder(body.get("accountHolder"));
             memberService.saveMember(member);
             return ResponseEntity.ok(java.util.Map.of("message", "회원 정보가 수정되었습니다."));
         } catch (Exception e) {

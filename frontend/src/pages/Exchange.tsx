@@ -75,13 +75,13 @@ const MarketName = styled.div`
 const CurrentPrice = styled.div<{ $change: string }>`
   font-size: 22px;
   font-weight: 700;
-  color: ${p => p.$change === 'RISE' ? '#d60000' : p.$change === 'FALL' ? '#0051c7' : '#333'};
+  color: ${(p: { $change: string }) => p.$change === 'RISE' ? '#d60000' : p.$change === 'FALL' ? '#0051c7' : '#333'};
 `;
 
 const ChangeRate = styled.div<{ $change: string }>`
   font-size: 13px;
   font-weight: 600;
-  color: ${p => p.$change === 'RISE' ? '#d60000' : p.$change === 'FALL' ? '#0051c7' : '#999'};
+  color: ${(p: { $change: string }) => p.$change === 'RISE' ? '#d60000' : p.$change === 'FALL' ? '#0051c7' : '#999'};
 `;
 
 const InfoItem = styled.div`
@@ -122,10 +122,10 @@ const TabButton = styled.button<{ $active: boolean }>`
   flex: 1;
   padding: 12px;
   border: none;
-  background: ${props => props.$active ? '#fff' : 'transparent'};
+  background: ${(props: { $active: boolean }) => props.$active ? '#fff' : 'transparent'};
   font-weight: 600;
-  color: ${props => props.$active ? '#093687' : '#666'};
-  border-bottom: ${props => props.$active ? '2px solid #093687' : 'none'};
+  color: ${(props: { $active: boolean }) => props.$active ? '#093687' : '#666'};
+  border-bottom: ${(props: { $active: boolean }) => props.$active ? '2px solid #093687' : 'none'};
   cursor: pointer;
   font-size: 14px;
 
@@ -210,7 +210,7 @@ const Exchange: React.FC = () => {
   const [markets, setMarkets] = useState<UpbitMarket[]>([]);
   const [selectedMarket, setSelectedMarket] = useState('KRW-BTC');
   const [selectedPrice, setSelectedPrice] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<'order' | 'history'>('order');
+  const [activeTab, setActiveTab] = useState<'buy' | 'sell' | 'history'>('buy');
 
   // URL 파라미터에서 마켓 설정
   useEffect(() => {
@@ -223,20 +223,20 @@ const Exchange: React.FC = () => {
     fetchKRWMarkets().then(data => {
       setMarkets(data);
       // 초기 시세 로드도 함께
-      const codes = data.map(m => m.market);
+      const codes = data.map((m: UpbitMarket) => m.market);
       fetchTickers(codes).catch(() => { });
     }).catch(() => { });
   }, []);
 
   // WebSocket 연결
-  const marketCodes = useMemo(() => markets.map(m => m.market), [markets]);
+  const marketCodes = useMemo(() => markets.map((m: UpbitMarket) => m.market), [markets]);
   const wsTickers = useUpbitTicker(marketCodes);
   const orderbook = useUpbitOrderbook(selectedMarket);
   const trades = useUpbitTrades(selectedMarket);
 
   // 현재 선택된 코인 정보
   const currentTicker = wsTickers.get(selectedMarket);
-  const currentMarket = markets.find(m => m.market === selectedMarket);
+  const currentMarket = markets.find((m: UpbitMarket) => m.market === selectedMarket);
   const currentPrice = currentTicker?.trade_price ?? 0;
   const changeRate = currentTicker?.signed_change_rate ?? 0;
   const change = (currentTicker?.change ?? 'EVEN') as string;
@@ -294,27 +294,34 @@ const Exchange: React.FC = () => {
         <TradePanelContainer>
           <TabHeader>
             <TabButton
-              $active={activeTab === 'order'}
-              onClick={() => setActiveTab('order')}
+              $active={activeTab === 'buy'}
+              onClick={() => setActiveTab('buy')}
             >
-              주문
+              매수
+            </TabButton>
+            <TabButton
+              $active={activeTab === 'sell'}
+              onClick={() => setActiveTab('sell')}
+            >
+              매도
             </TabButton>
             <TabButton
               $active={activeTab === 'history'}
               onClick={() => setActiveTab('history')}
             >
-              내역
+              거래내역
             </TabButton>
           </TabHeader>
           <TabContent>
-            {activeTab === 'order' ? (
+            {activeTab === 'history' ? (
+              <MyHistory market={selectedMarket} />
+            ) : (
               <TradeForm
                 market={selectedMarket}
                 currentPrice={currentPrice}
                 selectedPrice={selectedPrice}
+                tradeType={activeTab}
               />
-            ) : (
-              <MyHistory market={selectedMarket} />
             )}
           </TabContent>
         </TradePanelContainer>

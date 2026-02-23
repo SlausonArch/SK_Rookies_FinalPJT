@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
+import TierModal from '../../components/TierModal';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
@@ -9,35 +10,46 @@ interface Props {
   market: string;
   currentPrice: number;
   selectedPrice: number | null;
+  tradeType: 'buy' | 'sell';
 }
 
 const Container = styled.div`
   display: flex;
   flex-direction: column;
-  height: 100%;
+  min-height: 100%;
 `;
 
-const Tabs = styled.div`
-  display: flex;
-`;
 
-const Tab = styled.button<{ $active: boolean; $type: 'buy' | 'sell' }>`
-  flex: 1;
-  padding: 10px;
-  font-size: 13px;
-  font-weight: 700;
-  border: none;
-  cursor: pointer;
-  color: ${p => p.$active ? '#fff' : '#666'};
-  background: ${p => {
-    if (!p.$active) return '#f5f6f7';
-    return p.$type === 'buy' ? '#d60000' : '#0051c7';
-  }};
-`;
 
 const FormBody = styled.div`
   padding: 12px;
   flex: 1;
+`;
+
+const TierInfoBox = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  background: #f8f9fa;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  border-radius: 4px;
+`;
+
+const PolicyBtn = styled.button`
+  background: none;
+  border: none;
+  color: #093687;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+`;
+
+const VolumeText = styled.span`
+  color: #333;
+  font-weight: 600;
 `;
 
 const FormRow = styled.div`
@@ -158,15 +170,19 @@ function getToken(): string | null {
   return localStorage.getItem('accessToken');
 }
 
-const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice }) => {
+const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, tradeType }) => {
   const navigate = useNavigate();
-  const [tab, setTab] = useState<'buy' | 'sell'>('buy');
+  // const [tab, setTab] = useState<'buy' | 'sell'>('buy'); // 제거됨
   const [price, setPrice] = useState('');
   const [amount, setAmount] = useState('');
   const [krwBalance, setKrwBalance] = useState(0);
   const [coinBalance, setCoinBalance] = useState(0);
   const [message, setMessage] = useState<{ text: string; success: boolean } | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const [totalVolume, setTotalVolume] = useState<number>(0);
+  const [nextTierVolume, setNextTierVolume] = useState<number>(100000000);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const token = getToken();
   const isLoggedIn = !!token;
@@ -200,6 +216,22 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice }) => 
         .then(res => setCoinBalance(res.data.availableBalance ?? 0))
         .catch(() => { });
     }
+
+    axios.get(`${API_BASE}/api/auth/me`, { headers })
+      .then(res => {
+        const volume = Number(res.data.totalVolume) || 0;
+        setTotalVolume(volume);
+        if (volume < 100000000) {
+          setNextTierVolume(100000000);
+        } else if (volume < 2000000000) {
+          setNextTierVolume(2000000000);
+        } else if (volume < 20000000000) {
+          setNextTierVolume(20000000000);
+        } else {
+          setNextTierVolume(volume); // VIP
+        }
+      })
+      .catch(() => { });
   }, [isLoggedIn, token, assetType, message]);
 
   // 쉼표 제거하여 파싱
@@ -210,9 +242,20 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice }) => 
     const p = parseNumber(price);
     if (p <= 0) return;
 
-    if (tab === 'buy') {
-      const maxAmount = krwBalance / p;
-      setAmount((maxAmount * pct / 100).toFixed(8));
+    if (tradeType === 'buy') {
+      // 등급별 수수료율 계산
+      let feeRate = 0.0008; // BRONZE
+      if (totalVolume >= 20000000000) feeRate = 0.0001; // VIP
+      else if (totalVolume >= 2000000000) feeRate = 0.0003; // GOLD
+      else if (totalVolume >= 100000000) feeRate = 0.0005; // SILVER
+
+      // 매수 시: 필요한 총 KRW = (현재가 * 수량) + (현재가 * 수량 * 수수료율)
+      // 즉, 잔액 배분: 잔액 = 수량 * 현재가 * (1 + 수수료율)
+      // 최대 수량 = (할당할 잔액) / (현재가 * (1 + 수수료율))
+      const allocatedBalance = krwBalance * (pct / 100);
+      const maxAmount = allocatedBalance / (p * (1 + feeRate));
+
+      setAmount(maxAmount.toFixed(8));
     } else {
       setAmount((coinBalance * pct / 100).toFixed(8));
     }
@@ -245,7 +288,7 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice }) => 
 
     try {
       await axios.post(`${API_BASE}/api/orders`, {
-        orderType: tab === 'buy' ? 'BUY' : 'SELL',
+        orderType: tradeType === 'buy' ? 'BUY' : 'SELL',
         priceType: 'LIMIT',
         assetType,
         price: p,
@@ -254,7 +297,7 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice }) => 
         headers: { Authorization: `Bearer ${token}` },
       });
       setMessage({
-        text: `${tab === 'buy' ? '매수' : '매도'} 주문이 체결되었습니다.`,
+        text: `${tradeType === 'buy' ? '매수' : '매도'} 주문이 체결되었습니다.`,
         success: true,
       });
       setAmount('');
@@ -269,10 +312,6 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice }) => 
   if (!isLoggedIn) {
     return (
       <Container>
-        <Tabs>
-          <Tab $active={true} $type="buy">매수</Tab>
-          <Tab $active={false} $type="sell">매도</Tab>
-        </Tabs>
         <LoginMessage>
           <a href="/login">로그인</a> 후 이용해 주세요.
         </LoginMessage>
@@ -282,20 +321,33 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice }) => 
 
   return (
     <Container>
-      <Tabs>
-        <Tab $active={tab === 'buy'} $type="buy" onClick={() => { setTab('buy'); setMessage(null); }}>매수</Tab>
-        <Tab $active={tab === 'sell'} $type="sell" onClick={() => { setTab('sell'); setMessage(null); }}>매도</Tab>
-      </Tabs>
       <FormBody>
+        <TierInfoBox>
+          <PolicyBtn onClick={() => setIsModalOpen(true)}>수수료 정책 보기</PolicyBtn>
+          <VolumeText>
+            {totalVolume >= 20000000000 ? (
+              `${totalVolume.toLocaleString()} / VIP 달성 (KRW)`
+            ) : (
+              `${totalVolume.toLocaleString()} / ${nextTierVolume.toLocaleString()} (KRW)`
+            )}
+          </VolumeText>
+        </TierInfoBox>
+
+        <TierModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          currentVolume={totalVolume}
+        />
+
         <BalanceInfo>
-          {tab === 'buy' ? (
+          {tradeType === 'buy' ? (
             <>주문가능: <span>{Number(krwBalance).toLocaleString()} KRW</span></>
           ) : (
             <>주문가능: <span>{Number(coinBalance).toFixed(8)} {assetType}</span></>
           )}
         </BalanceInfo>
 
-        {tab === 'buy' && krwBalance === 0 && (
+        {tradeType === 'buy' && krwBalance === 0 && (
           <DepositBtn onClick={handleDeposit}>테스트 1,000만원 충전</DepositBtn>
         )}
 
@@ -331,8 +383,8 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice }) => 
         </FormRow>
 
         <ButtonContainer>
-          <SubmitBtn $type={tab} onClick={handleSubmit} disabled={loading}>
-            {loading ? '처리 중...' : tab === 'buy' ? `${assetType} 매수` : `${assetType} 매도`}
+          <SubmitBtn $type={tradeType} onClick={handleSubmit} disabled={loading}>
+            {loading ? '처리 중...' : tradeType === 'buy' ? `${assetType} 매수` : `${assetType} 매도`}
           </SubmitBtn>
           <HistoryBtn onClick={() => navigate('/investments')}>내역</HistoryBtn>
         </ButtonContainer>

@@ -12,5 +12,5 @@ public class SignupRequestDto {
     private String phoneNumber;
     private String address;
     private String accountNumber;
-    // File handled separately in controller as RequestPart
+    private String referredByCode;
 }

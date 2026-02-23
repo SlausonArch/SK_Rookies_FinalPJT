@@ -20,7 +20,6 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final AssetRepository assetRepository;
     private final TransactionRepository transactionRepository;
-    private final FeeTierRepository feeTierRepository;
     private final MemberRepository memberRepository;
     private final AssetService assetService;
 
@@ -194,12 +193,20 @@ public class OrderService {
     }
 
     private BigDecimal getMemberFeeRate(Member member) {
-        if (member.getFeeTier() != null) {
-            return member.getFeeTier().getFeeRate();
+        BigDecimal totalVolume = transactionRepository.sumTotalVolumeByMemberId(member.getMemberId());
+        if (totalVolume == null) {
+            totalVolume = BigDecimal.ZERO;
         }
-        return feeTierRepository.findById(1L)
-                .map(FeeTier::getFeeRate)
-                .orElse(new BigDecimal("0.0020"));
+
+        if (totalVolume.compareTo(new BigDecimal("100000000")) < 0) {
+            return new BigDecimal("0.0008"); // Bronze: 0.08%
+        } else if (totalVolume.compareTo(new BigDecimal("2000000000")) < 0) {
+            return new BigDecimal("0.0005"); // Silver: 0.05%
+        } else if (totalVolume.compareTo(new BigDecimal("20000000000")) < 0) {
+            return new BigDecimal("0.0003"); // Gold: 0.03%
+        } else {
+            return new BigDecimal("0.0001"); // VIP: 0.01%
+        }
     }
 
     private OrderResponseDto toDto(Order order) {

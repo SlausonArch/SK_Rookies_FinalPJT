@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import TierModal from '../components/TierModal';
 
 /* ── styled ── */
 
@@ -101,12 +102,20 @@ const Badge = styled.span<{ $type: string }>`
   font-weight: 600;
   background: ${p =>
     p.$type === 'ACTIVE' ? '#dcfce7' :
-    p.$type === 'ADMIN' ? '#dbeafe' :
-    p.$type === 'USER' ? '#f0fdf4' : '#fee2e2'};
+      p.$type === 'ADMIN' ? '#dbeafe' :
+        p.$type === 'USER' ? '#f0fdf4' :
+          p.$type === 'VIP' ? '#fce7f3' :
+            p.$type === 'GOLD' ? '#fef9c3' :
+              p.$type === 'SILVER' ? '#f1f5f9' :
+                p.$type === 'BRONZE' ? '#ffedd5' : '#fee2e2'};
   color: ${p =>
     p.$type === 'ACTIVE' ? '#16a34a' :
-    p.$type === 'ADMIN' ? '#2563eb' :
-    p.$type === 'USER' ? '#16a34a' : '#dc2626'};
+      p.$type === 'ADMIN' ? '#2563eb' :
+        p.$type === 'USER' ? '#16a34a' :
+          p.$type === 'VIP' ? '#be185d' :
+            p.$type === 'GOLD' ? '#a16207' :
+              p.$type === 'SILVER' ? '#475569' :
+                p.$type === 'BRONZE' ? '#c2410c' : '#dc2626'};
 `;
 
 const ButtonRow = styled.div`
@@ -172,6 +181,7 @@ interface MemberInfo {
   role: string;
   status: string;
   createdAt: string;
+  referralCode?: string;
 }
 
 /* ── component ── */
@@ -184,6 +194,8 @@ const MyPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [totalVolume, setTotalVolume] = useState<number>(0);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   // 수정 폼 상태
   const [form, setForm] = useState({
@@ -209,6 +221,7 @@ const MyPage: React.FC = () => {
     axios.get('http://localhost:8080/api/auth/me', { headers })
       .then(res => {
         setMember(res.data);
+        setTotalVolume(Number(res.data.totalVolume) || 0);
         setForm({
           name: res.data.name || '',
           phoneNumber: res.data.phoneNumber || '',
@@ -301,6 +314,11 @@ const MyPage: React.FC = () => {
     );
   }
 
+  let tier = 'BRONZE';
+  if (totalVolume >= 20000000000) tier = 'VIP';
+  else if (totalVolume >= 2000000000) tier = 'GOLD';
+  else if (totalVolume >= 100000000) tier = 'SILVER';
+
   return (
     <Container>
       <Header />
@@ -327,6 +345,10 @@ const MyPage: React.FC = () => {
             </Value>
           </InfoRow>
           <InfoRow>
+            <Label>내 추천인 코드</Label>
+            <Value style={{ fontWeight: 600, color: '#093687' }}>{member.referralCode || '발급 전 (자동 갱신 예정)'}</Value>
+          </InfoRow>
+          <InfoRow>
             <Label>연락처</Label>
             <Value>
               {editing
@@ -344,7 +366,18 @@ const MyPage: React.FC = () => {
           </InfoRow>
           <InfoRow>
             <Label>등급</Label>
-            <Value><Badge $type={member.role}>{member.role}</Badge></Value>
+            <Value style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Badge $type={tier}>{tier}</Badge>
+              <button
+                onClick={() => setIsModalOpen(true)}
+                style={{
+                  background: 'none', border: 'none', color: '#093687',
+                  textDecoration: 'underline', cursor: 'pointer', fontSize: '13px', padding: 0, fontWeight: 600
+                }}
+              >
+                수수료 정책 보기
+              </button>
+            </Value>
           </InfoRow>
           <InfoRow>
             <Label>상태</Label>
@@ -398,6 +431,12 @@ const MyPage: React.FC = () => {
             </Value>
           </InfoRow>
         </Card>
+
+        <TierModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          currentVolume={totalVolume}
+        />
       </Main>
       <Footer />
     </Container>

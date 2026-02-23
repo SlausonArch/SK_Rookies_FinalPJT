@@ -113,6 +113,7 @@ interface SignupInputs {
     phoneNumber: string;
     address: string;
     accountNumber: string;
+    referredByCode: string; // 추천인 코드 추가
     idPhoto: FileList;
 }
 
@@ -149,16 +150,17 @@ const SignupComplete: React.FC = () => {
     const onSubmit = async (data: SignupInputs) => {
         setIsSubmitting(true);
         const formData = new FormData();
-        
+
         // 백엔드 @RequestPart("data") SignupRequestDto와 매핑되도록 처리
         const jsonData = {
             name: data.name,
             rrnPrefix: data.rrnPrefix,
             phoneNumber: data.phoneNumber,
             address: data.address,
-            accountNumber: data.accountNumber
+            accountNumber: data.accountNumber,
+            referredByCode: data.referredByCode || ''
         };
-        
+
         formData.append('data', new Blob([JSON.stringify(jsonData)], { type: "application/json" }));
 
         if (data.idPhoto && data.idPhoto[0]) {
@@ -201,26 +203,26 @@ const SignupComplete: React.FC = () => {
 
                     <FormGroup>
                         <Label>주민등록번호 (앞 6자리 + 뒤 1자리)</Label>
-                        <Input 
-                            {...register("rrnPrefix", { 
-                                required: true, 
+                        <Input
+                            {...register("rrnPrefix", {
+                                required: true,
                                 onChange: handleRrnChange,
-                                maxLength: 8 
-                            })} 
-                            placeholder="900101-1" 
+                                maxLength: 8
+                            })}
+                            placeholder="900101-1"
                         />
                         {errors.rrnPrefix && <ErrorText>올바른 형식이 아닙니다 (예: 900101-1)</ErrorText>}
                     </FormGroup>
 
                     <FormGroup>
                         <Label>휴대전화 번호</Label>
-                        <Input 
-                            {...register("phoneNumber", { 
+                        <Input
+                            {...register("phoneNumber", {
                                 required: true,
                                 onChange: handlePhoneChange,
                                 maxLength: 13
-                            })} 
-                            placeholder="010-1234-5678" 
+                            })}
+                            placeholder="010-1234-5678"
                         />
                     </FormGroup>
 
@@ -232,6 +234,11 @@ const SignupComplete: React.FC = () => {
                     <FormGroup>
                         <Label>계좌 번호</Label>
                         <Input {...register("accountNumber", { required: true })} placeholder="은행명 / 계좌번호" />
+                    </FormGroup>
+
+                    <FormGroup>
+                        <Label>추천인 코드 (선택)</Label>
+                        <Input {...register("referredByCode")} placeholder="영문 대문자, 숫자 8자리 코드 입력 (선택사항)" />
                     </FormGroup>
 
                     <FormGroup>

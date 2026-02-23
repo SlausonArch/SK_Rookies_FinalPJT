@@ -249,8 +249,8 @@ function CommunityDetail() {
     // 낙관적 UI 업데이트 - 즉시 UI 업데이트
     setSavingLike(true);
     const previousPost = post;
-    setPost(prev => prev ? { ...prev, likeCount: prev.likeCount + 1, userLiked: true } : null);
-    
+    setPost((prev: Post | null) => prev ? { ...prev, likeCount: prev.likeCount + 1, userLiked: true } : null);
+
     try {
       await axios.post(`${API_BASE}/api/community/posts/${post.postId}/like`, {}, { headers: authHeaders });
     } catch (error) {
@@ -367,7 +367,7 @@ function CommunityDetail() {
             <CommentSection>
               <CommentTitle>댓글 {comments.length}</CommentTitle>
               {comments.length === 0 && <Empty>아직 댓글이 없습니다.</Empty>}
-              {comments.map(comment => (
+              {comments.map((comment: Comment) => (
                 <CommentCard key={comment.commentId}>
                   <CommentMeta>
                     {comment.authorName} | {formatDate(comment.createdAt)}
@@ -386,7 +386,7 @@ function CommunityDetail() {
                 <Textarea
                   placeholder="댓글을 입력하세요."
                   value={commentContent}
-                  onChange={e => setCommentContent(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setCommentContent(e.target.value)}
                   required
                 />
                 <Button type="submit" disabled={savingComment}>

@@ -24,9 +24,9 @@ const TimeframeTabs = styled.div`
 const TimeframeBtn = styled.button<{ $active: boolean }>`
   padding: 4px 10px;
   font-size: 11px;
-  font-weight: ${p => p.$active ? 700 : 400};
-  color: ${p => p.$active ? '#fff' : '#666'};
-  background: ${p => p.$active ? '#093687' : '#f0f2f5'};
+  font-weight: ${(p: { $active: boolean }) => p.$active ? 700 : 400};
+  color: ${(p: { $active: boolean }) => p.$active ? '#fff' : '#666'};
+  background: ${(p: { $active: boolean }) => p.$active ? '#093687' : '#f0f2f5'};
   border: none;
   border-radius: 4px;
   cursor: pointer;
@@ -98,7 +98,7 @@ const toUtcTimestamp = (utcDateTime: string): Time => {
   return Math.floor(new Date(`${utcDateTime}Z`).getTime() / 1000) as Time;
 };
 
-const PriceChart: React.FC<Props> = ({ market }) => {
+const PriceChart: React.FC<Props> = ({ market }: Props) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick', Time> | null>(null);

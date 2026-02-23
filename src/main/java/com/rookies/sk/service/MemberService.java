@@ -7,6 +7,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
+
 @Service
 @RequiredArgsConstructor
 public class MemberService {
@@ -28,10 +30,25 @@ public class MemberService {
         member.setAddress(dto.getAddress());
         member.setAccountNumber(dto.getAccountNumber());
         member.setIdPhotoUrl(itemsUrl);
+
+        // 추천인 코드 생성 로직 (영문 대문자 + 숫자 8자리)
+        member.setReferralCode(generateReferralCode());
+        member.setReferredByCode(dto.getReferredByCode());
+
         member.setRole(Member.Role.USER);
         member.setStatus(Member.Status.ACTIVE);
 
         return memberRepository.save(member);
+    }
+
+    private String generateReferralCode() {
+        String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        SecureRandom random = new SecureRandom();
+        StringBuilder sb = new StringBuilder(8);
+        for (int i = 0; i < 8; i++) {
+            sb.append(chars.charAt(random.nextInt(chars.length())));
+        }
+        return sb.toString();
     }
 
     // V-01: IDOR - No check if the requesting user matches the requested ID

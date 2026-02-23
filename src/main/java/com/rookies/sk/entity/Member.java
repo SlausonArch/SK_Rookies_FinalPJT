@@ -53,6 +53,12 @@ public class Member {
     @Column(name = "ID_PHOTO_URL", length = 255)
     private String idPhotoUrl;
 
+    @Column(name = "REFERRAL_CODE", length = 20, unique = true)
+    private String referralCode;
+
+    @Column(name = "REFERRED_BY_CODE", length = 20)
+    private String referredByCode;
+
     @Enumerated(EnumType.STRING)
     @Column(length = 20)
     @Builder.Default

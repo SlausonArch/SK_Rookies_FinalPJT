@@ -62,7 +62,7 @@ export function useUpbitTicker(markets: string[]) {
           ? await event.data.text()
           : event.data;
         const data: TickerWS = JSON.parse(text);
-        setTickers(prev => {
+        setTickers((prev: Map<string, TickerWS>) => {
           const next = new Map(prev);
           next.set(data.code, data);
           return next;
@@ -143,7 +143,7 @@ export function useUpbitTrades(market: string) {
           ? await event.data.text()
           : event.data;
         const data: TradeWS = JSON.parse(text);
-        setTrades(prev => [data, ...prev].slice(0, 50));
+        setTrades((prev: TradeWS[]) => [data, ...prev].slice(0, 50));
       } catch { /* ignore */ }
     };
 
