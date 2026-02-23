@@ -1,5 +1,7 @@
 package com.rookies.sk.security;
 
+import com.rookies.sk.entity.Member;
+import com.rookies.sk.repository.MemberRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -25,6 +27,7 @@ import java.util.List;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider tokenProvider;
+    private final MemberRepository memberRepository;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -38,6 +41,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String email = tokenProvider.getEmail(token);
             String role = tokenProvider.getRole(token);
             log.info("Token Valid. Email: {}, Role: {}", email, role);
+
+            Member member = memberRepository.findByEmail(email).orElse(null);
+            if (member != null && member.getStatus() == Member.Status.LOCKED) {
+                response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                response.setContentType("application/json;charset=UTF-8");
+                response.getWriter().write("{\"message\":\"LOCKED_ACCOUNT\"}");
+                return;
+            }
 
             // Reconstruct Authentication object from Token
             List<GrantedAuthority> authorities = Collections

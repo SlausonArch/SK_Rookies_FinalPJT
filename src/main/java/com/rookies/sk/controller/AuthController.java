@@ -24,6 +24,8 @@ import java.math.BigDecimal;
 @RequiredArgsConstructor
 public class AuthController {
 
+    private static final String LOCKED_ACCOUNT_MESSAGE = "LOCKED_ACCOUNT";
+
     private final MemberService memberService;
     private final FileService fileService;
     private final JwtTokenProvider jwtTokenProvider;
@@ -37,6 +39,10 @@ public class AuthController {
 
             if (member.getPassword() == null || !passwordEncoder.matches(request.getPassword(), member.getPassword())) {
                 return ResponseEntity.status(401).body("이메일 또는 비밀번호가 올바르지 않습니다.");
+            }
+
+            if (member.getStatus() == Member.Status.LOCKED) {
+                return ResponseEntity.status(403).body(LOCKED_ACCOUNT_MESSAGE);
             }
 
             if (member.getRole() == Member.Role.GUEST) {
@@ -68,6 +74,10 @@ public class AuthController {
             // 비밀번호 검증
             if (member.getPassword() == null || !passwordEncoder.matches(request.getPassword(), member.getPassword())) {
                 return ResponseEntity.status(401).body("Invalid credentials");
+            }
+
+            if (member.getStatus() == Member.Status.LOCKED) {
+                return ResponseEntity.status(403).body(LOCKED_ACCOUNT_MESSAGE);
             }
 
             // 관리자 권한 확인

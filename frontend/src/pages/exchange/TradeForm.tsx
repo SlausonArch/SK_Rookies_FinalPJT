@@ -170,6 +170,23 @@ function getToken(): string | null {
   return localStorage.getItem('accessToken');
 }
 
+function toUserMessage(raw: unknown): string {
+  const code = String(raw ?? '');
+  if (code.includes('LOCKED_ACCOUNT')) {
+    return '계정의 접속을 차단하고 제한된 계정입니다. 관리자에게 문의하세요.';
+  }
+  if (code.includes('RESTRICTED_ACCOUNT')) {
+    return '제한계정입니다. 관리자한테 문의하세요.';
+  }
+  return code || '요청 처리에 실패했습니다.';
+}
+
+function showRestrictionPopupIfNeeded(msg: string): void {
+  if (msg.includes('제한계정') || msg.includes('접속을 차단')) {
+    window.alert(msg);
+  }
+}
+
 const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, tradeType }) => {
   const navigate = useNavigate();
   // const [tab, setTab] = useState<'buy' | 'sell'>('buy'); // 제거됨
@@ -269,8 +286,11 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setMessage({ text: '테스트 1,000만원이 충전되었습니다!', success: true });
-    } catch {
-      setMessage({ text: '충전에 실패했습니다.', success: false });
+    } catch (err: any) {
+      const raw = err.response?.data?.message || err.response?.data || '충전에 실패했습니다.';
+      const userMessage = toUserMessage(raw);
+      showRestrictionPopupIfNeeded(userMessage);
+      setMessage({ text: userMessage, success: false });
     }
   };
 
@@ -302,8 +322,10 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
       });
       setAmount('');
     } catch (err: any) {
-      const msg = err.response?.data?.message || err.response?.data || '주문에 실패했습니다.';
-      setMessage({ text: String(msg), success: false });
+      const raw = err.response?.data?.message || err.response?.data || '주문에 실패했습니다.';
+      const userMessage = toUserMessage(raw);
+      showRestrictionPopupIfNeeded(userMessage);
+      setMessage({ text: userMessage, success: false });
     } finally {
       setLoading(false);
     }

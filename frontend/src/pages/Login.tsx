@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import styled from 'styled-components';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 
 const Container = styled.div`
@@ -131,8 +131,29 @@ const FooterLink = styled.div`
 `;
 
 const Login: React.FC = () => {
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const toUserMessage = (raw: unknown) => {
+    const code = String(raw ?? '');
+    if (code.includes('LOCKED_ACCOUNT')) {
+      return '계정의 접속을 차단하고 제한된 계정입니다. 관리자에게 문의하세요.';
+    }
+    if (code.includes('RESTRICTED_ACCOUNT')) {
+      return '제한계정입니다. 관리자한테 문의하세요.';
+    }
+    return code || '로그인에 실패했습니다. 서버를 확인해주세요.';
+  };
+
+  useEffect(() => {
+    const errorCode = searchParams.get('error');
+    if (!errorCode) return;
+
+    const msg = toUserMessage(errorCode);
+    setError(msg);
+    window.alert(msg);
+  }, [searchParams]);
 
   const handleTestLogin = async () => {
     setLoading(true);
@@ -146,7 +167,11 @@ const Login: React.FC = () => {
       localStorage.setItem('refreshToken', data.refreshToken);
       window.location.href = '/';
     } catch (e: any) {
-      setError(e.response?.data || '로그인에 실패했습니다. 서버를 확인해주세요.');
+      const msg = toUserMessage(e.response?.data?.message || e.response?.data);
+      setError(msg);
+      if (msg.includes('제한')) {
+        window.alert(msg);
+      }
     } finally {
       setLoading(false);
     }

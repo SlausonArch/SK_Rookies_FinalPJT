@@ -31,9 +31,16 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
 
         // CustomOAuth2UserService에서 넣어준 내부 식별용 이메일 추출
         String internalEmail = (String) oAuth2User.getAttribute("internal_email");
-
         Member member = memberRepository.findByEmail(internalEmail)
                 .orElseThrow(() -> new RuntimeException("Member not found"));
+
+        if (member.getStatus() == Member.Status.LOCKED) {
+            String targetUrl = UriComponentsBuilder.fromUriString("http://localhost:5173/login")
+                    .queryParam("error", "LOCKED_ACCOUNT")
+                    .build().toUriString();
+            getRedirectStrategy().sendRedirect(request, response, targetUrl);
+            return;
+        }
 
         // 프론트엔드 회원가입창에 미리 채워줄 "진짜 이메일" (있을 때만)
         String socialEmail = null;

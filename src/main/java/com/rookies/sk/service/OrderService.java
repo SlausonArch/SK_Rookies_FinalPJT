@@ -5,8 +5,10 @@ import com.rookies.sk.dto.OrderResponseDto;
 import com.rookies.sk.entity.*;
 import com.rookies.sk.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -27,6 +29,7 @@ public class OrderService {
     public OrderResponseDto createOrder(String email, OrderRequestDto req) {
         Member member = memberRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("회원을 찾을 수 없습니다."));
+        validateTradePermission(member);
 
         String assetType = req.getAssetType().toUpperCase();
         String orderType = req.getOrderType().toUpperCase();
@@ -135,6 +138,7 @@ public class OrderService {
     public OrderResponseDto cancelOrder(String email, Long orderId) {
         Member member = memberRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("회원을 찾을 수 없습니다."));
+        validateTradePermission(member);
 
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new RuntimeException("주문을 찾을 수 없습니다."));
@@ -206,6 +210,15 @@ public class OrderService {
             return new BigDecimal("0.0003"); // Gold: 0.03%
         } else {
             return new BigDecimal("0.0001"); // VIP: 0.01%
+        }
+    }
+
+    private void validateTradePermission(Member member) {
+        if (member.getStatus() == Member.Status.LOCKED) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "LOCKED_ACCOUNT");
+        }
+        if (member.getStatus() == Member.Status.WITHDRAWN) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "RESTRICTED_ACCOUNT");
         }
     }
 

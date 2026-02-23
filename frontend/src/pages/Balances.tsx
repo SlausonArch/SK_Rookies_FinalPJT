@@ -337,6 +337,17 @@ const Balances = () => {
     return `₩${price.toLocaleString('ko-KR', options)}`;
   };
 
+  const toUserMessage = (raw: unknown, fallback: string) => {
+    const code = String(raw ?? '');
+    if (code.includes('LOCKED_ACCOUNT')) {
+      return '계정의 접속을 차단하고 제한된 계정입니다. 관리자에게 문의하세요.';
+    }
+    if (code.includes('RESTRICTED_ACCOUNT')) {
+      return '제한계정입니다. 관리자한테 문의하세요.';
+    }
+    return code || fallback;
+  };
+
   const handleCashDeposit = async () => {
     const token = localStorage.getItem('accessToken');
     if (!token) return;
@@ -348,8 +359,9 @@ const Balances = () => {
       );
       alert('입금이 완료되었습니다.');
       window.location.reload();
-    } catch (error) {
-      alert('입금에 실패했습니다.');
+    } catch (error: any) {
+      const msg = toUserMessage(error.response?.data?.message || error.response?.data, '입금에 실패했습니다.');
+      alert(msg);
     }
   };
 
@@ -365,7 +377,8 @@ const Balances = () => {
       alert('출금이 완료되었습니다.');
       window.location.reload();
     } catch (error: any) {
-      alert(error.response?.data?.message || '출금에 실패했습니다.');
+      const msg = toUserMessage(error.response?.data?.message || error.response?.data, '출금에 실패했습니다.');
+      alert(msg);
     }
   };
 
@@ -383,7 +396,8 @@ const Balances = () => {
       alert(`${transferType === 'deposit' ? '입금' : '출금'}이 완료되었습니다.`);
       window.location.reload();
     } catch (error: any) {
-      alert(error.response?.data?.message || '처리에 실패했습니다.');
+      const msg = toUserMessage(error.response?.data?.message || error.response?.data, '처리에 실패했습니다.');
+      alert(msg);
     }
   };
 

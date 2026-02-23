@@ -10,8 +10,10 @@ import com.rookies.sk.repository.AssetRepository;
 import com.rookies.sk.repository.MemberRepository;
 import com.rookies.sk.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -55,6 +57,7 @@ public class AssetService {
         @Transactional
         public AssetResponseDto deposit(String email, DepositRequestDto req) {
                 Member member = findMemberByEmail(email);
+                validateTradePermission(member);
                 String assetType = req.getAssetType().toUpperCase();
                 Asset asset = findOrCreateAsset(member, assetType);
 
@@ -76,6 +79,7 @@ public class AssetService {
         @Transactional
         public AssetResponseDto withdraw(String email, DepositRequestDto req) {
                 Member member = findMemberByEmail(email);
+                validateTradePermission(member);
                 String assetType = req.getAssetType().toUpperCase();
                 Asset asset = assetRepository.findWithLockByMember_MemberIdAndAssetType(member.getMemberId(), assetType)
                                 .orElseThrow(() -> new RuntimeException("자산이 없습니다."));
@@ -159,6 +163,15 @@ public class AssetService {
         private Member findMemberByEmail(String email) {
                 return memberRepository.findByEmail(email)
                                 .orElseThrow(() -> new RuntimeException("회원을 찾을 수 없습니다."));
+        }
+
+        private void validateTradePermission(Member member) {
+                if (member.getStatus() == Member.Status.LOCKED) {
+                        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "LOCKED_ACCOUNT");
+                }
+                if (member.getStatus() == Member.Status.WITHDRAWN) {
+                        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "RESTRICTED_ACCOUNT");
+                }
         }
 
         private AssetResponseDto toDto(Asset asset) {
