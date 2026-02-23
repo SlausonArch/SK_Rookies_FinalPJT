@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -85,25 +85,6 @@ const CardTitle = styled.h2`
   margin: 0;
 `;
 
-const FilterGroup = styled.div`
-  display: flex;
-  gap: 12px;
-`;
-
-const Select = styled.select`
-  padding: 8px 16px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 14px;
-  background: white;
-  cursor: pointer;
-
-  &:focus {
-    outline: none;
-    border-color: #093687;
-  }
-`;
-
 const Table = styled.table`
   width: 100%;
   border-collapse: collapse;
@@ -121,6 +102,11 @@ const Th = styled.th`
   color: #666;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+`;
+
+const SortTh = styled(Th)`
+  cursor: pointer;
+  user-select: none;
 `;
 
 const Tbody = styled.tbody``;
@@ -155,6 +141,30 @@ const EmptyState = styled.div`
   color: #999;
 `;
 
+const Pagination = styled.div`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+`;
+
+const PageButton = styled.button<{ $active?: boolean }>`
+  border: 1px solid ${props => (props.$active ? '#093687' : '#d1d8e3')};
+  background: ${props => (props.$active ? '#eef3ff' : '#fff')};
+  color: ${props => (props.$active ? '#093687' : '#333')};
+  border-radius: 6px;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 10px;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+`;
+
 interface Transaction {
   txId: number;
   txType: string;
@@ -166,10 +176,26 @@ interface Transaction {
   txDate: string;
 }
 
+type SortKey = 'txDate' | 'txType' | 'assetType' | 'amount' | 'price' | 'totalValue' | 'fee';
+type SortOrder = 'asc' | 'desc';
+
+const ROWS_PER_PAGE = 10;
+function getKst9Anchor(now: Date = new Date()): Date {
+  const offsetMs = 9 * 60 * 60 * 1000;
+  const kstNow = new Date(now.getTime() + offsetMs);
+  const y = kstNow.getUTCFullYear();
+  const m = kstNow.getUTCMonth();
+  const d = kstNow.getUTCDate();
+  const h = kstNow.getUTCHours();
+  const targetDay = h < 9 ? d - 1 : d;
+  return new Date(Date.UTC(y, m, targetDay, 0, 0, 0));
+}
+
 const Investments = () => {
   const navigate = useNavigate();
-  const [coinFilter, setCoinFilter] = useState('all');
-  const [typeFilter, setTypeFilter] = useState('all');
+  const [sortKey, setSortKey] = useState<SortKey>('txDate');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+  const [currentPage, setCurrentPage] = useState(1);
 
   // 자산
   const [krwBalance, setKrwBalance] = useState(0);
@@ -279,20 +305,53 @@ const Investments = () => {
   }, [assets]);
 
   // 필터링된 거래 내역
-  const filteredTrades = transactions.filter(tx => {
-    // 코인 필터
-    if (coinFilter !== 'all' && tx.assetType !== coinFilter) return false;
+  const onSort = (key: SortKey) => {
+    setCurrentPage(1);
+    if (sortKey === key) {
+      setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortKey(key);
+    setSortOrder('desc');
+  };
 
-    // 거래 유형 필터 (BUY/SELL/DEPOSIT/WITHDRAW)
-    if (typeFilter === 'buy' && tx.txType !== 'BUY') return false;
-    if (typeFilter === 'sell' && tx.txType !== 'SELL') return false;
-    if (typeFilter === 'deposit' && tx.txType !== 'DEPOSIT') return false;
-    if (typeFilter === 'withdraw' && tx.txType !== 'WITHDRAW') return false;
+  const sortedTrades = useMemo(() => {
+    const data = [...transactions];
+    const direction = sortOrder === 'asc' ? 1 : -1;
 
-    // typeFilter가 'all'일 때는 모든 내역 표시 (입출금 포함)
+    data.sort((a, b) => {
+      if (sortKey === 'txDate') {
+        const aTime = Number.isNaN(new Date(a.txDate).getTime()) ? 0 : new Date(a.txDate).getTime();
+        const bTime = Number.isNaN(new Date(b.txDate).getTime()) ? 0 : new Date(b.txDate).getTime();
+        return (aTime - bTime) * direction;
+      }
 
-    return true;
-  });
+      if (sortKey === 'txType' || sortKey === 'assetType') {
+        const aText = String(a[sortKey] ?? '');
+        const bText = String(b[sortKey] ?? '');
+        return aText.localeCompare(bText, 'ko-KR') * direction;
+      }
+
+      const aValue = Number(a[sortKey] ?? 0);
+      const bValue = Number(b[sortKey] ?? 0);
+      return (aValue - bValue) * direction;
+    });
+
+    return data;
+  }, [transactions, sortKey, sortOrder]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedTrades.length / ROWS_PER_PAGE));
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  const pagedTrades = useMemo(() => {
+    const start = (currentPage - 1) * ROWS_PER_PAGE;
+    return sortedTrades.slice(start, start + ROWS_PER_PAGE);
+  }, [sortedTrades, currentPage]);
 
   // 총 보유 자산 계산 (실시간 시세 반영)
   const totalAssets = krwBalance + assets
@@ -302,24 +361,22 @@ const Investments = () => {
       return sum + (asset.balance * info.price);
     }, 0);
 
-  // 오늘 날짜
-  const today = new Date().toISOString().split('T')[0];
+  // KST 09:00 ~ 현재 기준 거래 (입출금 제외)
+  const sessionStart = getKst9Anchor();
+  const todayTrades = transactions.filter(tx => {
+    const txTime = new Date(tx.txDate).getTime();
+    if (Number.isNaN(txTime)) return false;
+    return txTime >= sessionStart.getTime() && (tx.txType === 'BUY' || tx.txType === 'SELL');
+  });
+  const todayTradeAmount = todayTrades.reduce((sum, tx) => sum + (Number(tx.totalValue) || 0), 0);
 
-  // 오늘의 거래 내역
-  const todayTrades = transactions.filter(tx =>
-    tx.txDate.startsWith(today) && (tx.txType === 'BUY' || tx.txType === 'SELL')
-  );
-
-  // 오늘의 거래금액 (총액)
-  const todayTradeAmount = todayTrades.reduce((sum, tx) => sum + tx.totalValue, 0);
-
-  // 오늘의 수익 (보유 자산의 일일 평가 손익 합계)
-  // 등락액(signed_change_price) * 보유수량
+  // 오늘 수익: 보유 자산의 평가손익만 반영 (KST 9시 기준가 대비)
+  // Upbit signed_change_price = 현재가 - KST 9시 기준가
   const todayProfit = assets
-    .filter((a: any) => a.assetType !== 'KRW')
+    .filter((a: any) => a.assetType !== 'KRW' && (Number(a.balance) || 0) > 0)
     .reduce((sum, asset) => {
       const info = coinPrices[asset.assetType] || { price: 0, changePrice: 0 };
-      return sum + (asset.balance * info.changePrice);
+      return sum + ((Number(asset.balance) || 0) * info.changePrice);
     }, 0);
 
   // 총 수익률 (투자원금 기반)
@@ -351,6 +408,11 @@ const Investments = () => {
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  const sortMark = (key: SortKey) => {
+    if (sortKey !== key) return '';
+    return sortOrder === 'asc' ? ' ▲' : ' ▼';
   };
 
   if (loading) {
@@ -401,7 +463,7 @@ const Investments = () => {
           <CardHeader>
             <CardTitle>보유 자산 현황</CardTitle>
             <div style={{ fontSize: '14px', color: '#666' }}>
-              목록을 클릭하면 해당 코인의 거래 내역만 볼 수 있습니다.
+              현재 보유 중인 코인의 평가 현황입니다.
             </div>
           </CardHeader>
           <Table>
@@ -429,11 +491,7 @@ const Investments = () => {
                 const profitRate = totalInvest > 0 ? (profit / totalInvest * 100) : 0;
 
                 return (
-                  <Tr
-                    key={symbol}
-                    onClick={() => setCoinFilter(symbol)}
-                    style={{ cursor: 'pointer', backgroundColor: coinFilter === symbol ? '#f0f7ff' : 'transparent' }}
-                  >
+                  <Tr key={symbol}>
                     <Td><strong>{symbol}</strong></Td>
                     <Td>{balance.toFixed(8)}</Td>
                     <Td>{formatAverageBuyPrice(avgPrice)}</Td>
@@ -462,39 +520,24 @@ const Investments = () => {
         <Card>
           <CardHeader>
             <CardTitle>거래 내역</CardTitle>
-            <FilterGroup>
-              <Select value={coinFilter} onChange={(e) => setCoinFilter(e.target.value)}>
-                <option value="all">전체 코인</option>
-                <option value="BTC">비트코인</option>
-                <option value="ETH">이더리움</option>
-                <option value="XRP">리플</option>
-                <option value="DOGE">도지코인</option>
-              </Select>
-              <Select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
-                <option value="all">전체</option>
-                <option value="buy">매수</option>
-                <option value="sell">매도</option>
-                <option value="deposit">입금</option>
-                <option value="withdraw">출금</option>
-              </Select>
-            </FilterGroup>
+            <div style={{ fontSize: '13px', color: '#666' }}>헤더 클릭으로 정렬</div>
           </CardHeader>
 
-          {filteredTrades.length > 0 ? (
+          {sortedTrades.length > 0 ? (
             <Table>
               <Thead>
                 <Tr>
-                  <Th>날짜</Th>
-                  <Th>구분</Th>
-                  <Th>자산</Th>
-                  <Th>수량</Th>
-                  <Th>거래가</Th>
-                  <Th>총액</Th>
-                  <Th>비고</Th>
+                  <SortTh onClick={() => onSort('txDate')}>날짜{sortMark('txDate')}</SortTh>
+                  <SortTh onClick={() => onSort('txType')}>구분{sortMark('txType')}</SortTh>
+                  <SortTh onClick={() => onSort('assetType')}>자산{sortMark('assetType')}</SortTh>
+                  <SortTh onClick={() => onSort('amount')}>수량{sortMark('amount')}</SortTh>
+                  <SortTh onClick={() => onSort('price')}>거래가{sortMark('price')}</SortTh>
+                  <SortTh onClick={() => onSort('totalValue')}>총액{sortMark('totalValue')}</SortTh>
+                  <SortTh onClick={() => onSort('fee')}>비고{sortMark('fee')}</SortTh>
                 </Tr>
               </Thead>
               <Tbody>
-                {filteredTrades.map(tx => (
+                {pagedTrades.map(tx => (
                   <Tr key={tx.txId}>
                     <Td>{formatDate(tx.txDate)}</Td>
                     <Td>
@@ -517,6 +560,28 @@ const Investments = () => {
             </Table>
           ) : (
             <EmptyState>거래 내역이 없습니다.</EmptyState>
+          )}
+
+          {sortedTrades.length > 0 && (
+            <Pagination>
+              <PageButton
+                type='button'
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+              >
+                이전
+              </PageButton>
+              <span style={{ fontSize: '13px', color: '#555' }}>
+                {currentPage} / {totalPages}
+              </span>
+              <PageButton
+                type='button'
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+              >
+                다음
+              </PageButton>
+            </Pagination>
           )}
         </Card>
       </Main>
