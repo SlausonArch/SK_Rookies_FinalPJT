@@ -50,6 +50,54 @@ const TIMEFRAMES: Timeframe[] = [
   { label: '일봉', unit: 1, type: 'day' },
 ];
 
+const KST_TIMEZONE = 'Asia/Seoul';
+const kstDateTimePartsFormatter = new Intl.DateTimeFormat('ko-KR', {
+  timeZone: KST_TIMEZONE,
+  year: '2-digit',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+
+const toChartDate = (time: Time): Date => {
+  if (typeof time === 'number') return new Date(time * 1000);
+  if (typeof time === 'string') return new Date(`${time}T00:00:00Z`);
+  return new Date(Date.UTC(time.year, time.month - 1, time.day));
+};
+
+const extractKstParts = (date: Date) => {
+  const parts = kstDateTimePartsFormatter.formatToParts(date);
+  const pick = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find(p => p.type === type)?.value ?? '00';
+  return {
+    yy: pick('year'),
+    mm: pick('month'),
+    dd: pick('day'),
+    hh: pick('hour'),
+    min: pick('minute'),
+  };
+};
+
+const formatKstAxisTime = (time: Time, timeframeType: Timeframe['type']): string => {
+  const date = toChartDate(time);
+  if (Number.isNaN(date.getTime())) return '';
+  const { yy, mm, dd, hh, min } = extractKstParts(date);
+  return timeframeType === 'day' ? `${yy}${mm}${dd}` : `${hh}.${min}`;
+};
+
+const formatKstTooltipTime = (time: Time, timeframeType: Timeframe['type']): string => {
+  const date = toChartDate(time);
+  if (Number.isNaN(date.getTime())) return '';
+  const { yy, mm, dd, hh, min } = extractKstParts(date);
+  return timeframeType === 'day' ? `${yy}.${mm}.${dd}` : `${hh}.${min}`;
+};
+
+const toUtcTimestamp = (utcDateTime: string): Time => {
+  return Math.floor(new Date(`${utcDateTime}Z`).getTime() / 1000) as Time;
+};
+
 const PriceChart: React.FC<Props> = ({ market }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -74,6 +122,11 @@ const PriceChart: React.FC<Props> = ({ market }) => {
       timeScale: {
         timeVisible: true,
         secondsVisible: false,
+        tickMarkFormatter: (time: Time) => formatKstAxisTime(time, timeframe.type),
+      },
+      localization: {
+        locale: 'ko-KR',
+        timeFormatter: (time: Time) => formatKstTooltipTime(time, timeframe.type),
       },
       crosshair: {
         mode: 0,
@@ -125,7 +178,7 @@ const PriceChart: React.FC<Props> = ({ market }) => {
         }
 
         const data: CandlestickData<Time>[] = candles.map(c => ({
-          time: (Math.floor(new Date(c.candle_date_time_utc).getTime() / 1000)) as Time,
+          time: toUtcTimestamp(c.candle_date_time_utc),
           open: c.opening_price,
           high: c.high_price,
           low: c.low_price,
@@ -141,6 +194,19 @@ const PriceChart: React.FC<Props> = ({ market }) => {
 
     loadData();
   }, [market, timeframe]);
+
+  useEffect(() => {
+    if (!chartRef.current) return;
+    chartRef.current.applyOptions({
+      timeScale: {
+        tickMarkFormatter: (time: Time) => formatKstAxisTime(time, timeframe.type),
+      },
+      localization: {
+        locale: 'ko-KR',
+        timeFormatter: (time: Time) => formatKstTooltipTime(time, timeframe.type),
+      },
+    });
+  }, [timeframe]);
 
   return (
     <Container>

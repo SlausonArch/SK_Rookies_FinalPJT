@@ -70,6 +70,17 @@ function formatPrice(n: number): string {
   return n.toLocaleString('ko-KR', { maximumFractionDigits: 4 });
 }
 
+function formatTradeTimeKst(tradeTimestamp: number): string {
+  if (!Number.isFinite(tradeTimestamp)) return '';
+  return new Date(tradeTimestamp).toLocaleTimeString('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
 const RecentTrades: React.FC<Props> = ({ trades }) => {
   return (
     <Container>
@@ -87,7 +98,7 @@ const RecentTrades: React.FC<Props> = ({ trades }) => {
             <TradeRow key={`${t.sequential_id}-${i}`} $type={t.ask_bid}>
               <PriceCell $type={t.ask_bid}>{formatPrice(t.trade_price)}</PriceCell>
               <SizeCell>{t.trade_volume.toFixed(4)}</SizeCell>
-              <TimeCell>{t.trade_time?.substring(0, 8) ?? ''}</TimeCell>
+              <TimeCell>{formatTradeTimeKst(t.trade_timestamp)}</TimeCell>
             </TradeRow>
           ))
         )}
