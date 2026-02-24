@@ -5,6 +5,7 @@ import axios from 'axios';
 import {
   LayoutDashboard,
   Users,
+  BadgeCheck,
   ArrowLeftRight,
   Wallet,
   Banknote,
@@ -749,6 +750,8 @@ interface MemberRow {
   phoneNumber: string | null;
   role: string;
   status: string;
+  hasIdPhoto?: boolean;
+  idPhotoUrl?: string;
   createdAt: string | null;
 }
 interface OrderRow {
@@ -843,7 +846,7 @@ function toneFromTxType(t: string): 'success' | 'danger' | 'warn' | 'info' | 'ne
 const AdminDashboard = () => {
   const navigate = useNavigate();
   const [activeMenu, setActiveMenu] = useState<
-    'dashboard' | 'members' | 'orders' | 'assets' | 'deposits' | 'community' | 'inquiries' | 'settings'
+    'dashboard' | 'members' | 'idApprovals' | 'orders' | 'assets' | 'deposits' | 'community' | 'inquiries' | 'settings'
   >('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -852,6 +855,7 @@ const AdminDashboard = () => {
 
   const [stats, setStats] = useState<Stats | null>(null);
   const [members, setMembers] = useState<MemberRow[]>([]);
+  const [idApprovalMembers, setIdApprovalMembers] = useState<MemberRow[]>([]);
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [assets, setAssets] = useState<AssetRow[]>([]);
   const [transactions, setTransactions] = useState<TxRow[]>([]);
@@ -920,6 +924,14 @@ const AdminDashboard = () => {
       return;
     }
 
+    if (activeMenu === 'idApprovals') {
+      axios
+        .get<MemberRow[]>(`${API_BASE}/api/admin/members`, { headers: h })
+        .then(r => setIdApprovalMembers(r.data))
+        .catch(() => { });
+      return;
+    }
+
     if (activeMenu === 'orders') {
       axios.get(`${API_BASE}/api/admin/orders`, { headers: h }).then(r => setOrders(r.data)).catch(() => { });
       return;
@@ -976,6 +988,17 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleApproveIdPhoto = async (memberId: number) => {
+    try {
+      await axios.patch(`${API_BASE}/api/admin/members/${memberId}/approve-id`, {}, { headers });
+      setIdApprovalMembers(prev => prev.map(m => (m.memberId === memberId ? { ...m, status: 'ACTIVE' } : m)));
+      setMembers(prev => prev.map(m => (m.memberId === memberId ? { ...m, status: 'ACTIVE' } : m)));
+      alert('신분증 승인 완료: 회원 상태가 ACTIVE로 변경되었습니다.');
+    } catch (err: any) {
+      alert(err?.response?.data?.message || '신분증 승인 처리에 실패했습니다.');
+    }
+  };
+
   const handleDeletePost = async (postId: number) => {
     if (!confirm('게시글을 삭제하시겠습니까?')) return;
     try {
@@ -1015,6 +1038,7 @@ const AdminDashboard = () => {
   const menuTitles: Record<typeof activeMenu, { title: string; desc: string; icon: ElementType }> = {
     dashboard: { title: '대시보드', desc: '핵심 지표 요약', icon: LayoutDashboard },
     members: { title: '회원 관리', desc: '검색/상태 변경', icon: Users },
+    idApprovals: { title: '신분증 승인', desc: '신분증 제출 계정 승인', icon: BadgeCheck },
     orders: { title: '거래 내역', desc: '주문/체결 조회', icon: ArrowLeftRight },
     assets: { title: '자산 관리', desc: '보유/잠금 잔고', icon: Wallet },
     deposits: { title: '입출금 관리', desc: '입출금/거래 로그', icon: Banknote },
@@ -1169,6 +1193,63 @@ const AdminDashboard = () => {
             )}
           </Card>
         );
+
+      case 'idApprovals': {
+        const pendingIdApprovals = idApprovalMembers.filter(m => m.status === 'LOCKED' && Boolean(m.hasIdPhoto));
+
+        return (
+          <Card>
+            <CardTitle>신분증 제출 승인 ({pendingIdApprovals.length}건)</CardTitle>
+            {pendingIdApprovals.length === 0 ? (
+              <EmptyState>승인 대기 중인 신분증 제출 계정이 없습니다.</EmptyState>
+            ) : (
+              <Table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>이메일</th>
+                    <th>이름</th>
+                    <th>현재 상태</th>
+                    <th>신분증</th>
+                    <th>가입일</th>
+                    <th>승인 처리</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingIdApprovals.map(m => (
+                    <tr key={m.memberId}>
+                      <td>{m.memberId}</td>
+                      <td>{m.email}</td>
+                      <td>{m.name}</td>
+                      <td>
+                        <Badge $tone={toneFromStatus(m.status)}>{m.status}</Badge>
+                      </td>
+                      <td>
+                        {m.idPhotoUrl ? (
+                          <a
+                            href={m.idPhotoUrl.startsWith('http') ? m.idPhotoUrl : `${API_BASE}${m.idPhotoUrl}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{ color: COLORS.primary, textDecoration: 'underline', fontWeight: 900 }}
+                          >
+                            원본 보기
+                          </a>
+                        ) : (
+                          '-'
+                        )}
+                      </td>
+                      <td>{fmtDate(m.createdAt)}</td>
+                      <td>
+                        <PrimaryButton onClick={() => handleApproveIdPhoto(m.memberId)}>ACTIVE 승인</PrimaryButton>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            )}
+          </Card>
+        );
+      }
 
       case 'orders':
         return (
@@ -1561,7 +1642,7 @@ const AdminDashboard = () => {
 
               <SideSection>
                 <SideSectionTitle $collapsed={sidebarCollapsed}>거래소 관리</SideSectionTitle>
-                {(['members', 'orders', 'assets', 'deposits'] as const).map(key => (
+                {(['members', 'idApprovals', 'orders', 'assets', 'deposits'] as const).map(key => (
                   <SideItem
                     key={key}
                     $active={activeMenu === key}
