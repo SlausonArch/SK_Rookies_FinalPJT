@@ -282,20 +282,40 @@ const ListHeader = styled.div`
 
 /* ───── helpers ───── */
 
-const formatPrice = (price: number) => {
-  if (price >= 100) return price.toLocaleString('ko-KR', { maximumFractionDigits: 0 });
-  if (price >= 1) return price.toLocaleString('ko-KR', { maximumFractionDigits: 2 });
-  return price.toLocaleString('ko-KR', { maximumFractionDigits: 4 });
+const toFiniteNumber = (value: unknown): number | null => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 };
 
-const formatVolume = (vol: number) => {
-  if (vol >= 1_000_000_000_000) return `${(vol / 1_000_000_000_000).toFixed(1)}조`;
-  if (vol >= 100_000_000) return `${(vol / 100_000_000).toFixed(0)}억`;
-  if (vol >= 10_000) return `${(vol / 10_000).toFixed(0)}만`;
-  return vol.toLocaleString('ko-KR', { maximumFractionDigits: 0 });
+const formatPrice = (price: unknown) => {
+  const n = toFiniteNumber(price);
+  if (n === null) return '-';
+  if (n >= 100) return n.toLocaleString('ko-KR', { maximumFractionDigits: 0 });
+  if (n >= 1) return n.toLocaleString('ko-KR', { maximumFractionDigits: 2 });
+  return n.toLocaleString('ko-KR', { maximumFractionDigits: 4 });
 };
 
-const changeColor = (change: string) =>
+const formatVolume = (vol: unknown) => {
+  const n = toFiniteNumber(vol);
+  if (n === null) return '-';
+  if (n >= 1_000_000_000_000) return `${(n / 1_000_000_000_000).toFixed(1)}조`;
+  if (n >= 100_000_000) return `${(n / 100_000_000).toFixed(0)}억`;
+  if (n >= 10_000) return `${(n / 10_000).toFixed(0)}만`;
+  return n.toLocaleString('ko-KR', { maximumFractionDigits: 0 });
+};
+
+const formatRate = (rate: unknown) => {
+  const n = toFiniteNumber(rate);
+  if (n === null) return '-';
+  const pct = n * 100;
+  return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
+};
+
+const changeColor = (change: string | null | undefined) =>
   change === 'RISE' ? '#d60000' : change === 'FALL' ? '#0051c7' : '#333';
 
 /* ───── component ───── */
@@ -351,6 +371,7 @@ const toUtcTimestamp = (utcDateTime: string): Time => {
 const Trends: React.FC = () => {
   const [markets, setMarkets] = useState<UpbitMarket[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
+  const [pageError, setPageError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('volume');
   const [selectedMarket, setSelectedMarket] = useState('KRW-BTC');
@@ -403,59 +424,76 @@ const Trends: React.FC = () => {
       const ta = tickers.get(a.market);
       const tb = tickers.get(b.market);
       if (!ta || !tb) return 0;
-      if (sortKey === 'volume') return tb.acc_trade_price_24h - ta.acc_trade_price_24h;
-      if (sortKey === 'price') return tb.trade_price - ta.trade_price;
-      return Math.abs(tb.signed_change_rate) - Math.abs(ta.signed_change_rate);
+      const va = toFiniteNumber(ta.acc_trade_price_24h) ?? 0;
+      const vb = toFiniteNumber(tb.acc_trade_price_24h) ?? 0;
+      const pa = toFiniteNumber(ta.trade_price) ?? 0;
+      const pb = toFiniteNumber(tb.trade_price) ?? 0;
+      const ra = Math.abs(toFiniteNumber(ta.signed_change_rate) ?? 0);
+      const rb = Math.abs(toFiniteNumber(tb.signed_change_rate) ?? 0);
+
+      if (sortKey === 'volume') return vb - va;
+      if (sortKey === 'price') return pb - pa;
+      return rb - ra;
     });
   }, [markets, tickers, search, sortKey]);
 
   // chart init
   useEffect(() => {
     if (!chartContainerRef.current) return;
+    let chart: IChartApi | null = null;
+    let ro: ResizeObserver | null = null;
 
-    const chart = createChart(chartContainerRef.current, {
-      width: chartContainerRef.current.clientWidth,
-      height: chartContainerRef.current.clientHeight || 360,
-      layout: { background: { color: '#ffffff' }, textColor: '#333' },
-      grid: { vertLines: { color: '#f0f0f0' }, horzLines: { color: '#f0f0f0' } },
-      timeScale: {
-        timeVisible: true,
-        secondsVisible: false,
-        tickMarkFormatter: (time: Time) => formatKstAxisTime(time, timeframe.type),
-      },
-      localization: {
-        locale: 'ko-KR',
-        timeFormatter: (time: Time) => formatKstTooltipTime(time, timeframe.type),
-      },
-      crosshair: { mode: 0 },
-    });
+    try {
+      chart = createChart(chartContainerRef.current, {
+        width: chartContainerRef.current.clientWidth,
+        height: chartContainerRef.current.clientHeight || 360,
+        layout: { background: { color: '#ffffff' }, textColor: '#333' },
+        grid: { vertLines: { color: '#f0f0f0' }, horzLines: { color: '#f0f0f0' } },
+        timeScale: {
+          timeVisible: true,
+          secondsVisible: false,
+          tickMarkFormatter: (time: Time) => formatKstAxisTime(time, timeframe.type),
+        },
+        localization: {
+          locale: 'ko-KR',
+          timeFormatter: (time: Time) => formatKstTooltipTime(time, timeframe.type),
+        },
+        crosshair: { mode: 0 },
+      });
 
-    const series = chart.addSeries(CandlestickSeries, {
-      upColor: '#d60000',
-      downColor: '#0051c7',
-      borderUpColor: '#d60000',
-      borderDownColor: '#0051c7',
-      wickUpColor: '#d60000',
-      wickDownColor: '#0051c7',
-    });
+      const series = chart.addSeries(CandlestickSeries, {
+        upColor: '#d60000',
+        downColor: '#0051c7',
+        borderUpColor: '#d60000',
+        borderDownColor: '#0051c7',
+        wickUpColor: '#d60000',
+        wickDownColor: '#0051c7',
+      });
 
-    chartRef.current = chart;
-    seriesRef.current = series;
+      chartRef.current = chart;
+      seriesRef.current = series;
+      setPageError(null);
 
-    const ro = new ResizeObserver(entries => {
-      for (const e of entries) {
-        const { width, height } = e.contentRect;
-        if (width > 0 && height > 0) {
-          chart.applyOptions({ width, height });
-          chart.timeScale().fitContent();
-        }
+      if (typeof ResizeObserver !== 'undefined') {
+        ro = new ResizeObserver(entries => {
+          for (const e of entries) {
+            const { width, height } = e.contentRect;
+            if (width > 0 && height > 0) {
+              chart?.applyOptions({ width, height });
+              chart?.timeScale().fitContent();
+            }
+          }
+        });
+        ro.observe(chartContainerRef.current);
       }
-    });
-    ro.observe(chartContainerRef.current);
+    } catch (e) {
+      console.error('Trends chart init failed:', e);
+      setPageError('차트를 불러오지 못했습니다. 페이지를 새로고침 해주세요.');
+    }
 
     return () => {
-      ro.disconnect();
-      chart.remove();
+      ro?.disconnect();
+      chart?.remove();
       chartRef.current = null;
       seriesRef.current = null;
     };
@@ -503,6 +541,23 @@ const Trends: React.FC = () => {
   const selectedInfo = marketMap.get(selectedMarket);
   const selectedTicker = tickers.get(selectedMarket);
 
+  if (pageError) {
+    return (
+      <PageWrapper>
+        <Header />
+        <Container>
+          <PageTitle>코인 동향</PageTitle>
+          <Panel>
+            <PanelHeader>
+              <h3>화면 오류</h3>
+            </PanelHeader>
+            <NewsEmpty>{pageError}</NewsEmpty>
+          </Panel>
+        </Container>
+      </PageWrapper>
+    );
+  }
+
   return (
     <PageWrapper>
       <Header />
@@ -526,8 +581,7 @@ const Trends: React.FC = () => {
                 <div className="code">{code.replace('KRW-', '')}</div>
                 <div className="price">{formatPrice(t.trade_price)}원</div>
                 <div className="rate">
-                  {t.signed_change_rate >= 0 ? '+' : ''}
-                  {(t.signed_change_rate * 100).toFixed(2)}%
+                  {formatRate(t.signed_change_rate)}
                 </div>
               </CoinCard>
             );
@@ -548,8 +602,7 @@ const Trends: React.FC = () => {
                         {formatPrice(selectedTicker.trade_price)}원
                       </PriceDisplay>
                       <RateDisplay $change={selectedTicker.change}>
-                        {selectedTicker.signed_change_rate >= 0 ? '+' : ''}
-                        {(selectedTicker.signed_change_rate * 100).toFixed(2)}%
+                        {formatRate(selectedTicker.signed_change_rate)}
                       </RateDisplay>
                     </>
                   )}
@@ -631,8 +684,7 @@ const Trends: React.FC = () => {
                       {formatPrice(t.trade_price)}
                     </div>
                     <div className="rate-col" style={{ color: changeColor(t.change) }}>
-                      {t.signed_change_rate >= 0 ? '+' : ''}
-                      {(t.signed_change_rate * 100).toFixed(2)}%
+                      {formatRate(t.signed_change_rate)}
                     </div>
                   </CoinRow>
                 );
