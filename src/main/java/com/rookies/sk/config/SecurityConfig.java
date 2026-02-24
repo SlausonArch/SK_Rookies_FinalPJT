@@ -28,71 +28,78 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    private final CustomOAuth2UserService customOAuth2UserService;
-    private final OAuth2SuccessHandler oAuth2SuccessHandler;
-    private final JwtTokenProvider jwtTokenProvider;
-    private final MemberRepository memberRepository;
+        private final CustomOAuth2UserService customOAuth2UserService;
+        private final OAuth2SuccessHandler oAuth2SuccessHandler;
+        private final JwtTokenProvider jwtTokenProvider;
+        private final MemberRepository memberRepository;
 
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
+        @Bean
+        public PasswordEncoder passwordEncoder() {
+                return new BCryptPasswordEncoder();
+        }
 
-    @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        http
-                .httpBasic(AbstractHttpConfigurer::disable)
-                .csrf(AbstractHttpConfigurer::disable) // Disable CSRF for REST API
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)) // V-15:
-                                                                                                              // Even if
-                                                                                                              // stateless,
-                                                                                                              // implementation
-                                                                                                              // might
-                                                                                                              // be
-                                                                                                              // weak?
-                                                                                                              // We
-                                                                                                              // simulated
-                                                                                                              // Session
-                                                                                                              // Fixation
-                                                                                                              // via
-                                                                                                              // logic,
-                                                                                                              // not
-                                                                                                              // necessarily
-                                                                                                              // here.
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/", "/login/**", "/oauth2/**", "/api/auth/**", "/error", "/uploads/**")
-                        .permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/community/posts/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/news").permitAll()
-                        .requestMatchers("/api/auth/signup/complete").hasRole("GUEST") // Need Guest role
-                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                        .anyRequest().authenticated())
-                .oauth2Login(oauth2 -> oauth2
-                        .userInfoEndpoint(userInfo -> userInfo.userService(customOAuth2UserService))
-                        .successHandler(oAuth2SuccessHandler))
-                .addFilterBefore(new JwtAuthenticationFilter(jwtTokenProvider, memberRepository),
-                        UsernamePasswordAuthenticationFilter.class)
-                .exceptionHandling(exception -> exception
-                        .defaultAuthenticationEntryPointFor(
-                                new org.springframework.security.web.authentication.HttpStatusEntryPoint(
-                                        org.springframework.http.HttpStatus.UNAUTHORIZED),
-                                new org.springframework.security.web.util.matcher.AntPathRequestMatcher("/api/**")));
+        @Bean
+        public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+                http
+                                .httpBasic(AbstractHttpConfigurer::disable)
+                                .csrf(AbstractHttpConfigurer::disable) // Disable CSRF for REST API
+                                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                                .sessionManagement(session -> session
+                                                .sessionCreationPolicy(SessionCreationPolicy.STATELESS)) // V-15:
+                                                                                                         // Even if
+                                                                                                         // stateless,
+                                                                                                         // implementation
+                                                                                                         // might
+                                                                                                         // be
+                                                                                                         // weak?
+                                                                                                         // We
+                                                                                                         // simulated
+                                                                                                         // Session
+                                                                                                         // Fixation
+                                                                                                         // via
+                                                                                                         // logic,
+                                                                                                         // not
+                                                                                                         // necessarily
+                                                                                                         // here.
+                                .authorizeHttpRequests(auth -> auth
+                                                .requestMatchers("/", "/login/**", "/oauth2/**", "/api/auth/**",
+                                                                "/error", "/uploads/**")
+                                                .permitAll()
+                                                .requestMatchers(HttpMethod.GET, "/api/community/posts/**").permitAll()
+                                                .requestMatchers(HttpMethod.GET, "/api/news").permitAll()
+                                                .requestMatchers(HttpMethod.GET, "/api/support/faqs").permitAll()
+                                                .requestMatchers("/api/auth/signup/complete").hasRole("GUEST") // Need
+                                                                                                               // Guest
+                                                                                                               // role
+                                                .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                                                .anyRequest().authenticated())
+                                .oauth2Login(oauth2 -> oauth2
+                                                .userInfoEndpoint(userInfo -> userInfo
+                                                                .userService(customOAuth2UserService))
+                                                .successHandler(oAuth2SuccessHandler))
+                                .addFilterBefore(new JwtAuthenticationFilter(jwtTokenProvider, memberRepository),
+                                                UsernamePasswordAuthenticationFilter.class)
+                                .exceptionHandling(exception -> exception
+                                                .defaultAuthenticationEntryPointFor(
+                                                                new org.springframework.security.web.authentication.HttpStatusEntryPoint(
+                                                                                org.springframework.http.HttpStatus.UNAUTHORIZED),
+                                                                new org.springframework.security.web.util.matcher.AntPathRequestMatcher(
+                                                                                "/api/**")));
 
-        return http.build();
-    }
+                return http.build();
+        }
 
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
-        // V-05: CORS Weakness (Allow * origin is risky)
-        configuration.setAllowedOriginPatterns(List.of("*"));
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("*"));
-        configuration.setAllowCredentials(true);
+        @Bean
+        public CorsConfigurationSource corsConfigurationSource() {
+                CorsConfiguration configuration = new CorsConfiguration();
+                // V-05: CORS Weakness (Allow * origin is risky)
+                configuration.setAllowedOriginPatterns(List.of("*"));
+                configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+                configuration.setAllowedHeaders(List.of("*"));
+                configuration.setAllowCredentials(true);
 
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration);
-        return source;
-    }
+                UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+                source.registerCorsConfiguration("/**", configuration);
+                return source;
+        }
 }

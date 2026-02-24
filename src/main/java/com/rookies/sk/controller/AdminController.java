@@ -47,4 +47,18 @@ public class AdminController {
     public ResponseEntity<Map<String, Object>> getStats() {
         return ResponseEntity.ok(adminService.getStats());
     }
+
+    @GetMapping("/inquiries")
+    public ResponseEntity<List<Map<String, Object>>> getAllInquiries() {
+        return ResponseEntity.ok(adminService.getAllInquiries());
+    }
+
+    @PatchMapping("/inquiries/{inquiryId}/reply")
+    public ResponseEntity<Map<String, Object>> replyToInquiry(
+            @PathVariable Long inquiryId,
+            @RequestBody Map<String, String> body) {
+        String status = body.getOrDefault("status", "ANSWERED");
+        String reply = body.get("reply");
+        return ResponseEntity.ok(adminService.replyToInquiry(inquiryId, status, reply));
+    }
 }

@@ -15,6 +15,8 @@ import Investments from './pages/Investments';
 import Trends from './pages/Trends';
 import MyPage from './pages/MyPage';
 import WithdrawalComplete from './pages/WithdrawalComplete';
+import Events from './pages/Events';
+import Support from './pages/Support';
 
 function App() {
   return (
@@ -28,6 +30,8 @@ function App() {
         <Route path="/community/write" element={<CommunityWrite />} />
         <Route path="/community/:postId" element={<CommunityDetail />} />
         <Route path="/community/:postId/edit" element={<CommunityWrite />} />
+        <Route path="/events" element={<Events />} />
+        <Route path="/support" element={<Support />} />
         <Route path="/exchange" element={<Exchange />} />
         <Route path="/balances" element={<Balances />} />
         <Route path="/investments" element={<Investments />} />

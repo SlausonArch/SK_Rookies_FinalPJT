@@ -312,6 +312,7 @@ interface MemberRow { memberId: number; email: string; name: string; phoneNumber
 interface OrderRow { orderId: number; memberEmail: string; memberName: string; orderType: string; assetType: string; price: number; amount: number; filledAmount: number; status: string; createdAt: string | null; }
 interface AssetRow { assetId: number; memberEmail: string; memberName: string; assetType: string; balance: number; lockedBalance: number; }
 interface TxRow { txId: number; memberEmail: string; memberName: string; txType: string; assetType: string; amount: number; price: number | null; totalValue: number | null; fee: number | null; txDate: string | null; }
+interface InquiryRow { inquiryId: number; memberEmail: string; memberName: string; title: string; content: string; status: string; reply: string | null; attachmentUrl: string | null; createdAt: string | null; }
 interface Stats { totalMembers: number; activeMembers: number; totalOrders: number; totalKrwBalance: number; totalTransactions: number; }
 
 function fmt(n: number, d = 0) { return n.toLocaleString('ko-KR', { maximumFractionDigits: d }); }
@@ -343,9 +344,12 @@ const AdminDashboard = () => {
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [assets, setAssets] = useState<AssetRow[]>([]);
   const [transactions, setTransactions] = useState<TxRow[]>([]);
+  const [inquiries, setInquiries] = useState<InquiryRow[]>([]);
   const [posts, setPosts] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPost, setSelectedPost] = useState<any>(null);
+  const [selectedInquiry, setSelectedInquiry] = useState<InquiryRow | null>(null);
+  const [replyContent, setReplyContent] = useState('');
   const [settingsMsg, setSettingsMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [newPw, setNewPw] = useState('');
 
@@ -370,6 +374,8 @@ const AdminDashboard = () => {
       axios.get(`${API_BASE}/api/admin/assets`, { headers: h }).then(r => setAssets(r.data)).catch(() => { });
     } else if (activeMenu === 'deposits') {
       axios.get(`${API_BASE}/api/admin/transactions`, { headers: h }).then(r => setTransactions(r.data)).catch(() => { });
+    } else if (activeMenu === 'inquiries') {
+      axios.get(`${API_BASE}/api/admin/inquiries`, { headers: h }).then(r => setInquiries(r.data)).catch(() => { });
     } else if (activeMenu === 'community') {
       axios.get(`${API_BASE}/api/community/posts`).then(r => setPosts(r.data.content || r.data)).catch(() => { });
     }
@@ -392,6 +398,22 @@ const AdminDashboard = () => {
     } catch { alert('삭제 실패'); }
   };
 
+  const handleReplyInquiry = async () => {
+    if (!selectedInquiry || !replyContent.trim()) return;
+    try {
+      await axios.patch(`${API_BASE}/api/admin/inquiries/${selectedInquiry.inquiryId}/reply`,
+        { status: 'ANSWERED', reply: replyContent }, { headers });
+      setInquiries(prev => prev.map(inq =>
+        inq.inquiryId === selectedInquiry.inquiryId ? { ...inq, status: 'ANSWERED', reply: replyContent } : inq
+      ));
+      setSelectedInquiry(null);
+      setReplyContent('');
+      alert('답변이 등록되었습니다.');
+    } catch {
+      alert('답변 등록 실패');
+    }
+  };
+
   const handleLogout = () => {
     localStorage.clear();
     navigate('/admin/login', { replace: true });
@@ -399,7 +421,7 @@ const AdminDashboard = () => {
 
   const menuTitles: Record<string, string> = {
     dashboard: '대시보드', members: '회원 관리', orders: '거래 내역',
-    assets: '자산 관리', deposits: '입출금 관리', community: '커뮤니티 관리', settings: '시스템 설정'
+    assets: '자산 관리', deposits: '입출금 관리', inquiries: '고객센터 문의', community: '커뮤니티 관리', settings: '시스템 설정'
   };
 
   const renderContent = () => {
@@ -586,6 +608,42 @@ const AdminDashboard = () => {
           </Card>
         );
 
+      case 'inquiries':
+        return (
+          <Card>
+            <CardTitle>1:1 문의 관리 ({inquiries.length}건)</CardTitle>
+            {inquiries.length === 0 ? <EmptyState>등록된 문의가 없습니다.</EmptyState> : (
+              <Table>
+                <thead><tr><th>ID</th><th>이메일</th><th>이름</th><th>제목</th><th>상태</th><th>등록일</th><th>답변</th></tr></thead>
+                <tbody>
+                  {inquiries.map((inq) => (
+                    <tr key={inq.inquiryId}>
+                      <td>{inq.inquiryId}</td>
+                      <td>{inq.memberEmail}</td>
+                      <td>{inq.memberName}</td>
+                      <td
+                        style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer', color: '#60a5fa', textDecoration: 'underline' }}
+                        onClick={() => {
+                          setSelectedInquiry(inq);
+                          setReplyContent(inq.reply || '');
+                        }}
+                      >{inq.title}</td>
+                      <td><Badge $color={inq.status === 'PENDING' ? '#f59e0b' : '#22c55e'}>{inq.status === 'PENDING' ? '답변대기' : '답변완료'}</Badge></td>
+                      <td>{fmtDate(inq.createdAt)}</td>
+                      <td>
+                        <LogoutBtn onClick={() => {
+                          setSelectedInquiry(inq);
+                          setReplyContent(inq.reply || '');
+                        }}>상세 보기</LogoutBtn>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            )}
+          </Card>
+        );
+
       case 'settings':
         return (
           <Card>
@@ -631,6 +689,7 @@ const AdminDashboard = () => {
           <NavSection>
             <NavTitle>콘텐츠</NavTitle>
             <NavItem active={activeMenu === 'community'} onClick={() => setActiveMenu('community')}>커뮤니티 관리</NavItem>
+            <NavItem active={activeMenu === 'inquiries'} onClick={() => setActiveMenu('inquiries')}>고객센터 문의</NavItem>
           </NavSection>
           <NavSection>
             <NavTitle>시스템</NavTitle>
@@ -672,6 +731,43 @@ const AdminDashboard = () => {
                 style={{ background: '#ef4444', borderColor: '#ef4444' }}
               >
                 게시글 삭제
+              </ModalButton>
+            </ModalButtonGroup>
+          </ModalContainer>
+        </ModalOverlay>
+      )}
+
+      {selectedInquiry && (
+        <ModalOverlay onClick={() => { setSelectedInquiry(null); setReplyContent(''); }}>
+          <ModalContainer onClick={e => e.stopPropagation()} style={{ width: '600px' }}>
+            <ModalTitle>문의: {selectedInquiry.title}</ModalTitle>
+            <div style={{ marginBottom: 16, fontSize: 13, color: '#999' }}>
+              요청자: {selectedInquiry.memberName} ({selectedInquiry.memberEmail}) | 작성일: {fmtDate(selectedInquiry.createdAt)}
+            </div>
+            <ModalText style={{ maxHeight: '150px' }}>{selectedInquiry.content}</ModalText>
+
+            {selectedInquiry.attachmentUrl && (
+              <div style={{ marginBottom: '20px', fontSize: '13px' }}>
+                <a href={`${API_BASE}${selectedInquiry.attachmentUrl}`} target="_blank" rel="noreferrer" style={{ color: '#60a5fa', textDecoration: 'underline' }}>
+                  📎 첨부파일 존재함 (클릭하여 열기)
+                </a>
+              </div>
+            )}
+
+            <FormGroup>
+              <Label>관리자 답변</Label>
+              <textarea
+                value={replyContent}
+                onChange={e => setReplyContent(e.target.value)}
+                style={{ width: '100%', boxSizing: 'border-box', padding: '10px', background: '#2a2a2a', color: '#fff', border: '1px solid #444', borderRadius: '6px', minHeight: '120px', fontSize: '14px' }}
+                placeholder="답변 내용을 입력하세요..."
+              />
+            </FormGroup>
+
+            <ModalButtonGroup>
+              <ModalButton onClick={() => { setSelectedInquiry(null); setReplyContent(''); }}>취소</ModalButton>
+              <ModalButton onClick={handleReplyInquiry} style={{ background: '#093687', borderColor: '#093687' }}>
+                {selectedInquiry.status === 'ANSWERED' ? '답변 수정' : '답변 등록'}
               </ModalButton>
             </ModalButtonGroup>
           </ModalContainer>

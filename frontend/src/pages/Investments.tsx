@@ -414,6 +414,10 @@ const Investments = () => {
     return `₩${price.toLocaleString('ko-KR', options)}`;
   };
 
+  const formatDetailKrw = (value: number) => {
+    return value.toLocaleString('ko-KR', { maximumFractionDigits: 4 });
+  };
+
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleString('ko-KR', {
@@ -518,10 +522,10 @@ const Investments = () => {
                     </Td>
                     <Td>{balance.toFixed(5)}</Td>
                     <Td>{formatAverageBuyPrice(avgPrice)}</Td>
-                    <Td>≈ {Math.round(currentPrice).toLocaleString()} KRW</Td>
-                    <Td>≈ {Math.round(valuation).toLocaleString()} KRW</Td>
+                    <Td>{formatDetailKrw(currentPrice)} KRW</Td>
+                    <Td>{formatDetailKrw(valuation)} KRW</Td>
                     <Td style={{ color: avgPrice > 0 ? (profit >= 0 ? '#d60000' : '#0051c7') : '#999' }}>
-                      {avgPrice > 0 ? `${profit >= 0 ? '+' : ''}≈ ${Math.round(profit).toLocaleString()} KRW` : '-'}
+                      {avgPrice > 0 ? `${profit >= 0 ? '+' : ''}${formatDetailKrw(profit)} KRW` : '-'}
                     </Td>
                     <Td style={{ color: avgPrice > 0 ? (profitRate >= 0 ? '#d60000' : '#0051c7') : '#999' }}>
                       {avgPrice > 0 ? `${profitRate >= 0 ? '+' : ''}${profitRate.toFixed(2)}%` : '-'}
@@ -573,10 +577,10 @@ const Investments = () => {
                     <Td><strong>{tx.assetType}</strong></Td>
                     <Td>{Number(tx.amount).toFixed(5)}</Td>
                     <Td>
-                      {(tx.txType === 'DEPOSIT' || tx.txType === 'WITHDRAW') ? '-' : `≈ ${Math.round(tx.price || 0).toLocaleString()} KRW`}
+                      {(tx.txType === 'DEPOSIT' || tx.txType === 'WITHDRAW') ? '-' : `${formatDetailKrw(tx.price || 0)} KRW`}
                     </Td>
-                    <Td>≈ {Math.round(tx.totalValue).toLocaleString()} KRW</Td>
-                    <Td>{tx.fee ? `수수료 ≈ ${Math.round(tx.fee).toLocaleString()} KRW` : '-'}</Td>
+                    <Td>{formatDetailKrw(tx.totalValue)} KRW</Td>
+                    <Td>{tx.fee ? `수수료 ${formatDetailKrw(tx.fee)} KRW` : '-'}</Td>
                   </Tr>
                 ))}
               </Tbody>

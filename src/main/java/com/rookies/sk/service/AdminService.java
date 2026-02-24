@@ -18,6 +18,7 @@ public class AdminService {
     private final OrderRepository orderRepository;
     private final AssetRepository assetRepository;
     private final TransactionRepository transactionRepository;
+    private final InquiryRepository inquiryRepository;
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getAllMembers() {
@@ -86,8 +87,10 @@ public class AdminService {
     public List<Map<String, Object>> getAllTransactions() {
         return transactionRepository.findAll().stream()
                 .sorted((a, b) -> {
-                    if (b.getTxDate() == null) return -1;
-                    if (a.getTxDate() == null) return 1;
+                    if (b.getTxDate() == null)
+                        return -1;
+                    if (a.getTxDate() == null)
+                        return 1;
                     return b.getTxDate().compareTo(a.getTxDate());
                 })
                 .map(tx -> {
@@ -127,5 +130,40 @@ public class AdminService {
         stats.put("totalKrwBalance", totalAssetValue);
         stats.put("totalTransactions", totalTransactions);
         return stats;
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getAllInquiries() {
+        return inquiryRepository.findAll().stream()
+                .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
+                .map(inq -> {
+                    Map<String, Object> map = new LinkedHashMap<>();
+                    map.put("inquiryId", inq.getInquiryId());
+                    map.put("memberEmail", inq.getMember().getEmail());
+                    map.put("memberName", inq.getMember().getName());
+                    map.put("title", inq.getTitle());
+                    map.put("content", inq.getContent());
+                    map.put("status", inq.getStatus());
+                    map.put("reply", inq.getReply());
+                    map.put("attachmentUrl", inq.getAttachmentUrl());
+                    map.put("createdAt", inq.getCreatedAt());
+                    return map;
+                }).collect(Collectors.toList());
+    }
+
+    @Transactional
+    public Map<String, Object> replyToInquiry(Long inquiryId, String replyStatus, String replyContent) {
+        Inquiry inquiry = inquiryRepository.findById(inquiryId)
+                .orElseThrow(() -> new RuntimeException("문의를 찾을 수 없습니다."));
+
+        inquiry.setStatus(replyStatus);
+        inquiry.setReply(replyContent);
+        inquiryRepository.save(inquiry);
+
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("inquiryId", inquiry.getInquiryId());
+        map.put("status", inquiry.getStatus());
+        map.put("reply", inquiry.getReply());
+        return map;
     }
 }
