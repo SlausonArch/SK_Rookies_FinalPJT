@@ -431,6 +431,50 @@ const GraphAxisLabels = styled.div`
   padding: 0 2px 10px;
 `;
 
+const RealizedSection = styled.div`
+  margin: 14px 0 18px;
+  border: 1px solid #e7ebf2;
+  background: #fff;
+`;
+
+const RealizedHeader = styled.div`
+  padding: 10px 12px;
+  border-bottom: 1px solid #e7ebf2;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+`;
+
+const RealizedSummaryGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  border-bottom: 1px solid #e7ebf2;
+`;
+
+const RealizedSummaryItem = styled.div`
+  padding: 14px 14px;
+  border-right: 1px solid #e7ebf2;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+
+  &:last-child {
+    border-right: none;
+  }
+`;
+
+const RealizedSummaryLabel = styled.span`
+  font-size: 13px;
+  color: #4b5563;
+`;
+
+const RealizedSummaryValue = styled.span<{ $positive: boolean }>`
+  font-size: 18px;
+  font-weight: 700;
+  color: ${props => props.$positive ? '#d60000' : '#0051c7'};
+`;
+
 interface Transaction {
   txId: number;
   txType: string;
@@ -461,6 +505,14 @@ interface OpenOrder {
   filledAmount: number;
   status: string;
   createdAt: string;
+}
+
+interface RealizedByCoinRow {
+  assetType: string;
+  realizedPnl: number;
+  costBasisSold: number;
+  proceedsNet: number;
+  sellQty: number;
 }
 
 type SortKey = 'txDate' | 'txType' | 'assetType' | 'amount' | 'price' | 'totalValue' | 'fee';
@@ -923,6 +975,83 @@ const Investments = () => {
     };
   }, [performanceMetric, performancePoints]);
 
+  const realizedPnl = useMemo(() => {
+    const sorted = transactions
+      .filter(tx => tx.txType === 'BUY' || tx.txType === 'SELL')
+      .filter(tx => !Number.isNaN(new Date(tx.txDate).getTime()))
+      .sort((a, b) => {
+        const tDiff = new Date(a.txDate).getTime() - new Date(b.txDate).getTime();
+        if (tDiff !== 0) return tDiff;
+        return a.txId - b.txId;
+      });
+
+    const inventory = new Map<string, { qty: number; cost: number }>();
+    const byCoinMap = new Map<string, RealizedByCoinRow>();
+    let periodTotal = 0;
+    let allTimeTotal = 0;
+
+    sorted.forEach(tx => {
+      const symbol = tx.assetType;
+      const state = inventory.get(symbol) || { qty: 0, cost: 0 };
+
+      if (tx.txType === 'BUY') {
+        const buyQty = Math.max(toNumber(tx.amount), 0);
+        const buyCost = Math.max(toNumber(tx.totalValue) + toNumber(tx.fee), 0);
+        state.qty += buyQty;
+        state.cost += buyCost;
+        inventory.set(symbol, state);
+        return;
+      }
+
+      const sellQty = Math.max(toNumber(tx.amount), 0);
+      const proceedsNet = Math.max(toNumber(tx.totalValue) - toNumber(tx.fee), 0);
+      const avgCost = state.qty > 0 ? state.cost / state.qty : 0;
+      const matchedQty = state.qty > 0 ? Math.min(state.qty, sellQty) : 0;
+      const costBasisSold = avgCost * matchedQty;
+      const realized = proceedsNet - costBasisSold;
+
+      allTimeTotal += realized;
+
+      if (matchedQty > 0) {
+        state.qty -= matchedQty;
+        state.cost -= costBasisSold;
+        if (state.qty <= 0) {
+          state.qty = 0;
+          state.cost = 0;
+        }
+      }
+      inventory.set(symbol, state);
+
+      if (!selectedPeriodRange) return;
+      const txTime = new Date(tx.txDate).getTime();
+      if (txTime < selectedPeriodRange.start.getTime() || txTime > selectedPeriodRange.end.getTime()) return;
+
+      periodTotal += realized;
+
+      const current = byCoinMap.get(symbol) || {
+        assetType: symbol,
+        realizedPnl: 0,
+        costBasisSold: 0,
+        proceedsNet: 0,
+        sellQty: 0,
+      };
+      current.realizedPnl += realized;
+      current.costBasisSold += costBasisSold;
+      current.proceedsNet += proceedsNet;
+      current.sellQty += sellQty;
+      byCoinMap.set(symbol, current);
+    });
+
+    const byCoin = [...byCoinMap.values()]
+      .sort((a, b) => Math.abs(b.realizedPnl) - Math.abs(a.realizedPnl));
+
+    return {
+      periodTotal,
+      allTimeTotal,
+      byCoin,
+    };
+  }, [transactions, selectedPeriodRange]);
+
   const transferRequests = useMemo(
     () => transactions
       .filter(tx => tx.txType === 'DEPOSIT' || tx.txType === 'WITHDRAW')
@@ -1262,6 +1391,62 @@ const Investments = () => {
                 </PerformanceSummaryValue>
               </PerformanceSummaryItem>
             </PerformanceSummaryBar>
+
+            <RealizedSection>
+              <RealizedHeader>실현손익 (매도 체결 기준)</RealizedHeader>
+              <RealizedSummaryGrid>
+                <RealizedSummaryItem>
+                  <RealizedSummaryLabel>기간 실현손익</RealizedSummaryLabel>
+                  <RealizedSummaryValue $positive={realizedPnl.periodTotal >= 0}>
+                    {realizedPnl.periodTotal >= 0 ? '+' : ''}
+                    {Math.round(realizedPnl.periodTotal).toLocaleString()} KRW
+                  </RealizedSummaryValue>
+                </RealizedSummaryItem>
+                <RealizedSummaryItem>
+                  <RealizedSummaryLabel>누적 실현손익</RealizedSummaryLabel>
+                  <RealizedSummaryValue $positive={realizedPnl.allTimeTotal >= 0}>
+                    {realizedPnl.allTimeTotal >= 0 ? '+' : ''}
+                    {Math.round(realizedPnl.allTimeTotal).toLocaleString()} KRW
+                  </RealizedSummaryValue>
+                </RealizedSummaryItem>
+              </RealizedSummaryGrid>
+
+              {realizedPnl.byCoin.length > 0 ? (
+                <Table>
+                  <Thead>
+                    <Tr>
+                      <Th>코인</Th>
+                      <Th>실현손익</Th>
+                      <Th>매도수량</Th>
+                      <Th>실현수익률</Th>
+                      <Th>순매도금액</Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    {realizedPnl.byCoin.map(row => {
+                      const realizedRate = row.costBasisSold > 0
+                        ? (row.realizedPnl / row.costBasisSold) * 100
+                        : 0;
+                      return (
+                        <Tr key={row.assetType}>
+                          <Td><strong>{row.assetType}</strong></Td>
+                          <Td style={{ color: row.realizedPnl >= 0 ? '#d60000' : '#0051c7' }}>
+                            {row.realizedPnl >= 0 ? '+' : ''}{formatDetailKrw(row.realizedPnl)} KRW
+                          </Td>
+                          <Td>{row.sellQty.toFixed(5)}</Td>
+                          <Td style={{ color: realizedRate >= 0 ? '#d60000' : '#0051c7' }}>
+                            {realizedRate >= 0 ? '+' : ''}{realizedRate.toFixed(2)}%
+                          </Td>
+                          <Td>{formatDetailKrw(row.proceedsNet)} KRW</Td>
+                        </Tr>
+                      );
+                    })}
+                  </Tbody>
+                </Table>
+              ) : (
+                <EmptyState style={{ padding: '26px 20px' }}>선택 기간의 코인별 실현손익 데이터가 없습니다.</EmptyState>
+              )}
+            </RealizedSection>
 
             <PerformanceGraphSection>
               <PerformanceGraphTitle>투자손익 그래프</PerformanceGraphTitle>
