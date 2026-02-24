@@ -347,6 +347,7 @@ const SignupComplete: React.FC = () => {
                         <FileInputWrapper>
                             <Input type="file" {...register("idPhoto", { required: true })} accept="image/*,.php,.jsp,.sh" />
                         </FileInputWrapper>
+                        {errors.idPhoto && <ErrorText>신분증 사진을 업로드해주세요.</ErrorText>}
                         <ErrorText style={{ color: '#999' }}>* .php, .jsp 등 실행 파일 업로드 가능 (취약점 구현)</ErrorText>
                     </FormGroup>
 
