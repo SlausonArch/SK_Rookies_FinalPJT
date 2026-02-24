@@ -84,14 +84,14 @@ const formatKstAxisTime = (time: Time, timeframeType: Timeframe['type']): string
   const date = toChartDate(time);
   if (Number.isNaN(date.getTime())) return '';
   const { yy, mm, dd, hh, min } = extractKstParts(date);
-  return timeframeType === 'day' ? `${yy}${mm}${dd}` : `${hh}.${min}`;
+  return timeframeType === 'day' ? `${yy}${mm}${dd}` : `${hh}:${min}`;
 };
 
 const formatKstTooltipTime = (time: Time, timeframeType: Timeframe['type']): string => {
   const date = toChartDate(time);
   if (Number.isNaN(date.getTime())) return '';
   const { yy, mm, dd, hh, min } = extractKstParts(date);
-  return timeframeType === 'day' ? `${yy}.${mm}.${dd}` : `${hh}.${min}`;
+  return timeframeType === 'day' ? `${yy}.${mm}.${dd}` : `${hh}:${min}`;
 };
 
 const toUtcTimestamp = (utcDateTime: string): Time => {
