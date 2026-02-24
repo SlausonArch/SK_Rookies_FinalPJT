@@ -17,45 +17,85 @@ const ExchangeContainer = styled.div`
   display: flex;
   flex-direction: column;
   height: 100vh;
+  min-height: 700px;
   background: #f5f6f7;
+  overflow-y: auto;
+  overflow-x: hidden;
 `;
 
 const ExchangeBody = styled.div`
   display: grid;
   grid-template-columns: 260px 1fr 280px;
-  grid-template-rows: 60% 40%;
+  grid-template-rows: 1fr 380px;
 
   flex: 1;
   gap: 1px;
   background: #dfe7f6;
   min-height: 0;
+
+  @media (max-width: 1200px) {
+    grid-template-columns: 1fr 280px;
+  }
+
+  @media (max-width: 900px) {
+    grid-template-columns: 1fr;
+  }
 `;
 
 const SidebarPanel = styled.div`
+  grid-column: 1 / 2;
   grid-row: 1 / 3;
   background: #fff;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+
+  @media (max-width: 1200px) {
+    display: none;
+  }
 `;
 
 const ChartPanel = styled.div`
+  grid-column: 2 / 3;
+  grid-row: 1 / 2;
   background: #fff;
   min-height: 0;
   overflow: hidden;
+
+  @media (max-width: 1200px) {
+    grid-column: 1 / 2;
+  }
 `;
 
 const OrderbookPanel = styled.div`
+  grid-column: 3 / 4;
+  grid-row: 1 / 2;
   background: #fff;
   overflow: hidden;
+
+  @media (max-width: 1200px) {
+    grid-column: 2 / 3;
+  }
+  @media (max-width: 900px) {
+    display: none;
+  }
 `;
 
 const RecentTradesPanel = styled.div`
+  grid-column: 3 / 4;
+  grid-row: 2 / 3;
   background: #fff;
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+
+  @media (max-width: 1200px) {
+    grid-column: 2 / 3;
+  }
+  @media (max-width: 900px) {
+    display: none;
+  }
 `;
 
 const MarketInfo = styled.div`
@@ -65,6 +105,7 @@ const MarketInfo = styled.div`
   padding: 10px 16px;
   background: #fff;
   border-bottom: 1px solid #dfe7f6;
+  min-width: max-content;
 `;
 
 const MarketName = styled.div`
@@ -107,11 +148,17 @@ function formatVolume(n: number): string {
 // ... (기존 import 유지)
 
 const TradePanelContainer = styled.div`
+  grid-column: 2 / 3;
+  grid-row: 2 / 3;
   background: white;
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+
+  @media (max-width: 1200px) {
+    grid-column: 1 / 2;
+  }
 `;
 
 const TabHeader = styled.div`
@@ -138,7 +185,8 @@ const TabButton = styled.button<{ $active: boolean }>`
 
 const TabContent = styled.div`
   flex: 1;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
 `;
