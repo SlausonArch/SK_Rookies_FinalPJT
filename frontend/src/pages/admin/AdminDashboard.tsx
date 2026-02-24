@@ -112,17 +112,9 @@ const BrandTitle = styled.div`
   font-weight: 950;
 `;
 
-const BrandSub = styled.div`
-  font-size: 11px;
-  color: ${COLORS.muted};
-  font-weight: 800;
-`;
 
-const TopRight = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 10px;
-`;
+
+
 
 const TopBtn = styled.button`
   height: 36px;
@@ -140,16 +132,7 @@ const TopBtn = styled.button`
   }
 `;
 
-const TopPrimaryBtn = styled(TopBtn)`
-  background: ${COLORS.primary};
-  border-color: ${COLORS.primary};
-  color: #fff;
 
-  &:hover {
-    background: ${COLORS.primaryHover};
-    border-color: ${COLORS.primaryHover};
-  }
-`;
 
 const ToggleBtn = styled(TopBtn)`
   width: 36px;
@@ -177,26 +160,7 @@ const Sidebar = styled.aside<{ $collapsed: boolean }>`
   transition: width 180ms ease;
 `;
 
-const SideHeader = styled.div<{ $collapsed: boolean }>`
-  padding: 16px 16px 12px;
-  border-bottom: 1px solid ${COLORS.sidebarBorder};
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  ${p => (p.$collapsed ? 'padding: 14px 12px 10px;' : '')}
-`;
 
-const SideHeaderTitle = styled.div`
-  color: ${COLORS.sidebarText};
-  font-weight: 950;
-  font-size: 14px;
-`;
-
-const SideHeaderSub = styled.div`
-  color: ${COLORS.sidebarTextMuted};
-  font-size: 12px;
-  font-weight: 800;
-`;
 
 const SideNav = styled.nav`
   padding: 12px 10px;
@@ -591,15 +555,15 @@ const Badge = styled.span<{ $tone: 'success' | 'danger' | 'warn' | 'info' | 'neu
 
   border: 1px solid
     ${p =>
-      p.$tone === 'success'
-        ? 'rgba(44,182,125,0.25)'
-        : p.$tone === 'danger'
-          ? 'rgba(229,83,83,0.25)'
-          : p.$tone === 'warn'
-            ? 'rgba(240,162,2,0.25)'
-            : p.$tone === 'info'
-              ? 'rgba(46,111,182,0.25)'
-              : 'rgba(100,116,139,0.25)'};
+    p.$tone === 'success'
+      ? 'rgba(44,182,125,0.25)'
+      : p.$tone === 'danger'
+        ? 'rgba(229,83,83,0.25)'
+        : p.$tone === 'warn'
+          ? 'rgba(240,162,2,0.25)'
+          : p.$tone === 'info'
+            ? 'rgba(46,111,182,0.25)'
+            : 'rgba(100,116,139,0.25)'};
 
   background: ${p =>
     p.$tone === 'success'
@@ -931,7 +895,7 @@ const AdminDashboard = () => {
     const h = { Authorization: `Bearer ${token}` };
 
     if (activeMenu === 'dashboard') {
-      axios.get(`${API_BASE}/api/admin/stats`, { headers: h }).then(r => setStats(r.data)).catch(() => {});
+      axios.get(`${API_BASE}/api/admin/stats`, { headers: h }).then(r => setStats(r.data)).catch(() => { });
       return;
     }
 
@@ -952,17 +916,17 @@ const AdminDashboard = () => {
           setMemberTotal(r.data.totalElements);
           setMemberTotalPages(r.data.totalPages);
         })
-        .catch(() => {});
+        .catch(() => { });
       return;
     }
 
     if (activeMenu === 'orders') {
-      axios.get(`${API_BASE}/api/admin/orders`, { headers: h }).then(r => setOrders(r.data)).catch(() => {});
+      axios.get(`${API_BASE}/api/admin/orders`, { headers: h }).then(r => setOrders(r.data)).catch(() => { });
       return;
     }
 
     if (activeMenu === 'assets') {
-      axios.get(`${API_BASE}/api/admin/assets`, { headers: h }).then(r => setAssets(r.data)).catch(() => {});
+      axios.get(`${API_BASE}/api/admin/assets`, { headers: h }).then(r => setAssets(r.data)).catch(() => { });
       return;
     }
 
@@ -985,17 +949,17 @@ const AdminDashboard = () => {
           setTxTotal(r.data.totalElements);
           setTxTotalPages(r.data.totalPages);
         })
-        .catch(() => {});
+        .catch(() => { });
       return;
     }
 
     if (activeMenu === 'inquiries') {
-      axios.get(`${API_BASE}/api/admin/inquiries`, { headers: h }).then(r => setInquiries(r.data)).catch(() => {});
+      axios.get(`${API_BASE}/api/admin/inquiries`, { headers: h }).then(r => setInquiries(r.data)).catch(() => { });
       return;
     }
 
     if (activeMenu === 'community') {
-      axios.get(`${API_BASE}/api/community/posts`).then(r => setPosts(r.data.content || r.data)).catch(() => {});
+      axios.get(`${API_BASE}/api/community/posts`).then(r => setPosts(r.data.content || r.data)).catch(() => { });
     }
   }, [activeMenu, token, txQuery, memberQuery]);
 
