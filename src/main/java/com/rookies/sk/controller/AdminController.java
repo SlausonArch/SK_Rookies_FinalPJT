@@ -20,6 +20,17 @@ public class AdminController {
         return ResponseEntity.ok(adminService.getAllMembers());
     }
 
+    @GetMapping("/members/search")
+    public ResponseEntity<Map<String, Object>> searchMembers(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) String role,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return ResponseEntity.ok(adminService.searchMembers(q, role, status, page, size));
+    }
+
     @PatchMapping("/members/{memberId}/status")
     public ResponseEntity<Map<String, Object>> updateMemberStatus(
             @PathVariable Long memberId,
@@ -53,6 +64,27 @@ public class AdminController {
         return ResponseEntity.ok(adminService.getStats());
     }
 
+    @GetMapping("/transactions/search")
+    public ResponseEntity<Map<String, Object>> searchTransactions(
+            @RequestParam(required = false) String memberEmail,
+            @RequestParam(required = false) String assetType,
+            @RequestParam(required = false) String txType,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return ResponseEntity.ok(
+                adminService.searchTransactions(
+                        memberEmail,
+                        assetType,
+                        txType,
+                        from,
+                        to,
+                        page,
+                        size
+                )
+    );}
     @GetMapping("/inquiries")
     public ResponseEntity<List<Map<String, Object>>> getAllInquiries() {
         return ResponseEntity.ok(adminService.getAllInquiries());

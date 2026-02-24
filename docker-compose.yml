@@ -1,3 +1,4 @@
+
 services:
   # 1. Oracle Database (v23.4 Free - Mac M1/M2/M3 호환성 우수)
   oracle-db:
@@ -50,7 +51,7 @@ services:
     build: ./frontend
     container_name: sk-frontend
     ports:
-      - "3000:3000"
+      - "5173:3000"
     environment:
       - REACT_APP_API_URL=http://localhost:8080
     stdin_open: true

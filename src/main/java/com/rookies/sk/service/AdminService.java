@@ -10,6 +10,12 @@ import java.math.BigDecimal;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+
 @Service
 @RequiredArgsConstructor
 public class AdminService {
@@ -35,6 +41,45 @@ public class AdminService {
             map.put("createdAt", m.getCreatedAt());
             return map;
         }).collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> searchMembers(String q, String role, String status, int page, int size) {
+        PageRequest pageable = PageRequest.of(
+                Math.max(page, 0),
+                Math.max(1, Math.min(size, 200)),
+                Sort.by(Sort.Direction.DESC, "createdAt")
+        );
+
+        Member.Role roleEnum = isBlank(role) ? null : Member.Role.valueOf(role.toUpperCase());
+        Member.Status statusEnum = isBlank(status) ? null : Member.Status.valueOf(status.toUpperCase());
+
+        Page<Member> result = memberRepository.searchMembers(
+                isBlank(q) ? null : q.trim(),
+                roleEnum,
+                statusEnum,
+                pageable
+        );
+
+        List<Map<String, Object>> content = result.getContent().stream().map(m -> {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("memberId", m.getMemberId());
+            map.put("email", m.getEmail());
+            map.put("name", m.getName());
+            map.put("phoneNumber", m.getPhoneNumber());
+            map.put("role", m.getRole().name());
+            map.put("status", m.getStatus().name());
+            map.put("createdAt", m.getCreatedAt());
+            return map;
+        }).collect(Collectors.toList());
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("content", content);
+        response.put("totalElements", result.getTotalElements());
+        response.put("totalPages", result.getTotalPages());
+        response.put("page", result.getNumber());
+
+        return response;
     }
 
     @Transactional
@@ -196,5 +241,74 @@ public class AdminService {
         map.put("status", inquiry.getStatus());
         map.put("reply", inquiry.getReply());
         return map;
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> searchTransactions(
+            String memberEmail,
+            String assetType,
+            String txType,
+            String from,
+            String to,
+            int page,
+            int size
+    ) {
+
+        LocalDateTime fromDt = parseFrom(from);
+        LocalDateTime toDt = parseTo(to);
+
+        PageRequest pageable = PageRequest.of(
+                Math.max(page, 0),
+                Math.max(1, Math.min(size, 200)),
+                Sort.by(Sort.Direction.DESC, "txDate")
+        );
+
+        Page<Transaction> result = transactionRepository.searchAdminTransactions(
+                isBlank(memberEmail) ? null : memberEmail.trim(),
+                isBlank(assetType) ? null : assetType.toUpperCase(),
+                isBlank(txType) ? null : txType.toUpperCase(),
+                fromDt,
+                toDt,
+                pageable
+        );
+
+        List<Map<String, Object>> content = result.getContent().stream()
+                .map(tx -> {
+                    Map<String, Object> map = new LinkedHashMap<>();
+                    map.put("txId", tx.getTxId());
+                    map.put("memberEmail", tx.getMember().getEmail());
+                    map.put("memberName", tx.getMember().getName());
+                    map.put("txType", tx.getTxType());
+                    map.put("assetType", tx.getAssetType());
+                    map.put("amount", tx.getAmount());
+                    map.put("price", tx.getPrice());
+                    map.put("totalValue", tx.getTotalValue());
+                    map.put("fee", tx.getFee());
+                    map.put("txDate", tx.getTxDate());
+                    return map;
+                })
+                .toList();
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("content", content);
+        response.put("totalElements", result.getTotalElements());
+        response.put("totalPages", result.getTotalPages());
+        response.put("page", result.getNumber());
+
+        return response;
+    }
+
+    private LocalDateTime parseFrom(String from) {
+        if (isBlank(from)) return null;
+        return LocalDate.parse(from).atStartOfDay();
+    }
+
+    private LocalDateTime parseTo(String to) {
+        if (isBlank(to)) return null;
+        return LocalDate.parse(to).plusDays(1).atStartOfDay().minusNanos(1);
+    }
+
+    private boolean isBlank(String s) {
+        return s == null || s.isBlank();
     }
 }

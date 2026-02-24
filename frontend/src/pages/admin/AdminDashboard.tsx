@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -51,17 +51,20 @@ const NavTitle = styled.div`
 
 const NavItem = styled.div<{ active?: boolean }>`
   padding: 12px 24px;
-  color: ${props => props.active ? '#fff' : '#999'};
-  background: ${props => props.active ? 'rgba(9, 54, 135, 0.15)' : 'transparent'};
-  border-left: 3px solid ${props => props.active ? '#093687' : 'transparent'};
+  color: ${props => (props.active ? '#fff' : '#999')};
+  background: ${props => (props.active ? 'rgba(9, 54, 135, 0.15)' : 'transparent')};
+  border-left: 3px solid ${props => (props.active ? '#093687' : 'transparent')};
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 12px;
   font-size: 14px;
-  font-weight: ${props => props.active ? '600' : '400'};
+  font-weight: ${props => (props.active ? '600' : '400')};
   transition: all 0.2s;
-  &:hover { background: rgba(9, 54, 135, 0.1); color: #fff; }
+  &:hover {
+    background: rgba(9, 54, 135, 0.1);
+    color: #fff;
+  }
 `;
 
 const UserInfo = styled.div`
@@ -85,9 +88,18 @@ const Avatar = styled.div`
   font-size: 14px;
 `;
 
-const UserDetails = styled.div`flex: 1;`;
-const UserName = styled.div`color: #fff; font-size: 14px; font-weight: 600;`;
-const UserRole = styled.div`color: #666; font-size: 12px;`;
+const UserDetails = styled.div`
+  flex: 1;
+`;
+const UserName = styled.div`
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+`;
+const UserRole = styled.div`
+  color: #666;
+  font-size: 12px;
+`;
 
 const LogoutBtn = styled.button`
   padding: 6px 12px;
@@ -97,7 +109,15 @@ const LogoutBtn = styled.button`
   border-radius: 4px;
   font-size: 12px;
   cursor: pointer;
-  &:hover { background: #1a1a1a; color: #fff; border-color: #444; }
+  &:hover {
+    background: #1a1a1a;
+    color: #fff;
+    border-color: #444;
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 `;
 
 const ContentArea = styled.div`
@@ -131,10 +151,14 @@ const ActionButton = styled.button`
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  &:hover { background: #0a4099; }
+  &:hover {
+    background: #0a4099;
+  }
 `;
 
-const Main = styled.div`padding: 32px;`;
+const Main = styled.div`
+  padding: 32px;
+`;
 
 const StatsGrid = styled.div`
   display: grid;
@@ -148,12 +172,24 @@ const StatCard = styled.div`
   border: 1px solid #2a2a2a;
   border-radius: 12px;
   padding: 24px;
-  &:hover { border-color: #093687; transform: translateY(-2px); }
+  &:hover {
+    border-color: #093687;
+    transform: translateY(-2px);
+  }
   transition: all 0.3s;
 `;
 
-const StatLabel = styled.div`font-size: 13px; color: #999; margin-bottom: 8px;`;
-const StatValue = styled.div`font-size: 32px; color: #fff; font-weight: 700; margin-bottom: 4px;`;
+const StatLabel = styled.div`
+  font-size: 13px;
+  color: #999;
+  margin-bottom: 8px;
+`;
+const StatValue = styled.div`
+  font-size: 32px;
+  color: #fff;
+  font-weight: 700;
+  margin-bottom: 4px;
+`;
 
 const Card = styled.div`
   background: #1a1a1a;
@@ -193,7 +229,9 @@ const Table = styled.table`
     color: #ccc;
     border-bottom: 1px solid #1f1f1f;
   }
-  tr:hover td { background: rgba(9, 54, 135, 0.05); }
+  tr:hover td {
+    background: rgba(9, 54, 135, 0.05);
+  }
 `;
 
 const Badge = styled.span<{ $color: string }>`
@@ -216,8 +254,15 @@ const Select = styled.select`
   cursor: pointer;
 `;
 
-const FormGroup = styled.div`margin-bottom: 16px;`;
-const Label = styled.label`display: block; font-size: 13px; color: #999; margin-bottom: 4px;`;
+const FormGroup = styled.div`
+  margin-bottom: 16px;
+`;
+const Label = styled.label`
+  display: block;
+  font-size: 13px;
+  color: #999;
+  margin-bottom: 4px;
+`;
 const Input = styled.input`
   width: 100%;
   padding: 10px 12px;
@@ -227,7 +272,10 @@ const Input = styled.input`
   color: #fff;
   font-size: 14px;
   box-sizing: border-box;
-  &:focus { border-color: #093687; outline: none; }
+  &:focus {
+    border-color: #093687;
+    outline: none;
+  }
 `;
 
 const SaveBtn = styled.button`
@@ -239,8 +287,12 @@ const SaveBtn = styled.button`
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  &:hover { background: #0a4099; }
-  &:disabled { opacity: 0.5; }
+  &:hover {
+    background: #0a4099;
+  }
+  &:disabled {
+    opacity: 0.5;
+  }
 `;
 
 const Msg = styled.div<{ $ok: boolean }>`
@@ -248,8 +300,8 @@ const Msg = styled.div<{ $ok: boolean }>`
   border-radius: 6px;
   font-size: 13px;
   margin-bottom: 12px;
-  background: ${p => p.$ok ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)'};
-  color: ${p => p.$ok ? '#22c55e' : '#ef4444'};
+  background: ${p => (p.$ok ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)')};
+  color: ${p => (p.$ok ? '#22c55e' : '#ef4444')};
 `;
 
 const ModalOverlay = styled.div`
@@ -315,6 +367,13 @@ interface TxRow { txId: number; memberEmail: string; memberName: string; txType:
 interface InquiryRow { inquiryId: number; memberEmail: string; memberName: string; title: string; content: string; status: string; reply: string | null; attachmentUrl: string | null; createdAt: string | null; }
 interface Stats { totalMembers: number; activeMembers: number; totalOrders: number; totalKrwBalance: number; totalTransactions: number; }
 
+type Paged<T> = {
+  content: T[];
+  totalElements: number;
+  totalPages: number;
+  page: number;
+};
+
 function fmt(n: number, d = 0) { return n.toLocaleString('ko-KR', { maximumFractionDigits: d }); }
 function fmtDate(v: string | null) { if (!v) return '-'; return new Date(v).toLocaleString('ko-KR'); }
 
@@ -353,6 +412,22 @@ const AdminDashboard = () => {
   const [settingsMsg, setSettingsMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [newPw, setNewPw] = useState('');
 
+  const [memberQuery, setMemberQuery] = useState({ q: '', role: '', status: '', page: 0, size: 20 });
+  const [memberTotal, setMemberTotal] = useState(0);
+  const [memberTotalPages, setMemberTotalPages] = useState(0);
+
+  const [txQuery, setTxQuery] = useState({
+    memberEmail: '',
+    assetType: '',
+    txType: '',
+    from: '',
+    to: '',
+    page: 0,
+    size: 20,
+  });
+  const [txTotal, setTxTotal] = useState(0);
+  const [txTotalPages, setTxTotalPages] = useState(0);
+
   useEffect(() => {
     const t = localStorage.getItem('token');
     const r = localStorage.getItem('role');
@@ -364,30 +439,69 @@ const AdminDashboard = () => {
   const fetchData = useCallback(() => {
     if (!token) return;
     const h = { Authorization: `Bearer ${token}` };
+
     if (activeMenu === 'dashboard') {
       axios.get(`${API_BASE}/api/admin/stats`, { headers: h }).then(r => setStats(r.data)).catch(() => { });
     } else if (activeMenu === 'members') {
-      axios.get(`${API_BASE}/api/admin/members`, { headers: h }).then(r => setMembers(r.data)).catch(() => { });
+      axios
+        .get<Paged<MemberRow>>(`${API_BASE}/api/admin/members/search`, {
+          headers: h,
+          params: {
+            q: memberQuery.q || undefined,
+            role: memberQuery.role || undefined,
+            status: memberQuery.status || undefined,
+            page: memberQuery.page,
+            size: memberQuery.size,
+          },
+        })
+        .then(r => {
+          setMembers(r.data.content);
+          setMemberTotal(r.data.totalElements);
+          setMemberTotalPages(r.data.totalPages);
+        })
+        .catch(() => {});
     } else if (activeMenu === 'orders') {
       axios.get(`${API_BASE}/api/admin/orders`, { headers: h }).then(r => setOrders(r.data)).catch(() => { });
     } else if (activeMenu === 'assets') {
       axios.get(`${API_BASE}/api/admin/assets`, { headers: h }).then(r => setAssets(r.data)).catch(() => { });
     } else if (activeMenu === 'deposits') {
-      axios.get(`${API_BASE}/api/admin/transactions`, { headers: h }).then(r => setTransactions(r.data)).catch(() => { });
+      axios
+        .get<Paged<TxRow>>(`${API_BASE}/api/admin/transactions/search`, {
+          headers: h,
+          params: {
+            memberEmail: txQuery.memberEmail || undefined,
+            assetType: txQuery.assetType || undefined,
+            txType: txQuery.txType || undefined,
+            from: txQuery.from || undefined,
+            to: txQuery.to || undefined,
+            page: txQuery.page,
+            size: txQuery.size,
+          },
+        })
+        .then(r => {
+          setTransactions(r.data.content);
+          setTxTotal(r.data.totalElements);
+          setTxTotalPages(r.data.totalPages);
+        })
+        .catch(() => {});
     } else if (activeMenu === 'inquiries') {
       axios.get(`${API_BASE}/api/admin/inquiries`, { headers: h }).then(r => setInquiries(r.data)).catch(() => { });
     } else if (activeMenu === 'community') {
       axios.get(`${API_BASE}/api/community/posts`).then(r => setPosts(r.data.content || r.data)).catch(() => { });
     }
-  }, [activeMenu, token]);
+  }, [activeMenu, token, txQuery, memberQuery]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const handleStatusChange = async (memberId: number, newStatus: string) => {
     try {
       await axios.patch(`${API_BASE}/api/admin/members/${memberId}/status`, { status: newStatus }, { headers });
-      setMembers(prev => prev.map(m => m.memberId === memberId ? { ...m, status: newStatus } : m));
-    } catch { alert('상태 변경 실패'); }
+      setMembers(prev => prev.map(m => (m.memberId === memberId ? { ...m, status: newStatus } : m)));
+    } catch {
+      alert('상태 변경 실패');
+    }
   };
 
   const handleDeletePost = async (postId: number) => {
@@ -395,7 +509,9 @@ const AdminDashboard = () => {
     try {
       await axios.delete(`${API_BASE}/api/community/posts/${postId}`, { headers });
       setPosts(prev => prev.filter((p: any) => p.postId !== postId));
-    } catch { alert('삭제 실패'); }
+    } catch {
+      alert('삭제 실패');
+    }
   };
 
   const handleReplyInquiry = async () => {
@@ -420,8 +536,14 @@ const AdminDashboard = () => {
   };
 
   const menuTitles: Record<string, string> = {
-    dashboard: '대시보드', members: '회원 관리', orders: '거래 내역',
-    assets: '자산 관리', deposits: '입출금 관리', inquiries: '고객센터 문의', community: '커뮤니티 관리', settings: '시스템 설정'
+    dashboard: '대시보드',
+    members: '회원 관리',
+    orders: '거래 내역',
+    assets: '자산 관리',
+    deposits: '입출금 관리',
+    inquiries: '고객센터 문의',
+    community: '커뮤니티 관리',
+    settings: '시스템 설정',
   };
 
   const renderContent = () => {
@@ -449,9 +571,7 @@ const AdminDashboard = () => {
             </StatsGrid>
             <Card>
               <CardTitle>요약</CardTitle>
-              <div style={{ color: '#999', fontSize: 14 }}>
-                총 거래 건수: {stats ? fmt(stats.totalTransactions) : '-'}건
-              </div>
+              <div style={{ color: '#999', fontSize: 14 }}>총 거래 건수: {stats ? fmt(stats.totalTransactions) : '-'}건</div>
             </Card>
           </>
         );
@@ -459,30 +579,91 @@ const AdminDashboard = () => {
       case 'members':
         return (
           <Card>
-            <CardTitle>회원 목록 ({members.length}명)</CardTitle>
-            {members.length === 0 ? <EmptyState>회원이 없습니다.</EmptyState> : (
-              <Table>
-                <thead><tr><th>ID</th><th>이메일</th><th>이름</th><th>역할</th><th>상태</th><th>가입일</th><th>상태 변경</th></tr></thead>
-                <tbody>
-                  {members.map(m => (
-                    <tr key={m.memberId}>
-                      <td>{m.memberId}</td>
-                      <td>{m.email}</td>
-                      <td>{m.name}</td>
-                      <td><Badge $color={m.role === 'ADMIN' ? '#093687' : '#555'}>{m.role}</Badge></td>
-                      <td><Badge $color={statusColor(m.status)}>{m.status}</Badge></td>
-                      <td>{fmtDate(m.createdAt)}</td>
-                      <td>
-                        <Select value={m.status} onChange={e => handleStatusChange(m.memberId, e.target.value)}>
-                          <option value="ACTIVE">ACTIVE</option>
-                          <option value="LOCKED">LOCKED</option>
-                          <option value="WITHDRAWN">WITHDRAWN</option>
-                        </Select>
-                      </td>
+            <CardTitle>회원 목록 ({fmt(memberTotal)}명)</CardTitle>
+
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+              <Input
+                value={memberQuery.q}
+                onChange={e => setMemberQuery(s => ({ ...s, q: e.target.value, page: 0 }))}
+                placeholder="이메일/이름 검색"
+                style={{ width: 260 }}
+              />
+
+              <Select value={memberQuery.role} onChange={e => setMemberQuery(s => ({ ...s, role: e.target.value, page: 0 }))}>
+                <option value="">전체 역할</option>
+                <option value="ADMIN">ADMIN</option>
+                <option value="USER">USER</option>
+                <option value="GUEST">GUEST</option>
+              </Select>
+
+              <Select value={memberQuery.status} onChange={e => setMemberQuery(s => ({ ...s, status: e.target.value, page: 0 }))}>
+                <option value="">전체 상태</option>
+                <option value="PENDING">PENDING</option>
+                <option value="ACTIVE">ACTIVE</option>
+                <option value="LOCKED">LOCKED</option>
+                <option value="WITHDRAWN">WITHDRAWN</option>
+              </Select>
+
+              <ActionButton onClick={fetchData}>검색</ActionButton>
+
+              <LogoutBtn onClick={() => setMemberQuery({ q: '', role: '', status: '', page: 0, size: 20 })}>초기화</LogoutBtn>
+            </div>
+
+            {members.length === 0 ? (
+              <EmptyState>회원이 없습니다.</EmptyState>
+            ) : (
+              <>
+                <Table>
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>이메일</th>
+                      <th>이름</th>
+                      <th>역할</th>
+                      <th>상태</th>
+                      <th>가입일</th>
+                      <th>상태 변경</th>
                     </tr>
-                  ))}
-                </tbody>
-              </Table>
+                  </thead>
+                  <tbody>
+                    {members.map(m => (
+                      <tr key={m.memberId}>
+                        <td>{m.memberId}</td>
+                        <td>{m.email}</td>
+                        <td>{m.name}</td>
+                        <td>
+                          <Badge $color={m.role === 'ADMIN' ? '#093687' : '#555'}>{m.role}</Badge>
+                        </td>
+                        <td>
+                          <Badge $color={statusColor(m.status)}>{m.status}</Badge>
+                        </td>
+                        <td>{fmtDate(m.createdAt)}</td>
+                        <td>
+                          <Select value={m.status} onChange={e => handleStatusChange(m.memberId, e.target.value)}>
+                            <option value="ACTIVE">ACTIVE</option>
+                            <option value="LOCKED">LOCKED</option>
+                            <option value="WITHDRAWN">WITHDRAWN</option>
+                          </Select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+                  <div style={{ color: '#777', fontSize: 12 }}>
+                    페이지 {memberQuery.page + 1} / {Math.max(memberTotalPages, 1)}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <LogoutBtn onClick={() => setMemberQuery(q => ({ ...q, page: Math.max(0, q.page - 1) }))} disabled={memberQuery.page <= 0}>
+                      이전
+                    </LogoutBtn>
+                    <LogoutBtn onClick={() => setMemberQuery(q => ({ ...q, page: q.page + 1 }))} disabled={memberQuery.page + 1 >= memberTotalPages}>
+                      다음
+                    </LogoutBtn>
+                  </div>
+                </div>
+              </>
             )}
           </Card>
         );
@@ -491,20 +672,38 @@ const AdminDashboard = () => {
         return (
           <Card>
             <CardTitle>전체 주문 ({orders.length}건)</CardTitle>
-            {orders.length === 0 ? <EmptyState>주문 내역이 없습니다.</EmptyState> : (
+            {orders.length === 0 ? (
+              <EmptyState>주문 내역이 없습니다.</EmptyState>
+            ) : (
               <Table>
-                <thead><tr><th>ID</th><th>회원</th><th>유형</th><th>코인</th><th>가격</th><th>수량</th><th>체결량</th><th>상태</th><th>일시</th></tr></thead>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>회원</th>
+                    <th>유형</th>
+                    <th>코인</th>
+                    <th>가격</th>
+                    <th>수량</th>
+                    <th>체결량</th>
+                    <th>상태</th>
+                    <th>일시</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {orders.map(o => (
                     <tr key={o.orderId}>
                       <td>{o.orderId}</td>
                       <td>{o.memberName}</td>
-                      <td><Badge $color={o.orderType === 'BUY' ? '#ef4444' : '#3b82f6'}>{o.orderType}</Badge></td>
+                      <td>
+                        <Badge $color={o.orderType === 'BUY' ? '#ef4444' : '#3b82f6'}>{o.orderType}</Badge>
+                      </td>
                       <td>{o.assetType}</td>
                       <td>{fmt(o.price)}</td>
                       <td>{o.amount}</td>
                       <td>{o.filledAmount}</td>
-                      <td><Badge $color={statusColor(o.status)}>{o.status}</Badge></td>
+                      <td>
+                        <Badge $color={statusColor(o.status)}>{o.status}</Badge>
+                      </td>
                       <td>{fmtDate(o.createdAt)}</td>
                     </tr>
                   ))}
@@ -518,9 +717,19 @@ const AdminDashboard = () => {
         return (
           <Card>
             <CardTitle>전체 자산 ({assets.length}건)</CardTitle>
-            {assets.length === 0 ? <EmptyState>자산 내역이 없습니다.</EmptyState> : (
+            {assets.length === 0 ? (
+              <EmptyState>자산 내역이 없습니다.</EmptyState>
+            ) : (
               <Table>
-                <thead><tr><th>회원</th><th>이메일</th><th>자산</th><th>잔고</th><th>잠금</th></tr></thead>
+                <thead>
+                  <tr>
+                    <th>회원</th>
+                    <th>이메일</th>
+                    <th>자산</th>
+                    <th>잔고</th>
+                    <th>잠금</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {assets.map(a => (
                     <tr key={a.assetId}>
@@ -540,25 +749,90 @@ const AdminDashboard = () => {
       case 'deposits':
         return (
           <Card>
-            <CardTitle>전체 입출금 ({transactions.length}건)</CardTitle>
-            {transactions.length === 0 ? <EmptyState>입출금 내역이 없습니다.</EmptyState> : (
-              <Table>
-                <thead><tr><th>ID</th><th>회원</th><th>유형</th><th>자산</th><th>수량</th><th>총액</th><th>수수료</th><th>일시</th></tr></thead>
-                <tbody>
-                  {transactions.map(tx => (
-                    <tr key={tx.txId}>
-                      <td>{tx.txId}</td>
-                      <td>{tx.memberName}</td>
-                      <td><Badge $color={txColor(tx.txType)}>{tx.txType}</Badge></td>
-                      <td>{tx.assetType}</td>
-                      <td>{tx.amount}</td>
-                      <td>{tx.totalValue ? fmt(tx.totalValue) : '-'}</td>
-                      <td>{tx.fee ? fmt(tx.fee, 8) : '-'}</td>
-                      <td>{fmtDate(tx.txDate)}</td>
+            <CardTitle>전체 입출금 ({fmt(txTotal)}건)</CardTitle>
+
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+              <Input
+                value={txQuery.memberEmail}
+                onChange={e => setTxQuery(q => ({ ...q, memberEmail: e.target.value, page: 0 }))}
+                placeholder="회원 이메일 검색"
+                style={{ width: 240 }}
+              />
+
+              <Select value={txQuery.txType} onChange={e => setTxQuery(q => ({ ...q, txType: e.target.value, page: 0 }))}>
+                <option value="">전체 유형</option>
+                <option value="DEPOSIT">DEPOSIT</option>
+                <option value="WITHDRAW">WITHDRAW</option>
+                <option value="BUY">BUY</option>
+                <option value="SELL">SELL</option>
+              </Select>
+
+              <Input type="date" value={txQuery.from} onChange={e => setTxQuery(q => ({ ...q, from: e.target.value, page: 0 }))} style={{ width: 160 }} />
+              <Input type="date" value={txQuery.to} onChange={e => setTxQuery(q => ({ ...q, to: e.target.value, page: 0 }))} style={{ width: 160 }} />
+
+              <Input
+                value={txQuery.assetType}
+                onChange={e => setTxQuery(q => ({ ...q, assetType: e.target.value.toUpperCase(), page: 0 }))}
+                placeholder="자산 (예: KRW, BTC)"
+                style={{ width: 180 }}
+              />
+
+              <ActionButton onClick={fetchData}>검색</ActionButton>
+
+              <LogoutBtn onClick={() => setTxQuery({ memberEmail: '', assetType: '', txType: '', from: '', to: '', page: 0, size: 20 })}>
+                초기화
+              </LogoutBtn>
+            </div>
+
+            {transactions.length === 0 ? (
+              <EmptyState>입출금 내역이 없습니다.</EmptyState>
+            ) : (
+              <>
+                <Table>
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>회원</th>
+                      <th>유형</th>
+                      <th>자산</th>
+                      <th>수량</th>
+                      <th>총액</th>
+                      <th>수수료</th>
+                      <th>일시</th>
                     </tr>
-                  ))}
-                </tbody>
-              </Table>
+                  </thead>
+                  <tbody>
+                    {transactions.map(tx => (
+                      <tr key={tx.txId}>
+                        <td>{tx.txId}</td>
+                        <td>{tx.memberName}</td>
+                        <td>
+                          <Badge $color={txColor(tx.txType)}>{tx.txType}</Badge>
+                        </td>
+                        <td>{tx.assetType}</td>
+                        <td>{tx.amount}</td>
+                        <td>{tx.totalValue ? fmt(tx.totalValue) : '-'}</td>
+                        <td>{tx.fee ? fmt(tx.fee, 8) : '-'}</td>
+                        <td>{fmtDate(tx.txDate)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+                  <div style={{ color: '#777', fontSize: 12 }}>
+                    페이지 {txQuery.page + 1} / {Math.max(txTotalPages, 1)}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <LogoutBtn onClick={() => setTxQuery(q => ({ ...q, page: Math.max(0, q.page - 1) }))} disabled={txQuery.page <= 0}>
+                      이전
+                    </LogoutBtn>
+                    <LogoutBtn onClick={() => setTxQuery(q => ({ ...q, page: q.page + 1 }))} disabled={txQuery.page + 1 >= txTotalPages}>
+                      다음
+                    </LogoutBtn>
+                  </div>
+                </div>
+              </>
             )}
           </Card>
         );
@@ -583,7 +857,16 @@ const AdminDashboard = () => {
             </div>
             {filteredPosts.length === 0 ? <EmptyState>게시글이 없습니다.</EmptyState> : (
               <Table>
-                <thead><tr><th>ID</th><th>제목</th><th>작성자</th><th>공지</th><th>작성일</th><th>삭제</th></tr></thead>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>제목</th>
+                    <th>작성자</th>
+                    <th>공지</th>
+                    <th>작성일</th>
+                    <th>삭제</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {filteredPosts.map((p: any) => (
                     <tr key={p.postId}>
@@ -653,15 +936,20 @@ const AdminDashboard = () => {
               <Label>새 비밀번호</Label>
               <Input type="password" value={newPw} onChange={e => setNewPw(e.target.value)} placeholder="새 비밀번호 입력" />
             </FormGroup>
-            <SaveBtn disabled={!newPw} onClick={async () => {
-              try {
-                await axios.put(`${API_BASE}/api/admin/change-password`, { newPassword: newPw }, { headers });
-                setSettingsMsg({ text: '비밀번호가 변경되었습니다.', ok: true });
-                setNewPw('');
-              } catch {
-                setSettingsMsg({ text: '비밀번호 변경 기능은 준비 중입니다.', ok: false });
-              }
-            }}>비밀번호 변경</SaveBtn>
+            <SaveBtn
+              disabled={!newPw}
+              onClick={async () => {
+                try {
+                  await axios.put(`${API_BASE}/api/admin/change-password`, { newPassword: newPw }, { headers });
+                  setSettingsMsg({ text: '비밀번호가 변경되었습니다.', ok: true });
+                  setNewPw('');
+                } catch {
+                  setSettingsMsg({ text: '비밀번호 변경 기능은 준비 중입니다.', ok: false });
+                }
+              }}
+            >
+              비밀번호 변경
+            </SaveBtn>
           </Card>
         );
 
@@ -677,14 +965,24 @@ const AdminDashboard = () => {
         <Nav>
           <NavSection>
             <NavTitle>메인</NavTitle>
-            <NavItem active={activeMenu === 'dashboard'} onClick={() => setActiveMenu('dashboard')}>대시보드</NavItem>
+            <NavItem active={activeMenu === 'dashboard'} onClick={() => setActiveMenu('dashboard')}>
+              대시보드
+            </NavItem>
           </NavSection>
           <NavSection>
             <NavTitle>거래소 관리</NavTitle>
-            <NavItem active={activeMenu === 'members'} onClick={() => setActiveMenu('members')}>회원 관리</NavItem>
-            <NavItem active={activeMenu === 'orders'} onClick={() => setActiveMenu('orders')}>거래 내역</NavItem>
-            <NavItem active={activeMenu === 'assets'} onClick={() => setActiveMenu('assets')}>자산 관리</NavItem>
-            <NavItem active={activeMenu === 'deposits'} onClick={() => setActiveMenu('deposits')}>입출금 관리</NavItem>
+            <NavItem active={activeMenu === 'members'} onClick={() => setActiveMenu('members')}>
+              회원 관리
+            </NavItem>
+            <NavItem active={activeMenu === 'orders'} onClick={() => setActiveMenu('orders')}>
+              거래 내역
+            </NavItem>
+            <NavItem active={activeMenu === 'assets'} onClick={() => setActiveMenu('assets')}>
+              자산 관리
+            </NavItem>
+            <NavItem active={activeMenu === 'deposits'} onClick={() => setActiveMenu('deposits')}>
+              입출금 관리
+            </NavItem>
           </NavSection>
           <NavSection>
             <NavTitle>콘텐츠</NavTitle>
@@ -693,7 +991,9 @@ const AdminDashboard = () => {
           </NavSection>
           <NavSection>
             <NavTitle>시스템</NavTitle>
-            <NavItem active={activeMenu === 'settings'} onClick={() => setActiveMenu('settings')}>설정</NavItem>
+            <NavItem active={activeMenu === 'settings'} onClick={() => setActiveMenu('settings')}>
+              설정
+            </NavItem>
           </NavSection>
         </Nav>
         <UserInfo>
