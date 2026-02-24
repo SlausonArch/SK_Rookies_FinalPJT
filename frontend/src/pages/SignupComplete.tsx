@@ -251,7 +251,7 @@ const SignupComplete: React.FC = () => {
 
             const newToken = response.data;
             localStorage.setItem('accessToken', newToken);
-            alert('회원가입이 완료되었습니다! 로그인 상태로 유지됩니다.');
+            alert('회원가입이 완료되었습니다. 신분증 승인 전까지 계정 상태는 LOCKED(입출금 및 코인거래 제한)입니다.');
             navigate('/');
         } catch (error: any) {
             console.error(error);

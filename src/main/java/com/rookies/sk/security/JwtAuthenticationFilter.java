@@ -43,10 +43,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             log.info("Token Valid. Email: {}, Role: {}", email, role);
 
             Member member = memberRepository.findByEmail(email).orElse(null);
-            if (member != null && member.getStatus() == Member.Status.LOCKED) {
+            if (member != null && member.getStatus() == Member.Status.WITHDRAWN) {
                 response.setStatus(HttpServletResponse.SC_FORBIDDEN);
                 response.setContentType("application/json;charset=UTF-8");
-                response.getWriter().write("{\"message\":\"LOCKED_ACCOUNT\"}");
+                response.getWriter().write("{\"message\":\"WITHDRAWN_ACCOUNT\"}");
                 return;
             }
 

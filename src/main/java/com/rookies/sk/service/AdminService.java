@@ -30,6 +30,8 @@ public class AdminService {
             map.put("phoneNumber", m.getPhoneNumber());
             map.put("role", m.getRole().name());
             map.put("status", m.getStatus().name());
+            map.put("hasIdPhoto", m.getIdPhotoUrl() != null && !m.getIdPhotoUrl().isBlank());
+            map.put("idPhotoUrl", m.getIdPhotoUrl() != null ? m.getIdPhotoUrl() : "");
             map.put("createdAt", m.getCreatedAt());
             return map;
         }).collect(Collectors.toList());
@@ -39,7 +41,36 @@ public class AdminService {
     public Map<String, Object> updateMemberStatus(Long memberId, String status) {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new RuntimeException("회원을 찾을 수 없습니다."));
+
+        if ("ACTIVE".equalsIgnoreCase(status)
+                && (member.getIdPhotoUrl() == null || member.getIdPhotoUrl().isBlank())) {
+            throw new RuntimeException("신분증 제출 확인 후에만 ACTIVE 승인할 수 있습니다.");
+        }
+
         member.setStatus(Member.Status.valueOf(status));
+        memberRepository.save(member);
+
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("memberId", member.getMemberId());
+        map.put("email", member.getEmail());
+        map.put("name", member.getName());
+        map.put("status", member.getStatus().name());
+        return map;
+    }
+
+    @Transactional
+    public Map<String, Object> approveMemberIdentity(Long memberId) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new RuntimeException("회원을 찾을 수 없습니다."));
+
+        if (member.getStatus() == Member.Status.WITHDRAWN) {
+            throw new RuntimeException("탈퇴 계정은 승인할 수 없습니다.");
+        }
+        if (member.getIdPhotoUrl() == null || member.getIdPhotoUrl().isBlank()) {
+            throw new RuntimeException("신분증 제출본이 없어 승인할 수 없습니다.");
+        }
+
+        member.setStatus(Member.Status.ACTIVE);
         memberRepository.save(member);
 
         Map<String, Object> map = new LinkedHashMap<>();

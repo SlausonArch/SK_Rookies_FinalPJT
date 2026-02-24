@@ -34,9 +34,9 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
         Member member = memberRepository.findByEmail(internalEmail)
                 .orElseThrow(() -> new RuntimeException("Member not found"));
 
-        if (member.getStatus() == Member.Status.LOCKED) {
+        if (member.getStatus() == Member.Status.WITHDRAWN) {
             String targetUrl = UriComponentsBuilder.fromUriString("http://localhost:5173/login")
-                    .queryParam("error", "LOCKED_ACCOUNT")
+                    .queryParam("error", "WITHDRAWN_ACCOUNT")
                     .build().toUriString();
             getRedirectStrategy().sendRedirect(request, response, targetUrl);
             return;

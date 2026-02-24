@@ -24,7 +24,7 @@ import java.math.BigDecimal;
 @RequiredArgsConstructor
 public class AuthController {
 
-    private static final String LOCKED_ACCOUNT_MESSAGE = "LOCKED_ACCOUNT";
+    private static final String WITHDRAWN_ACCOUNT_MESSAGE = "WITHDRAWN_ACCOUNT";
 
     private final MemberService memberService;
     private final FileService fileService;
@@ -41,8 +41,8 @@ public class AuthController {
                 return ResponseEntity.status(401).body("이메일 또는 비밀번호가 올바르지 않습니다.");
             }
 
-            if (member.getStatus() == Member.Status.LOCKED) {
-                return ResponseEntity.status(403).body(LOCKED_ACCOUNT_MESSAGE);
+            if (member.getStatus() == Member.Status.WITHDRAWN) {
+                return ResponseEntity.status(403).body(WITHDRAWN_ACCOUNT_MESSAGE);
             }
 
             if (member.getRole() == Member.Role.GUEST) {
@@ -76,8 +76,8 @@ public class AuthController {
                 return ResponseEntity.status(401).body("Invalid credentials");
             }
 
-            if (member.getStatus() == Member.Status.LOCKED) {
-                return ResponseEntity.status(403).body(LOCKED_ACCOUNT_MESSAGE);
+            if (member.getStatus() == Member.Status.WITHDRAWN) {
+                return ResponseEntity.status(403).body(WITHDRAWN_ACCOUNT_MESSAGE);
             }
 
             // 관리자 권한 확인
@@ -145,6 +145,8 @@ public class AuthController {
             result.put("totalVolume", totalVolume.toString());
             result.put("nextTierVolume", nextTierVolume.toString());
             result.put("referralCode", member.getReferralCode());
+            result.put("hasIdPhoto", member.getIdPhotoUrl() != null && !member.getIdPhotoUrl().isBlank());
+            result.put("idPhotoUrl", member.getIdPhotoUrl() != null ? member.getIdPhotoUrl() : "");
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             return ResponseEntity.status(404).body("회원 정보를 찾을 수 없습니다.");
@@ -173,6 +175,22 @@ public class AuthController {
             return ResponseEntity.ok(java.util.Map.of("message", "회원 정보가 수정되었습니다."));
         } catch (Exception e) {
             return ResponseEntity.status(400).body("회원 정보 수정에 실패했습니다.");
+        }
+    }
+
+    @PostMapping("/me/id-photo")
+    public ResponseEntity<?> submitIdPhoto(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestPart("file") MultipartFile file) {
+        try {
+            String filePath = fileService.storeFile(file);
+            Member member = memberService.submitIdPhotoByEmail(userDetails.getUsername(), filePath);
+            return ResponseEntity.ok(java.util.Map.of(
+                    "message", "신분증이 제출되었습니다. 관리자 승인 전까지 LOCKED 상태로 유지됩니다.",
+                    "status", member.getStatus().name(),
+                    "idPhotoUrl", member.getIdPhotoUrl() != null ? member.getIdPhotoUrl() : ""));
+        } catch (Exception e) {
+            return ResponseEntity.status(400).body(java.util.Map.of("message", e.getMessage()));
         }
     }
 

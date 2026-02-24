@@ -150,17 +150,20 @@ function getToken(): string | null {
 
 function toUserMessage(raw: unknown): string {
   const code = String(raw ?? '');
-  if (code.includes('LOCKED_ACCOUNT')) {
-    return '계정의 접속을 차단하고 제한된 계정입니다. 관리자에게 문의하세요.';
+  if (code.includes('WITHDRAWN_ACCOUNT')) {
+    return '탈퇴 계정입니다. 로그인이 불가능합니다. 관리자에게 문의하세요.';
   }
   if (code.includes('RESTRICTED_ACCOUNT')) {
-    return '제한계정입니다. 관리자한테 문의하세요.';
+    return '입출금 및 매수매도가 제한된 계정입니다. 관리자에게 문의하세요.';
+  }
+  if (code.includes('LOCKED_ACCOUNT')) {
+    return '입출금 및 매수매도가 제한된 계정입니다. 관리자에게 문의하세요.';
   }
   return code || '요청 처리에 실패했습니다.';
 }
 
 function showRestrictionPopupIfNeeded(msg: string): void {
-  if (msg.includes('제한계정') || msg.includes('접속을 차단')) {
+  if (msg.includes('제한') || msg.includes('탈퇴')) {
     window.alert(msg);
   }
 }

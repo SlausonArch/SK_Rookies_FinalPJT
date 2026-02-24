@@ -75,7 +75,28 @@ public class MemberService {
         }
 
         member.setRole(Member.Role.USER);
-        member.setStatus(Member.Status.ACTIVE);
+        member.setStatus(Member.Status.LOCKED);
+
+        return memberRepository.save(member);
+    }
+
+    @Transactional
+    public Member submitIdPhotoByEmail(String email, String idPhotoUrl) {
+        Member member = memberRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Member not found"));
+
+        if (member.getStatus() == Member.Status.WITHDRAWN) {
+            throw new RuntimeException("탈퇴 계정은 신분증을 제출할 수 없습니다.");
+        }
+
+        if (member.getIdPhotoUrl() != null && !member.getIdPhotoUrl().isBlank()) {
+            throw new RuntimeException("이미 신분증이 제출된 계정입니다.");
+        }
+
+        member.setIdPhotoUrl(idPhotoUrl);
+        if (member.getRole() == Member.Role.USER) {
+            member.setStatus(Member.Status.LOCKED);
+        }
 
         return memberRepository.save(member);
     }

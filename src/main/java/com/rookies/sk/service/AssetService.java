@@ -167,10 +167,10 @@ public class AssetService {
 
         private void validateTradePermission(Member member) {
                 if (member.getStatus() == Member.Status.LOCKED) {
-                        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "LOCKED_ACCOUNT");
+                        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "RESTRICTED_ACCOUNT");
                 }
                 if (member.getStatus() == Member.Status.WITHDRAWN) {
-                        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "RESTRICTED_ACCOUNT");
+                        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "WITHDRAWN_ACCOUNT");
                 }
         }
 

@@ -62,6 +62,7 @@ public class SecurityConfig {
                                                                                                          // necessarily
                                                                                                          // here.
                                 .authorizeHttpRequests(auth -> auth
+                                                .requestMatchers("/api/auth/me/**", "/api/auth/withdraw").authenticated()
                                                 .requestMatchers("/", "/login/**", "/oauth2/**", "/api/auth/**",
                                                                 "/error", "/uploads/**")
                                                 .permitAll()

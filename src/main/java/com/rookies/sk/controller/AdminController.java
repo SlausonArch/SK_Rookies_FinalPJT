@@ -28,6 +28,11 @@ public class AdminController {
         return ResponseEntity.ok(adminService.updateMemberStatus(memberId, status));
     }
 
+    @PatchMapping("/members/{memberId}/approve-id")
+    public ResponseEntity<Map<String, Object>> approveMemberIdentity(@PathVariable Long memberId) {
+        return ResponseEntity.ok(adminService.approveMemberIdentity(memberId));
+    }
+
     @GetMapping("/orders")
     public ResponseEntity<List<Map<String, Object>>> getAllOrders() {
         return ResponseEntity.ok(adminService.getAllOrders());

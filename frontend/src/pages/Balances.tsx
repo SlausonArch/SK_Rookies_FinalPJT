@@ -339,11 +339,14 @@ const Balances = () => {
 
   const toUserMessage = (raw: unknown, fallback: string) => {
     const code = String(raw ?? '');
-    if (code.includes('LOCKED_ACCOUNT')) {
-      return '계정의 접속을 차단하고 제한된 계정입니다. 관리자에게 문의하세요.';
+    if (code.includes('WITHDRAWN_ACCOUNT')) {
+      return '탈퇴 계정입니다. 로그인이 불가능합니다. 관리자에게 문의하세요.';
     }
     if (code.includes('RESTRICTED_ACCOUNT')) {
-      return '제한계정입니다. 관리자한테 문의하세요.';
+      return '입출금 및 매수매도가 제한된 계정입니다. 관리자에게 문의하세요.';
+    }
+    if (code.includes('LOCKED_ACCOUNT')) {
+      return '입출금 및 매수매도가 제한된 계정입니다. 관리자에게 문의하세요.';
     }
     return code || fallback;
   };
