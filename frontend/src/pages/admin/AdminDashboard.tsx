@@ -1,371 +1,842 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import styled from 'styled-components';
+import { useState, useEffect, useCallback, useMemo, type ElementType } from 'react';
+import styled, { createGlobalStyle } from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import {
+  LayoutDashboard,
+  Users,
+  ArrowLeftRight,
+  Wallet,
+  Banknote,
+  MessageSquareText,
+  Headset,
+  Settings,
+} from 'lucide-react';
 
 const API_BASE = 'http://localhost:8080';
 
-const Container = styled.div`
-  display: flex;
+const COLORS = {
+  appBg: '#F1F4F8',
+  surface: '#FFFFFF',
+  surface2: '#F7F9FC',
+  border: '#D9E1EA',
+  border2: '#E6EDF5',
+
+  text: '#1F2A37',
+  text2: '#334155',
+  muted: '#64748B',
+  muted2: '#94A3B8',
+
+  sidebarBg: '#234C86',
+  sidebarBg2: '#1F447A',
+  sidebarBorder: 'rgba(255,255,255,0.12)',
+  sidebarText: 'rgba(255,255,255,0.92)',
+  sidebarTextMuted: 'rgba(255,255,255,0.62)',
+
+  primary: '#2E6FB6',
+  primaryHover: '#275F9B',
+  primarySoft: '#E7F0FB',
+
+  success: '#2CB67D',
+  danger: '#E55353',
+  warn: '#F0A202',
+  info: '#2E6FB6',
+};
+
+const SHADOW = {
+  topbar: '0 1px 8px rgba(31, 42, 55, 0.08)',
+  card: '0 2px 10px rgba(31, 42, 55, 0.06)',
+  panel: '0 1px 8px rgba(31, 42, 55, 0.06)',
+  modal: '0 18px 50px rgba(15, 23, 42, 0.18)',
+};
+
+const GlobalStyle = createGlobalStyle`
+  html, body, #root { height: 100%; }
+  body { margin: 0; background: ${COLORS.appBg}; }
+  * { box-sizing: border-box; }
+
+  /* hide scrollbar (global) */
+  * { scrollbar-width: none; -ms-overflow-style: none; }
+  *::-webkit-scrollbar { width: 0; height: 0; }
+`;
+
+const Shell = styled.div`
   height: 100vh;
-  background: #0f0f0f;
+  background: ${COLORS.appBg};
+  display: grid;
+  grid-template-rows: 64px 1fr;
 `;
 
-const Sidebar = styled.div`
-  width: 260px;
-  background: linear-gradient(180deg, #1a1a1a 0%, #0a0a0a 100%);
-  border-right: 1px solid #2a2a2a;
-  display: flex;
-  flex-direction: column;
-`;
-
-const Logo = styled.div`
-  padding: 24px;
-  font-size: 24px;
-  font-weight: 700;
-  color: #fff;
-  border-bottom: 1px solid #2a2a2a;
+const TopBar = styled.header`
+  height: 64px;
+  background: ${COLORS.surface};
+  color: ${COLORS.text};
+  box-shadow: ${SHADOW.topbar};
+  border-bottom: 1px solid ${COLORS.border};
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  padding: 0 22px;
 `;
 
-const Nav = styled.nav`
-  flex: 1;
-  padding: 16px 0;
+const Brand = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 900;
+  letter-spacing: -0.2px;
+  min-width: 0;
+`;
+
+const BrandMark = styled.div`
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: ${COLORS.primarySoft};
+  border: 1px solid rgba(30, 94, 255, 0.18);
+  display: grid;
+  place-items: center;
+  font-weight: 950;
+  color: ${COLORS.primary};
+`;
+
+const BrandText = styled.div`
+  display: flex;
+  flex-direction: column;
+  line-height: 1.05;
+  min-width: 0;
+`;
+
+const BrandTitle = styled.div`
+  font-size: 16px;
+  font-weight: 950;
+`;
+
+const BrandSub = styled.div`
+  font-size: 11px;
+  color: ${COLORS.muted};
+  font-weight: 800;
+`;
+
+const TopRight = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+`;
+
+const TopBtn = styled.button`
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid ${COLORS.border};
+  background: ${COLORS.surface};
+  color: ${COLORS.text2};
+  font-weight: 950;
+  font-size: 12px;
+  cursor: pointer;
+
+  &:hover {
+    background: ${COLORS.surface2};
+  }
+`;
+
+const TopPrimaryBtn = styled(TopBtn)`
+  background: ${COLORS.primary};
+  border-color: ${COLORS.primary};
+  color: #fff;
+
+  &:hover {
+    background: ${COLORS.primaryHover};
+    border-color: ${COLORS.primaryHover};
+  }
+`;
+
+const ToggleBtn = styled(TopBtn)`
+  width: 36px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  font-weight: 950;
+`;
+
+const Body = styled.div<{ $collapsed: boolean }>`
+  display: grid;
+  grid-template-columns: ${p => (p.$collapsed ? '84px 1fr' : '260px 1fr')};
+  min-height: 0;
+  transition: grid-template-columns 180ms ease;
+`;
+
+const Sidebar = styled.aside<{ $collapsed: boolean }>`
+  background: linear-gradient(180deg, ${COLORS.sidebarBg} 0%, ${COLORS.sidebarBg2} 100%);
+  border-right: 1px solid ${COLORS.sidebarBorder};
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+  transition: width 180ms ease;
+`;
+
+const SideHeader = styled.div<{ $collapsed: boolean }>`
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid ${COLORS.sidebarBorder};
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  ${p => (p.$collapsed ? 'padding: 14px 12px 10px;' : '')}
+`;
+
+const SideHeaderTitle = styled.div`
+  color: ${COLORS.sidebarText};
+  font-weight: 950;
+  font-size: 14px;
+`;
+
+const SideHeaderSub = styled.div`
+  color: ${COLORS.sidebarTextMuted};
+  font-size: 12px;
+  font-weight: 800;
+`;
+
+const SideNav = styled.nav`
+  padding: 12px 10px;
   overflow-y: auto;
 `;
 
-const NavSection = styled.div`
-  margin-bottom: 24px;
+const SideSection = styled.div`
+  margin-bottom: 14px;
 `;
 
-const NavTitle = styled.div`
-  padding: 8px 24px;
+const SideSectionTitle = styled.div<{ $collapsed?: boolean }>`
+  padding: 8px 10px 6px;
   font-size: 11px;
-  font-weight: 600;
-  color: #666;
+  font-weight: 950;
+  color: ${COLORS.sidebarTextMuted};
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
+  ${p => (p.$collapsed ? 'opacity: 0; height: 0; padding: 0; margin: 0; overflow: hidden;' : '')}
 `;
 
-const NavItem = styled.div<{ active?: boolean }>`
-  padding: 12px 24px;
-  color: ${props => (props.active ? '#fff' : '#999')};
-  background: ${props => (props.active ? 'rgba(9, 54, 135, 0.15)' : 'transparent')};
-  border-left: 3px solid ${props => (props.active ? '#093687' : 'transparent')};
-  cursor: pointer;
+const SideItem = styled.div<{ $active?: boolean; $collapsed?: boolean }>`
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: 14px;
-  font-weight: ${props => (props.active ? '600' : '400')};
-  transition: all 0.2s;
+  justify-content: space-between;
+  gap: 10px;
+
+  padding: 11px 12px;
+  margin: 4px 6px;
+  border-radius: 12px;
+  cursor: pointer;
+
+  color: ${p => (p.$active ? '#FFFFFF' : COLORS.sidebarText)};
+  background: ${p => (p.$active ? 'rgba(255, 255, 255, 0.14)' : 'transparent')};
+  border: 1px solid ${p => (p.$active ? 'rgba(255, 255, 255, 0.22)' : 'transparent')};
+
   &:hover {
-    background: rgba(9, 54, 135, 0.1);
-    color: #fff;
+    background: ${p => (p.$active ? 'rgba(255, 255, 255, 0.14)' : 'rgba(255,255,255,0.10)')};
   }
+
+  ${p => (p.$collapsed ? 'justify-content: center; padding: 11px 10px;' : '')}
 `;
 
-const UserInfo = styled.div`
-  padding: 20px 24px;
-  border-top: 1px solid #2a2a2a;
+const SideLeft = styled.div<{ $collapsed?: boolean }>`
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  min-width: 0;
+  ${p => (p.$collapsed ? 'justify-content: center;' : '')}
 `;
 
-const Avatar = styled.div`
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #093687 0%, #0a4099 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-weight: 700;
-  font-size: 14px;
-`;
+const SideIcon = styled.div<{ $active?: boolean }>`
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
 
-const UserDetails = styled.div`
-  flex: 1;
-`;
-const UserName = styled.div`
-  color: #fff;
-  font-size: 14px;
-  font-weight: 600;
-`;
-const UserRole = styled.div`
-  color: #666;
+  background: ${p => (p.$active ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.12)')};
+  border: 1px solid ${p => (p.$active ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.18)')};
+
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 950;
   font-size: 12px;
 `;
 
-const LogoutBtn = styled.button`
-  padding: 6px 12px;
-  background: transparent;
-  border: 1px solid #2a2a2a;
-  color: #999;
-  border-radius: 4px;
+const SideText = styled.div<{ $collapsed?: boolean }>`
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  ${p => (p.$collapsed ? 'display: none;' : '')}
+`;
+
+const SideLabel = styled.div`
+  font-size: 13px;
+  font-weight: 950;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+`;
+
+const SideDesc = styled.div`
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 800;
+  color: ${COLORS.sidebarTextMuted};
+`;
+
+/* ✅ (필수 수정) 빨간 알림 뱃지 */
+const SideBadge = styled.div<{ $show?: boolean; $collapsed?: boolean }>`
+  min-width: 22px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+
+  background: rgba(229, 83, 83, 0.95);
+  border: 1px solid rgba(229, 83, 83, 0.85);
+  color: #fff;
+
+  font-size: 12px;
+  font-weight: 950;
+
+  display: ${p => (p.$show ? 'grid' : 'none')};
+  place-items: center;
+
+  ${p =>
+    p.$collapsed
+      ? `
+        position: absolute;
+        right: 10px;
+        top: 10px;
+        min-width: 20px;
+        height: 20px;
+        padding: 0 6px;
+        font-size: 11px;
+      `
+      : ''}
+`;
+
+const SideFooter = styled.div<{ $collapsed: boolean }>`
+  padding: 12px 12px;
+  border-top: 1px solid ${COLORS.sidebarBorder};
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  ${p => (p.$collapsed ? 'justify-content: center; padding: 12px 10px;' : '')}
+`;
+
+const SideFooterUser = styled.div<{ $collapsed: boolean }>`
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  ${p => (p.$collapsed ? 'display: none;' : '')}
+`;
+
+const SideFooterName = styled.div`
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 13px;
+  font-weight: 950;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+`;
+
+const SideFooterRole = styled.div`
+  margin-top: 2px;
+  color: ${COLORS.sidebarTextMuted};
+  font-size: 11px;
+  font-weight: 800;
+`;
+
+const SideLogout = styled.button<{ $collapsed?: boolean }>`
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 950;
   font-size: 12px;
   cursor: pointer;
+
   &:hover {
-    background: #1a1a1a;
-    color: #fff;
-    border-color: #444;
+    background: rgba(255, 255, 255, 0.16);
+  }
+
+  ${p => (p.$collapsed ? 'width: 34px; padding: 0; display: grid; place-items: center;' : '')}
+`;
+
+const Content = styled.main`
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 18px 26px;
+`;
+
+const Breadcrumb = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: ${COLORS.muted};
+  font-size: 12px;
+  font-weight: 800;
+  margin-bottom: 12px;
+`;
+
+const PrimaryButton = styled.button`
+  height: 38px;
+  padding: 0 14px;
+  background: ${COLORS.primary};
+  color: #fff;
+  border: 1px solid ${COLORS.primary};
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 950;
+  cursor: pointer;
+
+  &:hover {
+    background: ${COLORS.primaryHover};
+    border-color: ${COLORS.primaryHover};
   }
   &:disabled {
-    opacity: 0.5;
+    opacity: 0.6;
     cursor: not-allowed;
   }
 `;
 
-const ContentArea = styled.div`
-  flex: 1;
-  overflow-y: auto;
-  background: #0f0f0f;
-`;
-
-const HeaderBar = styled.div`
-  padding: 24px 32px;
-  background: #1a1a1a;
-  border-bottom: 1px solid #2a2a2a;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-`;
-
-const PageTitle = styled.h1`
-  font-size: 28px;
-  margin: 0;
-  color: #fff;
-  font-weight: 700;
-`;
-
-const ActionButton = styled.button`
-  padding: 10px 20px;
-  background: #093687;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
+const GhostButton = styled.button`
+  height: 38px;
+  padding: 0 14px;
+  background: ${COLORS.surface};
+  color: ${COLORS.text2};
+  border: 1px solid ${COLORS.border};
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 900;
   cursor: pointer;
-  &:hover {
-    background: #0a4099;
-  }
-`;
 
-const Main = styled.div`
-  padding: 32px;
+  &:hover {
+    background: ${COLORS.surface2};
+  }
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
 `;
 
 const StatsGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
-  margin-bottom: 32px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+
+  @media (max-width: 1100px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  @media (max-width: 720px) {
+    grid-template-columns: 1fr;
+  }
 `;
 
 const StatCard = styled.div`
-  background: linear-gradient(135deg, #1a1a1a 0%, #141414 100%);
-  border: 1px solid #2a2a2a;
-  border-radius: 12px;
-  padding: 24px;
-  &:hover {
-    border-color: #093687;
-    transform: translateY(-2px);
-  }
-  transition: all 0.3s;
+  background: ${COLORS.surface};
+  border: 1px solid ${COLORS.border};
+  border-radius: 16px;
+  box-shadow: ${SHADOW.card};
+  padding: 14px;
+`;
+
+const StatTop = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 `;
 
 const StatLabel = styled.div`
-  font-size: 13px;
-  color: #999;
-  margin-bottom: 8px;
+  font-size: 12px;
+  color: ${COLORS.muted};
+  font-weight: 900;
 `;
+
 const StatValue = styled.div`
-  font-size: 32px;
-  color: #fff;
-  font-weight: 700;
-  margin-bottom: 4px;
+  margin-top: 10px;
+  font-size: 26px;
+  color: ${COLORS.text};
+  font-weight: 950;
+  letter-spacing: -0.3px;
 `;
 
-const Card = styled.div`
-  background: #1a1a1a;
-  border: 1px solid #2a2a2a;
-  border-radius: 12px;
-  padding: 24px;
-  margin-bottom: 24px;
+const StatChip = styled.div`
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: ${COLORS.primarySoft};
+  border: 1px solid rgba(46, 111, 182, 0.18);
+  color: ${COLORS.primary};
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 950;
 `;
 
-const CardTitle = styled.h2`
-  font-size: 18px;
-  color: #fff;
-  margin: 0 0 20px 0;
-  font-weight: 600;
+const Card = styled.section`
+  background: ${COLORS.surface};
+  border: 1px solid ${COLORS.border};
+  border-radius: 16px;
+  box-shadow: ${SHADOW.card};
+  padding: 16px;
+  margin-bottom: 14px;
+`;
+
+const CardTitle = styled.div`
+  font-size: 15px;
+  color: ${COLORS.text};
+  font-weight: 950;
+  margin-bottom: 12px;
 `;
 
 const EmptyState = styled.div`
+  padding: 46px 12px;
   text-align: center;
-  padding: 60px 20px;
-  color: #666;
+  color: ${COLORS.muted};
+  font-weight: 800;
+`;
+
+const FilterRow = styled.div`
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 12px;
+`;
+
+const Input = styled.input`
+  height: 38px;
+  padding: 0 12px;
+  background: ${COLORS.surface};
+  border: 1px solid ${COLORS.border};
+  border-radius: 10px;
+  color: ${COLORS.text2};
+  font-size: 13px;
+  font-weight: 800;
+
+  &::placeholder {
+    color: ${COLORS.muted2};
+    font-weight: 700;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: rgba(46, 111, 182, 0.55);
+    box-shadow: 0 0 0 3px rgba(46, 111, 182, 0.12);
+  }
+`;
+
+const Select = styled.select`
+  height: 38px;
+  padding: 0 12px;
+  background: ${COLORS.surface};
+  border: 1px solid ${COLORS.border};
+  border-radius: 10px;
+  color: ${COLORS.text2};
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+
+  &:focus {
+    outline: none;
+    border-color: rgba(46, 111, 182, 0.55);
+    box-shadow: 0 0 0 3px rgba(46, 111, 182, 0.12);
+  }
 `;
 
 const Table = styled.table`
   width: 100%;
   border-collapse: collapse;
+  border: 1px solid ${COLORS.border2};
+  border-radius: 14px;
+  overflow: hidden;
+
   th {
     text-align: left;
-    padding: 10px 12px;
+    padding: 12px;
     font-size: 12px;
-    font-weight: 600;
-    color: #666;
-    border-bottom: 1px solid #2a2a2a;
+    font-weight: 950;
+    color: ${COLORS.muted};
+    background: ${COLORS.surface2};
+    border-bottom: 1px solid ${COLORS.border};
+    white-space: nowrap;
   }
   td {
-    padding: 10px 12px;
+    padding: 12px;
     font-size: 13px;
-    color: #ccc;
-    border-bottom: 1px solid #1f1f1f;
+    font-weight: 800;
+    color: ${COLORS.text2};
+    border-bottom: 1px solid ${COLORS.border2};
+    vertical-align: middle;
   }
   tr:hover td {
-    background: rgba(9, 54, 135, 0.05);
+    background: ${COLORS.surface2};
   }
 `;
 
-const Badge = styled.span<{ $color: string }>`
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #fff;
-  background: ${p => p.$color};
-`;
-
-const Select = styled.select`
-  padding: 4px 8px;
+const Badge = styled.span<{ $tone: 'success' | 'danger' | 'warn' | 'info' | 'neutral' }>`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 999px;
   font-size: 12px;
-  background: #2a2a2a;
-  color: #ccc;
-  border: 1px solid #444;
-  border-radius: 4px;
-  cursor: pointer;
+  font-weight: 950;
+
+  border: 1px solid
+    ${p =>
+      p.$tone === 'success'
+        ? 'rgba(44,182,125,0.25)'
+        : p.$tone === 'danger'
+          ? 'rgba(229,83,83,0.25)'
+          : p.$tone === 'warn'
+            ? 'rgba(240,162,2,0.25)'
+            : p.$tone === 'info'
+              ? 'rgba(46,111,182,0.25)'
+              : 'rgba(100,116,139,0.25)'};
+
+  background: ${p =>
+    p.$tone === 'success'
+      ? 'rgba(44,182,125,0.12)'
+      : p.$tone === 'danger'
+        ? 'rgba(229,83,83,0.12)'
+        : p.$tone === 'warn'
+          ? 'rgba(240,162,2,0.12)'
+          : p.$tone === 'info'
+            ? 'rgba(46,111,182,0.12)'
+            : 'rgba(100,116,139,0.10)'};
+
+  color: ${p =>
+    p.$tone === 'success'
+      ? COLORS.success
+      : p.$tone === 'danger'
+        ? COLORS.danger
+        : p.$tone === 'warn'
+          ? COLORS.warn
+          : p.$tone === 'info'
+            ? COLORS.info
+            : COLORS.muted};
 `;
 
-const FormGroup = styled.div`
-  margin-bottom: 16px;
-`;
-const Label = styled.label`
-  display: block;
-  font-size: 13px;
-  color: #999;
-  margin-bottom: 4px;
-`;
-const Input = styled.input`
-  width: 100%;
-  padding: 10px 12px;
-  background: #2a2a2a;
-  border: 1px solid #444;
-  border-radius: 6px;
-  color: #fff;
-  font-size: 14px;
-  box-sizing: border-box;
-  &:focus {
-    border-color: #093687;
-    outline: none;
-  }
+const LinkCell = styled.div`
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  color: ${COLORS.primary};
+  font-weight: 950;
 `;
 
-const SaveBtn = styled.button`
-  padding: 10px 24px;
-  background: #093687;
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  &:hover {
-    background: #0a4099;
-  }
-  &:disabled {
-    opacity: 0.5;
-  }
+const PaginationRow = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+  gap: 10px;
+`;
+
+const PageInfo = styled.div`
+  color: ${COLORS.muted};
+  font-size: 12px;
+  font-weight: 900;
+`;
+
+const PageButtons = styled.div`
+  display: flex;
+  gap: 8px;
 `;
 
 const Msg = styled.div<{ $ok: boolean }>`
-  padding: 8px 12px;
-  border-radius: 6px;
+  padding: 10px 12px;
+  border-radius: 14px;
   font-size: 13px;
   margin-bottom: 12px;
-  background: ${p => (p.$ok ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)')};
-  color: ${p => (p.$ok ? '#22c55e' : '#ef4444')};
+  font-weight: 950;
+
+  border: 1px solid ${p => (p.$ok ? 'rgba(44,182,125,0.25)' : 'rgba(229,83,83,0.25)')};
+  background: ${p => (p.$ok ? 'rgba(44,182,125,0.12)' : 'rgba(229,83,83,0.12)')};
+  color: ${p => (p.$ok ? COLORS.success : COLORS.danger)};
 `;
 
 const ModalOverlay = styled.div`
   position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.6);
+  inset: 0;
+  background: rgba(15, 23, 42, 0.58);
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 1000;
+  padding: 18px;
 `;
 
 const ModalContainer = styled.div`
-  background: #1a1a1a;
-  border: 1px solid #2a2a2a;
-  border-radius: 12px;
-  width: 500px;
-  max-width: 90%;
-  padding: 32px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+  background: ${COLORS.surface};
+  border: 1px solid ${COLORS.border};
+  border-radius: 18px;
+  width: 560px;
+  max-width: 100%;
+  padding: 18px;
+  box-shadow: ${SHADOW.modal};
 `;
 
 const ModalTitle = styled.h2`
-  font-size: 20px;
-  color: #fff;
-  margin-top: 0;
-  margin-bottom: 8px;
+  font-size: 16px;
+  color: ${COLORS.text};
+  margin: 0 0 10px 0;
+  font-weight: 950;
+`;
+
+const ModalMeta = styled.div`
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: ${COLORS.muted};
+  font-weight: 900;
 `;
 
 const ModalText = styled.div`
-  font-size: 14px;
-  color: #ccc;
-  line-height: 1.6;
-  margin-bottom: 24px;
-  background: #2a2a2a;
-  padding: 16px;
-  border-radius: 8px;
+  font-size: 13px;
+  color: ${COLORS.text2};
+  line-height: 1.7;
+  margin-bottom: 12px;
+  background: ${COLORS.surface2};
+  padding: 14px;
+  border: 1px solid ${COLORS.border2};
+  border-radius: 14px;
   white-space: pre-wrap;
-  max-height: 400px;
+  max-height: 360px;
   overflow-y: auto;
 `;
 
 const ModalButtonGroup = styled.div`
   display: flex;
-  gap: 12px;
+  gap: 10px;
   justify-content: flex-end;
 `;
 
-const ModalButton = styled.button`
-  padding: 10px 20px;
-  background: #333;
-  color: #fff;
-  border: 1px solid #444;
-  border-radius: 6px;
+const ModalButton = styled.button<{ $variant?: 'primary' | 'danger' | 'ghost' }>`
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 10px;
+  font-weight: 950;
+  font-size: 13px;
   cursor: pointer;
-  &:hover { background: #444; }
+
+  ${p => {
+    if (p.$variant === 'primary') {
+      return `
+        background: ${COLORS.primary};
+        border: 1px solid ${COLORS.primary};
+        color: #fff;
+        &:hover { background: ${COLORS.primaryHover}; border-color: ${COLORS.primaryHover}; }
+      `;
+    }
+    if (p.$variant === 'danger') {
+      return `
+        background: ${COLORS.danger};
+        border: 1px solid ${COLORS.danger};
+        color: #fff;
+        &:hover { filter: brightness(0.96); }
+      `;
+    }
+    return `
+      background: ${COLORS.surface};
+      border: 1px solid ${COLORS.border};
+      color: ${COLORS.text2};
+      &:hover { background: ${COLORS.surface2}; }
+    `;
+  }}
 `;
 
-interface MemberRow { memberId: number; email: string; name: string; phoneNumber: string | null; role: string; status: string; createdAt: string | null; }
-interface OrderRow { orderId: number; memberEmail: string; memberName: string; orderType: string; assetType: string; price: number; amount: number; filledAmount: number; status: string; createdAt: string | null; }
-interface AssetRow { assetId: number; memberEmail: string; memberName: string; assetType: string; balance: number; lockedBalance: number; }
-interface TxRow { txId: number; memberEmail: string; memberName: string; txType: string; assetType: string; amount: number; price: number | null; totalValue: number | null; fee: number | null; txDate: string | null; }
-interface InquiryRow { inquiryId: number; memberEmail: string; memberName: string; title: string; content: string; status: string; reply: string | null; attachmentUrl: string | null; createdAt: string | null; }
-interface Stats { totalMembers: number; activeMembers: number; totalOrders: number; totalKrwBalance: number; totalTransactions: number; }
+const Textarea = styled.textarea`
+  width: 100%;
+  padding: 12px 12px;
+  background: ${COLORS.surface};
+  color: ${COLORS.text2};
+  border: 1px solid ${COLORS.border};
+  border-radius: 14px;
+  min-height: 120px;
+  font-size: 13px;
+  font-weight: 800;
+  resize: vertical;
+
+  &::placeholder {
+    color: ${COLORS.muted2};
+    font-weight: 700;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: rgba(46, 111, 182, 0.55);
+    box-shadow: 0 0 0 3px rgba(46, 111, 182, 0.12);
+  }
+`;
+
+interface MemberRow {
+  memberId: number;
+  email: string;
+  name: string;
+  phoneNumber: string | null;
+  role: string;
+  status: string;
+  createdAt: string | null;
+}
+interface OrderRow {
+  orderId: number;
+  memberEmail: string;
+  memberName: string;
+  orderType: string;
+  assetType: string;
+  price: number;
+  amount: number;
+  filledAmount: number;
+  status: string;
+  createdAt: string | null;
+}
+interface AssetRow {
+  assetId: number;
+  memberEmail: string;
+  memberName: string;
+  assetType: string;
+  balance: number;
+  lockedBalance: number;
+}
+interface TxRow {
+  txId: number;
+  memberEmail: string;
+  memberName: string;
+  txType: string;
+  assetType: string;
+  amount: number;
+  price: number | null;
+  totalValue: number | null;
+  fee: number | null;
+  txDate: string | null;
+}
+interface InquiryRow {
+  inquiryId: number;
+  memberEmail: string;
+  memberName: string;
+  title: string;
+  content: string;
+  status: string;
+  reply: string | null;
+  attachmentUrl: string | null;
+  createdAt: string | null;
+}
+interface Stats {
+  totalMembers: number;
+  activeMembers: number;
+  totalOrders: number;
+  totalKrwBalance: number;
+  totalTransactions: number;
+}
 
 type Paged<T> = {
   content: T[];
@@ -374,27 +845,44 @@ type Paged<T> = {
   page: number;
 };
 
-function fmt(n: number, d = 0) { return n.toLocaleString('ko-KR', { maximumFractionDigits: d }); }
-function fmtDate(v: string | null) { if (!v) return '-'; return new Date(v).toLocaleString('ko-KR'); }
-
-function statusColor(s: string) {
-  if (s === 'ACTIVE') return '#22c55e';
-  if (s === 'LOCKED') return '#ef4444';
-  if (s === 'WITHDRAWN') return '#666';
-  return '#f59e0b';
+function fmt(n: number, d = 0) {
+  return n.toLocaleString('ko-KR', { maximumFractionDigits: d });
+}
+function fmtDate(v: string | null) {
+  if (!v) return '-';
+  return new Date(v).toLocaleString('ko-KR');
 }
 
-function txColor(t: string) {
-  if (t === 'BUY') return '#ef4444';
-  if (t === 'SELL') return '#3b82f6';
-  if (t === 'DEPOSIT') return '#22c55e';
-  if (t === 'WITHDRAW') return '#f59e0b';
-  return '#666';
+function toneFromStatus(s: string): 'success' | 'danger' | 'warn' | 'info' | 'neutral' {
+  if (s === 'ACTIVE') return 'success';
+  if (s === 'LOCKED') return 'danger';
+  if (s === 'WITHDRAWN') return 'neutral';
+  if (s === 'PENDING') return 'warn';
+  if (s === 'ANSWERED') return 'success';
+  if (s === 'OPEN') return 'info';
+  return 'warn';
+}
+function toneFromRole(r: string): 'info' | 'neutral' {
+  return r === 'ADMIN' ? 'info' : 'neutral';
+}
+function toneFromOrderType(t: string): 'danger' | 'info' {
+  return t === 'BUY' ? 'danger' : 'info';
+}
+function toneFromTxType(t: string): 'success' | 'danger' | 'warn' | 'info' | 'neutral' {
+  if (t === 'BUY') return 'danger';
+  if (t === 'SELL') return 'info';
+  if (t === 'DEPOSIT') return 'success';
+  if (t === 'WITHDRAW') return 'warn';
+  return 'neutral';
 }
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
-  const [activeMenu, setActiveMenu] = useState('dashboard');
+  const [activeMenu, setActiveMenu] = useState<
+    'dashboard' | 'members' | 'orders' | 'assets' | 'deposits' | 'community' | 'inquiries' | 'settings'
+  >('dashboard');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
   const userName = localStorage.getItem('name') || '관리자';
   const token = localStorage.getItem('token');
 
@@ -406,9 +894,11 @@ const AdminDashboard = () => {
   const [inquiries, setInquiries] = useState<InquiryRow[]>([]);
   const [posts, setPosts] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+
   const [selectedPost, setSelectedPost] = useState<any>(null);
   const [selectedInquiry, setSelectedInquiry] = useState<InquiryRow | null>(null);
   const [replyContent, setReplyContent] = useState('');
+
   const [settingsMsg, setSettingsMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [newPw, setNewPw] = useState('');
 
@@ -434,15 +924,18 @@ const AdminDashboard = () => {
     if (!t || r !== 'ADMIN') navigate('/admin/login', { replace: true });
   }, [navigate]);
 
-  const headers = { Authorization: `Bearer ${token}` };
+  const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
 
   const fetchData = useCallback(() => {
     if (!token) return;
     const h = { Authorization: `Bearer ${token}` };
 
     if (activeMenu === 'dashboard') {
-      axios.get(`${API_BASE}/api/admin/stats`, { headers: h }).then(r => setStats(r.data)).catch(() => { });
-    } else if (activeMenu === 'members') {
+      axios.get(`${API_BASE}/api/admin/stats`, { headers: h }).then(r => setStats(r.data)).catch(() => {});
+      return;
+    }
+
+    if (activeMenu === 'members') {
       axios
         .get<Paged<MemberRow>>(`${API_BASE}/api/admin/members/search`, {
           headers: h,
@@ -460,11 +953,20 @@ const AdminDashboard = () => {
           setMemberTotalPages(r.data.totalPages);
         })
         .catch(() => {});
-    } else if (activeMenu === 'orders') {
-      axios.get(`${API_BASE}/api/admin/orders`, { headers: h }).then(r => setOrders(r.data)).catch(() => { });
-    } else if (activeMenu === 'assets') {
-      axios.get(`${API_BASE}/api/admin/assets`, { headers: h }).then(r => setAssets(r.data)).catch(() => { });
-    } else if (activeMenu === 'deposits') {
+      return;
+    }
+
+    if (activeMenu === 'orders') {
+      axios.get(`${API_BASE}/api/admin/orders`, { headers: h }).then(r => setOrders(r.data)).catch(() => {});
+      return;
+    }
+
+    if (activeMenu === 'assets') {
+      axios.get(`${API_BASE}/api/admin/assets`, { headers: h }).then(r => setAssets(r.data)).catch(() => {});
+      return;
+    }
+
+    if (activeMenu === 'deposits') {
       axios
         .get<Paged<TxRow>>(`${API_BASE}/api/admin/transactions/search`, {
           headers: h,
@@ -484,10 +986,16 @@ const AdminDashboard = () => {
           setTxTotalPages(r.data.totalPages);
         })
         .catch(() => {});
-    } else if (activeMenu === 'inquiries') {
-      axios.get(`${API_BASE}/api/admin/inquiries`, { headers: h }).then(r => setInquiries(r.data)).catch(() => { });
-    } else if (activeMenu === 'community') {
-      axios.get(`${API_BASE}/api/community/posts`).then(r => setPosts(r.data.content || r.data)).catch(() => { });
+      return;
+    }
+
+    if (activeMenu === 'inquiries') {
+      axios.get(`${API_BASE}/api/admin/inquiries`, { headers: h }).then(r => setInquiries(r.data)).catch(() => {});
+      return;
+    }
+
+    if (activeMenu === 'community') {
+      axios.get(`${API_BASE}/api/community/posts`).then(r => setPosts(r.data.content || r.data)).catch(() => {});
     }
   }, [activeMenu, token, txQuery, memberQuery]);
 
@@ -517,11 +1025,16 @@ const AdminDashboard = () => {
   const handleReplyInquiry = async () => {
     if (!selectedInquiry || !replyContent.trim()) return;
     try {
-      await axios.patch(`${API_BASE}/api/admin/inquiries/${selectedInquiry.inquiryId}/reply`,
-        { status: 'ANSWERED', reply: replyContent }, { headers });
-      setInquiries(prev => prev.map(inq =>
-        inq.inquiryId === selectedInquiry.inquiryId ? { ...inq, status: 'ANSWERED', reply: replyContent } : inq
-      ));
+      await axios.patch(
+        `${API_BASE}/api/admin/inquiries/${selectedInquiry.inquiryId}/reply`,
+        { status: 'ANSWERED', reply: replyContent },
+        { headers }
+      );
+      setInquiries(prev =>
+        prev.map(inq =>
+          inq.inquiryId === selectedInquiry.inquiryId ? { ...inq, status: 'ANSWERED', reply: replyContent } : inq
+        )
+      );
       setSelectedInquiry(null);
       setReplyContent('');
       alert('답변이 등록되었습니다.');
@@ -535,16 +1048,21 @@ const AdminDashboard = () => {
     navigate('/admin/login', { replace: true });
   };
 
-  const menuTitles: Record<string, string> = {
-    dashboard: '대시보드',
-    members: '회원 관리',
-    orders: '거래 내역',
-    assets: '자산 관리',
-    deposits: '입출금 관리',
-    inquiries: '고객센터 문의',
-    community: '커뮤니티 관리',
-    settings: '시스템 설정',
+  const menuTitles: Record<typeof activeMenu, { title: string; desc: string; icon: ElementType }> = {
+    dashboard: { title: '대시보드', desc: '핵심 지표 요약', icon: LayoutDashboard },
+    members: { title: '회원 관리', desc: '검색/상태 변경', icon: Users },
+    orders: { title: '거래 내역', desc: '주문/체결 조회', icon: ArrowLeftRight },
+    assets: { title: '자산 관리', desc: '보유/잠금 잔고', icon: Wallet },
+    deposits: { title: '입출금 관리', desc: '입출금/거래 로그', icon: Banknote },
+    community: { title: '커뮤니티 관리', desc: '게시글 조회/삭제', icon: MessageSquareText },
+    inquiries: { title: '고객센터 문의', desc: '1:1 문의 답변', icon: Headset },
+    settings: { title: '시스템 설정', desc: '관리자 설정', icon: Settings },
   };
+
+  const pendingInquiryCount = useMemo(() => inquiries.filter(i => i.status === 'PENDING').length, [inquiries]);
+
+  /* ✅ (선택 적용) 99+ 처리 */
+  const badgeText = pendingInquiryCount > 99 ? '99+' : pendingInquiryCount;
 
   const renderContent = () => {
     switch (activeMenu) {
@@ -553,25 +1071,40 @@ const AdminDashboard = () => {
           <>
             <StatsGrid>
               <StatCard>
-                <StatLabel>총 회원 수</StatLabel>
+                <StatTop>
+                  <StatLabel>총 회원 수</StatLabel>
+                  <StatChip>Members</StatChip>
+                </StatTop>
                 <StatValue>{stats ? fmt(stats.totalMembers) : '-'}</StatValue>
               </StatCard>
               <StatCard>
-                <StatLabel>활성 회원</StatLabel>
+                <StatTop>
+                  <StatLabel>활성 회원</StatLabel>
+                  <StatChip>Active</StatChip>
+                </StatTop>
                 <StatValue>{stats ? fmt(stats.activeMembers) : '-'}</StatValue>
               </StatCard>
               <StatCard>
-                <StatLabel>총 주문 수</StatLabel>
+                <StatTop>
+                  <StatLabel>총 주문 수</StatLabel>
+                  <StatChip>Orders</StatChip>
+                </StatTop>
                 <StatValue>{stats ? fmt(stats.totalOrders) : '-'}</StatValue>
               </StatCard>
               <StatCard>
-                <StatLabel>KRW 총 잔고</StatLabel>
+                <StatTop>
+                  <StatLabel>KRW 총 잔고</StatLabel>
+                  <StatChip>Balance</StatChip>
+                </StatTop>
                 <StatValue>{stats ? `₩${fmt(stats.totalKrwBalance)}` : '-'}</StatValue>
               </StatCard>
             </StatsGrid>
+
             <Card>
               <CardTitle>요약</CardTitle>
-              <div style={{ color: '#999', fontSize: 14 }}>총 거래 건수: {stats ? fmt(stats.totalTransactions) : '-'}건</div>
+              <div style={{ color: COLORS.muted, fontSize: 13, fontWeight: 900 }}>
+                총 거래 건수: {stats ? fmt(stats.totalTransactions) : '-'}건
+              </div>
             </Card>
           </>
         );
@@ -581,33 +1114,32 @@ const AdminDashboard = () => {
           <Card>
             <CardTitle>회원 목록 ({fmt(memberTotal)}명)</CardTitle>
 
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+            <FilterRow>
               <Input
                 value={memberQuery.q}
                 onChange={e => setMemberQuery(s => ({ ...s, q: e.target.value, page: 0 }))}
                 placeholder="이메일/이름 검색"
                 style={{ width: 260 }}
               />
-
               <Select value={memberQuery.role} onChange={e => setMemberQuery(s => ({ ...s, role: e.target.value, page: 0 }))}>
                 <option value="">전체 역할</option>
                 <option value="ADMIN">ADMIN</option>
                 <option value="USER">USER</option>
                 <option value="GUEST">GUEST</option>
               </Select>
-
-              <Select value={memberQuery.status} onChange={e => setMemberQuery(s => ({ ...s, status: e.target.value, page: 0 }))}>
+              <Select
+                value={memberQuery.status}
+                onChange={e => setMemberQuery(s => ({ ...s, status: e.target.value, page: 0 }))}
+              >
                 <option value="">전체 상태</option>
                 <option value="PENDING">PENDING</option>
                 <option value="ACTIVE">ACTIVE</option>
                 <option value="LOCKED">LOCKED</option>
                 <option value="WITHDRAWN">WITHDRAWN</option>
               </Select>
-
-              <ActionButton onClick={fetchData}>검색</ActionButton>
-
-              <LogoutBtn onClick={() => setMemberQuery({ q: '', role: '', status: '', page: 0, size: 20 })}>초기화</LogoutBtn>
-            </div>
+              <PrimaryButton onClick={fetchData}>검색</PrimaryButton>
+              <GhostButton onClick={() => setMemberQuery({ q: '', role: '', status: '', page: 0, size: 20 })}>초기화</GhostButton>
+            </FilterRow>
 
             {members.length === 0 ? (
               <EmptyState>회원이 없습니다.</EmptyState>
@@ -632,10 +1164,10 @@ const AdminDashboard = () => {
                         <td>{m.email}</td>
                         <td>{m.name}</td>
                         <td>
-                          <Badge $color={m.role === 'ADMIN' ? '#093687' : '#555'}>{m.role}</Badge>
+                          <Badge $tone={toneFromRole(m.role)}>{m.role}</Badge>
                         </td>
                         <td>
-                          <Badge $color={statusColor(m.status)}>{m.status}</Badge>
+                          <Badge $tone={toneFromStatus(m.status)}>{m.status}</Badge>
                         </td>
                         <td>{fmtDate(m.createdAt)}</td>
                         <td>
@@ -650,19 +1182,25 @@ const AdminDashboard = () => {
                   </tbody>
                 </Table>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
-                  <div style={{ color: '#777', fontSize: 12 }}>
+                <PaginationRow>
+                  <PageInfo>
                     페이지 {memberQuery.page + 1} / {Math.max(memberTotalPages, 1)}
-                  </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <LogoutBtn onClick={() => setMemberQuery(q => ({ ...q, page: Math.max(0, q.page - 1) }))} disabled={memberQuery.page <= 0}>
+                  </PageInfo>
+                  <PageButtons>
+                    <GhostButton
+                      onClick={() => setMemberQuery(q => ({ ...q, page: Math.max(0, q.page - 1) }))}
+                      disabled={memberQuery.page <= 0}
+                    >
                       이전
-                    </LogoutBtn>
-                    <LogoutBtn onClick={() => setMemberQuery(q => ({ ...q, page: q.page + 1 }))} disabled={memberQuery.page + 1 >= memberTotalPages}>
+                    </GhostButton>
+                    <GhostButton
+                      onClick={() => setMemberQuery(q => ({ ...q, page: q.page + 1 }))}
+                      disabled={memberQuery.page + 1 >= memberTotalPages}
+                    >
                       다음
-                    </LogoutBtn>
-                  </div>
-                </div>
+                    </GhostButton>
+                  </PageButtons>
+                </PaginationRow>
               </>
             )}
           </Card>
@@ -695,14 +1233,14 @@ const AdminDashboard = () => {
                       <td>{o.orderId}</td>
                       <td>{o.memberName}</td>
                       <td>
-                        <Badge $color={o.orderType === 'BUY' ? '#ef4444' : '#3b82f6'}>{o.orderType}</Badge>
+                        <Badge $tone={toneFromOrderType(o.orderType)}>{o.orderType}</Badge>
                       </td>
                       <td>{o.assetType}</td>
                       <td>{fmt(o.price)}</td>
                       <td>{o.amount}</td>
                       <td>{o.filledAmount}</td>
                       <td>
-                        <Badge $color={statusColor(o.status)}>{o.status}</Badge>
+                        <Badge $tone={toneFromStatus(o.status)}>{o.status}</Badge>
                       </td>
                       <td>{fmtDate(o.createdAt)}</td>
                     </tr>
@@ -751,14 +1289,13 @@ const AdminDashboard = () => {
           <Card>
             <CardTitle>전체 입출금 ({fmt(txTotal)}건)</CardTitle>
 
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+            <FilterRow>
               <Input
                 value={txQuery.memberEmail}
                 onChange={e => setTxQuery(q => ({ ...q, memberEmail: e.target.value, page: 0 }))}
                 placeholder="회원 이메일 검색"
                 style={{ width: 240 }}
               />
-
               <Select value={txQuery.txType} onChange={e => setTxQuery(q => ({ ...q, txType: e.target.value, page: 0 }))}>
                 <option value="">전체 유형</option>
                 <option value="DEPOSIT">DEPOSIT</option>
@@ -766,23 +1303,29 @@ const AdminDashboard = () => {
                 <option value="BUY">BUY</option>
                 <option value="SELL">SELL</option>
               </Select>
-
-              <Input type="date" value={txQuery.from} onChange={e => setTxQuery(q => ({ ...q, from: e.target.value, page: 0 }))} style={{ width: 160 }} />
-              <Input type="date" value={txQuery.to} onChange={e => setTxQuery(q => ({ ...q, to: e.target.value, page: 0 }))} style={{ width: 160 }} />
-
+              <Input
+                type="date"
+                value={txQuery.from}
+                onChange={e => setTxQuery(q => ({ ...q, from: e.target.value, page: 0 }))}
+                style={{ width: 160 }}
+              />
+              <Input
+                type="date"
+                value={txQuery.to}
+                onChange={e => setTxQuery(q => ({ ...q, to: e.target.value, page: 0 }))}
+                style={{ width: 160 }}
+              />
               <Input
                 value={txQuery.assetType}
                 onChange={e => setTxQuery(q => ({ ...q, assetType: e.target.value.toUpperCase(), page: 0 }))}
                 placeholder="자산 (예: KRW, BTC)"
                 style={{ width: 180 }}
               />
-
-              <ActionButton onClick={fetchData}>검색</ActionButton>
-
-              <LogoutBtn onClick={() => setTxQuery({ memberEmail: '', assetType: '', txType: '', from: '', to: '', page: 0, size: 20 })}>
+              <PrimaryButton onClick={fetchData}>검색</PrimaryButton>
+              <GhostButton onClick={() => setTxQuery({ memberEmail: '', assetType: '', txType: '', from: '', to: '', page: 0, size: 20 })}>
                 초기화
-              </LogoutBtn>
-            </div>
+              </GhostButton>
+            </FilterRow>
 
             {transactions.length === 0 ? (
               <EmptyState>입출금 내역이 없습니다.</EmptyState>
@@ -807,7 +1350,7 @@ const AdminDashboard = () => {
                         <td>{tx.txId}</td>
                         <td>{tx.memberName}</td>
                         <td>
-                          <Badge $color={txColor(tx.txType)}>{tx.txType}</Badge>
+                          <Badge $tone={toneFromTxType(tx.txType)}>{tx.txType}</Badge>
                         </td>
                         <td>{tx.assetType}</td>
                         <td>{tx.amount}</td>
@@ -819,43 +1362,56 @@ const AdminDashboard = () => {
                   </tbody>
                 </Table>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
-                  <div style={{ color: '#777', fontSize: 12 }}>
+                <PaginationRow>
+                  <PageInfo>
                     페이지 {txQuery.page + 1} / {Math.max(txTotalPages, 1)}
-                  </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <LogoutBtn onClick={() => setTxQuery(q => ({ ...q, page: Math.max(0, q.page - 1) }))} disabled={txQuery.page <= 0}>
+                  </PageInfo>
+                  <PageButtons>
+                    <GhostButton
+                      onClick={() => setTxQuery(q => ({ ...q, page: Math.max(0, q.page - 1) }))}
+                      disabled={txQuery.page <= 0}
+                    >
                       이전
-                    </LogoutBtn>
-                    <LogoutBtn onClick={() => setTxQuery(q => ({ ...q, page: q.page + 1 }))} disabled={txQuery.page + 1 >= txTotalPages}>
+                    </GhostButton>
+                    <GhostButton
+                      onClick={() => setTxQuery(q => ({ ...q, page: q.page + 1 }))}
+                      disabled={txQuery.page + 1 >= txTotalPages}
+                    >
                       다음
-                    </LogoutBtn>
-                  </div>
-                </div>
+                    </GhostButton>
+                  </PageButtons>
+                </PaginationRow>
               </>
             )}
           </Card>
         );
 
-      case 'community':
+      case 'community': {
         const filteredPosts = posts.filter(p => {
           const term = searchTerm.toLowerCase();
-          return (p.title?.toLowerCase() || '').includes(term) ||
+          return (
+            (p.title?.toLowerCase() || '').includes(term) ||
             (p.content?.toLowerCase() || '').includes(term) ||
-            (p.authorName?.toLowerCase() || p.author?.toLowerCase() || '').includes(term);
+            (p.authorName?.toLowerCase() || p.author?.toLowerCase() || '').includes(term)
+          );
         });
+
         return (
           <Card>
             <CardTitle>게시글 관리 ({posts.length}건)</CardTitle>
-            <div style={{ marginBottom: 16 }}>
+
+            <FilterRow>
               <Input
                 placeholder="제목, 내용, 작성자 검색"
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                style={{ maxWidth: 300 }}
+                onChange={e => setSearchTerm(e.target.value)}
+                style={{ width: 320 }}
               />
-            </div>
-            {filteredPosts.length === 0 ? <EmptyState>게시글이 없습니다.</EmptyState> : (
+            </FilterRow>
+
+            {filteredPosts.length === 0 ? (
+              <EmptyState>게시글이 없습니다.</EmptyState>
+            ) : (
               <Table>
                 <thead>
                   <tr>
@@ -871,17 +1427,16 @@ const AdminDashboard = () => {
                   {filteredPosts.map((p: any) => (
                     <tr key={p.postId}>
                       <td>{p.postId}</td>
-                      <td
-                        style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer', color: '#60a5fa', textDecoration: 'underline' }}
-                        onClick={() => setSelectedPost(p)}
-                      >
-                        {p.title}
+                      <td>
+                        <LinkCell onClick={() => setSelectedPost(p)} title={p.title}>
+                          {p.title}
+                        </LinkCell>
                       </td>
                       <td>{p.authorName || p.author}</td>
-                      <td>{p.notice ? <Badge $color="#f59e0b">공지</Badge> : '-'}</td>
+                      <td>{p.notice ? <Badge $tone="warn">공지</Badge> : '-'}</td>
                       <td>{fmtDate(p.createdAt)}</td>
                       <td>
-                        <LogoutBtn onClick={() => handleDeletePost(p.postId)}>삭제</LogoutBtn>
+                        <GhostButton onClick={() => handleDeletePost(p.postId)}>삭제</GhostButton>
                       </td>
                     </tr>
                   ))}
@@ -890,34 +1445,59 @@ const AdminDashboard = () => {
             )}
           </Card>
         );
+      }
 
       case 'inquiries':
         return (
           <Card>
             <CardTitle>1:1 문의 관리 ({inquiries.length}건)</CardTitle>
-            {inquiries.length === 0 ? <EmptyState>등록된 문의가 없습니다.</EmptyState> : (
+            {inquiries.length === 0 ? (
+              <EmptyState>등록된 문의가 없습니다.</EmptyState>
+            ) : (
               <Table>
-                <thead><tr><th>ID</th><th>이메일</th><th>이름</th><th>제목</th><th>상태</th><th>등록일</th><th>답변</th></tr></thead>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>이메일</th>
+                    <th>이름</th>
+                    <th>제목</th>
+                    <th>상태</th>
+                    <th>등록일</th>
+                    <th>답변</th>
+                  </tr>
+                </thead>
                 <tbody>
-                  {inquiries.map((inq) => (
+                  {inquiries.map(inq => (
                     <tr key={inq.inquiryId}>
                       <td>{inq.inquiryId}</td>
                       <td>{inq.memberEmail}</td>
                       <td>{inq.memberName}</td>
-                      <td
-                        style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer', color: '#60a5fa', textDecoration: 'underline' }}
-                        onClick={() => {
-                          setSelectedInquiry(inq);
-                          setReplyContent(inq.reply || '');
-                        }}
-                      >{inq.title}</td>
-                      <td><Badge $color={inq.status === 'PENDING' ? '#f59e0b' : '#22c55e'}>{inq.status === 'PENDING' ? '답변대기' : '답변완료'}</Badge></td>
+                      <td>
+                        <LinkCell
+                          onClick={() => {
+                            setSelectedInquiry(inq);
+                            setReplyContent(inq.reply || '');
+                          }}
+                          title={inq.title}
+                        >
+                          {inq.title}
+                        </LinkCell>
+                      </td>
+                      <td>
+                        <Badge $tone={toneFromStatus(inq.status)}>
+                          {inq.status === 'PENDING' ? '답변대기' : '답변완료'}
+                        </Badge>
+                      </td>
                       <td>{fmtDate(inq.createdAt)}</td>
                       <td>
-                        <LogoutBtn onClick={() => {
-                          setSelectedInquiry(inq);
-                          setReplyContent(inq.reply || '');
-                        }}>상세 보기</LogoutBtn>
+                        <GhostButton
+                          onClick={() => {
+                            setSelectedInquiry(inq);
+                            setReplyContent(inq.reply || '');
+                          }}
+                        >
+                          상세 보기
+                        </GhostButton>
                       </td>
                     </tr>
                   ))}
@@ -932,24 +1512,30 @@ const AdminDashboard = () => {
           <Card>
             <CardTitle>관리자 설정</CardTitle>
             {settingsMsg && <Msg $ok={settingsMsg.ok}>{settingsMsg.text}</Msg>}
-            <FormGroup>
-              <Label>새 비밀번호</Label>
-              <Input type="password" value={newPw} onChange={e => setNewPw(e.target.value)} placeholder="새 비밀번호 입력" />
-            </FormGroup>
-            <SaveBtn
-              disabled={!newPw}
-              onClick={async () => {
-                try {
-                  await axios.put(`${API_BASE}/api/admin/change-password`, { newPassword: newPw }, { headers });
-                  setSettingsMsg({ text: '비밀번호가 변경되었습니다.', ok: true });
-                  setNewPw('');
-                } catch {
-                  setSettingsMsg({ text: '비밀번호 변경 기능은 준비 중입니다.', ok: false });
-                }
-              }}
-            >
-              비밀번호 변경
-            </SaveBtn>
+
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <Input
+                type="password"
+                value={newPw}
+                onChange={e => setNewPw(e.target.value)}
+                placeholder="새 비밀번호 입력"
+                style={{ width: 320 }}
+              />
+              <PrimaryButton
+                disabled={!newPw}
+                onClick={async () => {
+                  try {
+                    await axios.put(`${API_BASE}/api/admin/change-password`, { newPassword: newPw }, { headers });
+                    setSettingsMsg({ text: '비밀번호가 변경되었습니다.', ok: true });
+                    setNewPw('');
+                  } catch {
+                    setSettingsMsg({ text: '비밀번호 변경 기능은 준비 중입니다.', ok: false });
+                  }
+                }}
+              >
+                비밀번호 변경
+              </PrimaryButton>
+            </div>
           </Card>
         );
 
@@ -958,122 +1544,265 @@ const AdminDashboard = () => {
     }
   };
 
+  const page = menuTitles[activeMenu];
+
   return (
-    <Container>
-      <Sidebar>
-        <Logo>VCE Admin</Logo>
-        <Nav>
-          <NavSection>
-            <NavTitle>메인</NavTitle>
-            <NavItem active={activeMenu === 'dashboard'} onClick={() => setActiveMenu('dashboard')}>
-              대시보드
-            </NavItem>
-          </NavSection>
-          <NavSection>
-            <NavTitle>거래소 관리</NavTitle>
-            <NavItem active={activeMenu === 'members'} onClick={() => setActiveMenu('members')}>
-              회원 관리
-            </NavItem>
-            <NavItem active={activeMenu === 'orders'} onClick={() => setActiveMenu('orders')}>
-              거래 내역
-            </NavItem>
-            <NavItem active={activeMenu === 'assets'} onClick={() => setActiveMenu('assets')}>
-              자산 관리
-            </NavItem>
-            <NavItem active={activeMenu === 'deposits'} onClick={() => setActiveMenu('deposits')}>
-              입출금 관리
-            </NavItem>
-          </NavSection>
-          <NavSection>
-            <NavTitle>콘텐츠</NavTitle>
-            <NavItem active={activeMenu === 'community'} onClick={() => setActiveMenu('community')}>커뮤니티 관리</NavItem>
-            <NavItem active={activeMenu === 'inquiries'} onClick={() => setActiveMenu('inquiries')}>고객센터 문의</NavItem>
-          </NavSection>
-          <NavSection>
-            <NavTitle>시스템</NavTitle>
-            <NavItem active={activeMenu === 'settings'} onClick={() => setActiveMenu('settings')}>
-              설정
-            </NavItem>
-          </NavSection>
-        </Nav>
-        <UserInfo>
-          <Avatar>{userName[0]}</Avatar>
-          <UserDetails>
-            <UserName>{userName}</UserName>
-            <UserRole>시스템 관리자</UserRole>
-          </UserDetails>
-          <LogoutBtn onClick={handleLogout}>로그아웃</LogoutBtn>
-        </UserInfo>
-      </Sidebar>
-      <ContentArea>
-        <HeaderBar>
-          <PageTitle>{menuTitles[activeMenu] || ''}</PageTitle>
-          <ActionButton onClick={fetchData}>새로고침</ActionButton>
-        </HeaderBar>
-        <Main>{renderContent()}</Main>
-      </ContentArea>
+    <>
+      <GlobalStyle />
+      <Shell>
+        <TopBar>
+          <Brand>
+            <ToggleBtn
+              onClick={() => setSidebarCollapsed(v => !v)}
+              aria-label="sidebar toggle"
+              title={sidebarCollapsed ? '사이드바 펼치기' : '사이드바 접기'}
+            >
+              {sidebarCollapsed ? '»' : '«'}
+            </ToggleBtn>
 
-      {selectedPost && (
-        <ModalOverlay onClick={() => setSelectedPost(null)}>
-          <ModalContainer onClick={e => e.stopPropagation()}>
-            <ModalTitle>{selectedPost.title}</ModalTitle>
-            <div style={{ marginBottom: 16, fontSize: 13, color: '#999' }}>
-              작성자: {selectedPost.authorName || selectedPost.author} | 작성일: {fmtDate(selectedPost.createdAt)}
-            </div>
-            <ModalText>{selectedPost.content}</ModalText>
-            <ModalButtonGroup>
-              <ModalButton onClick={() => setSelectedPost(null)}>닫기</ModalButton>
-              <ModalButton
-                onClick={() => {
-                  handleDeletePost(selectedPost.postId);
-                  setSelectedPost(null);
-                }}
-                style={{ background: '#ef4444', borderColor: '#ef4444' }}
-              >
-                게시글 삭제
-              </ModalButton>
-            </ModalButtonGroup>
-          </ModalContainer>
-        </ModalOverlay>
-      )}
+            <BrandMark>V</BrandMark>
+            <BrandText>
+              <BrandTitle>VCE Admin</BrandTitle>
+            </BrandText>
+          </Brand>
+        </TopBar>
 
-      {selectedInquiry && (
-        <ModalOverlay onClick={() => { setSelectedInquiry(null); setReplyContent(''); }}>
-          <ModalContainer onClick={e => e.stopPropagation()} style={{ width: '600px' }}>
-            <ModalTitle>문의: {selectedInquiry.title}</ModalTitle>
-            <div style={{ marginBottom: 16, fontSize: 13, color: '#999' }}>
-              요청자: {selectedInquiry.memberName} ({selectedInquiry.memberEmail}) | 작성일: {fmtDate(selectedInquiry.createdAt)}
-            </div>
-            <ModalText style={{ maxHeight: '150px' }}>{selectedInquiry.content}</ModalText>
+        <Body $collapsed={sidebarCollapsed}>
+          <Sidebar $collapsed={sidebarCollapsed}>
+            <SideNav>
+              <SideSection>
+                <SideSectionTitle $collapsed={sidebarCollapsed}>메인</SideSectionTitle>
+                <SideItem
+                  $active={activeMenu === 'dashboard'}
+                  $collapsed={sidebarCollapsed}
+                  onClick={() => setActiveMenu('dashboard')}
+                  title={sidebarCollapsed ? menuTitles.dashboard.title : undefined}
+                >
+                  <SideLeft $collapsed={sidebarCollapsed}>
+                    {(() => {
+                      const Icon = menuTitles.dashboard.icon;
+                      return (
+                        <SideIcon $active={activeMenu === 'dashboard'}>
+                          <Icon size={16} />
+                        </SideIcon>
+                      );
+                    })()}
+                    <SideText $collapsed={sidebarCollapsed}>
+                      <SideLabel>{menuTitles.dashboard.title}</SideLabel>
+                      <SideDesc>{menuTitles.dashboard.desc}</SideDesc>
+                    </SideText>
+                  </SideLeft>
+                </SideItem>
+              </SideSection>
 
-            {selectedInquiry.attachmentUrl && (
-              <div style={{ marginBottom: '20px', fontSize: '13px' }}>
-                <a href={`${API_BASE}${selectedInquiry.attachmentUrl}`} target="_blank" rel="noreferrer" style={{ color: '#60a5fa', textDecoration: 'underline' }}>
-                  📎 첨부파일 존재함 (클릭하여 열기)
-                </a>
-              </div>
-            )}
+              <SideSection>
+                <SideSectionTitle $collapsed={sidebarCollapsed}>거래소 관리</SideSectionTitle>
+                {(['members', 'orders', 'assets', 'deposits'] as const).map(key => (
+                  <SideItem
+                    key={key}
+                    $active={activeMenu === key}
+                    $collapsed={sidebarCollapsed}
+                    onClick={() => setActiveMenu(key)}
+                    title={sidebarCollapsed ? menuTitles[key].title : undefined}
+                  >
+                    <SideLeft $collapsed={sidebarCollapsed}>
+                      {(() => {
+                        const Icon = menuTitles[key].icon;
+                        return (
+                          <SideIcon $active={activeMenu === key}>
+                            <Icon size={16} />
+                          </SideIcon>
+                        );
+                      })()}
+                      <SideText $collapsed={sidebarCollapsed}>
+                        <SideLabel>{menuTitles[key].title}</SideLabel>
+                        <SideDesc>{menuTitles[key].desc}</SideDesc>
+                      </SideText>
+                    </SideLeft>
+                  </SideItem>
+                ))}
+              </SideSection>
 
-            <FormGroup>
-              <Label>관리자 답변</Label>
-              <textarea
-                value={replyContent}
-                onChange={e => setReplyContent(e.target.value)}
-                style={{ width: '100%', boxSizing: 'border-box', padding: '10px', background: '#2a2a2a', color: '#fff', border: '1px solid #444', borderRadius: '6px', minHeight: '120px', fontSize: '14px' }}
-                placeholder="답변 내용을 입력하세요..."
-              />
-            </FormGroup>
+              <SideSection>
+                <SideSectionTitle $collapsed={sidebarCollapsed}>콘텐츠</SideSectionTitle>
 
-            <ModalButtonGroup>
-              <ModalButton onClick={() => { setSelectedInquiry(null); setReplyContent(''); }}>취소</ModalButton>
-              <ModalButton onClick={handleReplyInquiry} style={{ background: '#093687', borderColor: '#093687' }}>
-                {selectedInquiry.status === 'ANSWERED' ? '답변 수정' : '답변 등록'}
-              </ModalButton>
-            </ModalButtonGroup>
-          </ModalContainer>
-        </ModalOverlay>
-      )}
-    </Container>
+                <SideItem
+                  $active={activeMenu === 'community'}
+                  $collapsed={sidebarCollapsed}
+                  onClick={() => setActiveMenu('community')}
+                  title={sidebarCollapsed ? menuTitles.community.title : undefined}
+                >
+                  <SideLeft $collapsed={sidebarCollapsed}>
+                    {(() => {
+                      const Icon = menuTitles.community.icon;
+                      return (
+                        <SideIcon $active={activeMenu === 'community'}>
+                          <Icon size={16} />
+                        </SideIcon>
+                      );
+                    })()}
+                    <SideText $collapsed={sidebarCollapsed}>
+                      <SideLabel>{menuTitles.community.title}</SideLabel>
+                      <SideDesc>{menuTitles.community.desc}</SideDesc>
+                    </SideText>
+                  </SideLeft>
+                </SideItem>
+
+                <div style={{ position: 'relative' }}>
+                  <SideItem
+                    $active={activeMenu === 'inquiries'}
+                    $collapsed={sidebarCollapsed}
+                    onClick={() => setActiveMenu('inquiries')}
+                    title={sidebarCollapsed ? menuTitles.inquiries.title : undefined}
+                  >
+                    <SideLeft $collapsed={sidebarCollapsed}>
+                      {(() => {
+                        const Icon = menuTitles.inquiries.icon;
+                        return (
+                          <SideIcon $active={activeMenu === 'inquiries'}>
+                            <Icon size={16} />
+                          </SideIcon>
+                        );
+                      })()}
+                      <SideText $collapsed={sidebarCollapsed}>
+                        <SideLabel>{menuTitles.inquiries.title}</SideLabel>
+                        <SideDesc>{menuTitles.inquiries.desc}</SideDesc>
+                      </SideText>
+                    </SideLeft>
+
+                    {/* ✅ (옵션 적용) badgeText 출력 */}
+                    {!sidebarCollapsed && <SideBadge $show={pendingInquiryCount > 0}>{badgeText}</SideBadge>}
+                  </SideItem>
+
+                  {/* ✅ (옵션 적용) badgeText 출력 */}
+                  {sidebarCollapsed && (
+                    <SideBadge $show={pendingInquiryCount > 0} $collapsed>
+                      {badgeText}
+                    </SideBadge>
+                  )}
+                </div>
+              </SideSection>
+
+              <SideSection>
+                <SideSectionTitle $collapsed={sidebarCollapsed}>시스템</SideSectionTitle>
+                <SideItem
+                  $active={activeMenu === 'settings'}
+                  $collapsed={sidebarCollapsed}
+                  onClick={() => setActiveMenu('settings')}
+                  title={sidebarCollapsed ? menuTitles.settings.title : undefined}
+                >
+                  <SideLeft $collapsed={sidebarCollapsed}>
+                    {(() => {
+                      const Icon = menuTitles.settings.icon;
+                      return (
+                        <SideIcon $active={activeMenu === 'settings'}>
+                          <Icon size={16} />
+                        </SideIcon>
+                      );
+                    })()}
+                    <SideText $collapsed={sidebarCollapsed}>
+                      <SideLabel>{menuTitles.settings.title}</SideLabel>
+                      <SideDesc>{menuTitles.settings.desc}</SideDesc>
+                    </SideText>
+                  </SideLeft>
+                </SideItem>
+              </SideSection>
+            </SideNav>
+
+            <SideFooter $collapsed={sidebarCollapsed}>
+              <SideFooterUser $collapsed={sidebarCollapsed}>
+                <SideFooterName>{userName}</SideFooterName>
+                <SideFooterRole>ADMIN</SideFooterRole>
+              </SideFooterUser>
+
+              <SideLogout $collapsed={sidebarCollapsed} onClick={handleLogout} title={sidebarCollapsed ? '로그아웃' : undefined}>
+                {sidebarCollapsed ? '⎋' : '로그아웃'}
+              </SideLogout>
+            </SideFooter>
+          </Sidebar>
+
+          <Content>
+            <Breadcrumb>관리자 / {page.title}</Breadcrumb>
+            {renderContent()}
+          </Content>
+
+          {selectedPost && (
+            <ModalOverlay onClick={() => setSelectedPost(null)}>
+              <ModalContainer onClick={e => e.stopPropagation()}>
+                <ModalTitle>{selectedPost.title}</ModalTitle>
+                <ModalMeta>
+                  작성자: {selectedPost.authorName || selectedPost.author} | 작성일: {fmtDate(selectedPost.createdAt)}
+                </ModalMeta>
+                <ModalText>{selectedPost.content}</ModalText>
+                <ModalButtonGroup>
+                  <ModalButton $variant="ghost" onClick={() => setSelectedPost(null)}>
+                    닫기
+                  </ModalButton>
+                  <ModalButton
+                    $variant="danger"
+                    onClick={() => {
+                      handleDeletePost(selectedPost.postId);
+                      setSelectedPost(null);
+                    }}
+                  >
+                    게시글 삭제
+                  </ModalButton>
+                </ModalButtonGroup>
+              </ModalContainer>
+            </ModalOverlay>
+          )}
+
+          {selectedInquiry && (
+            <ModalOverlay
+              onClick={() => {
+                setSelectedInquiry(null);
+                setReplyContent('');
+              }}
+            >
+              <ModalContainer onClick={e => e.stopPropagation()} style={{ width: '640px' }}>
+                <ModalTitle>문의: {selectedInquiry.title}</ModalTitle>
+                <ModalMeta>
+                  요청자: {selectedInquiry.memberName} ({selectedInquiry.memberEmail}) | 작성일: {fmtDate(selectedInquiry.createdAt)}
+                </ModalMeta>
+
+                <ModalText style={{ maxHeight: '160px' }}>{selectedInquiry.content}</ModalText>
+
+                {selectedInquiry.attachmentUrl && (
+                  <div style={{ marginBottom: 12, fontSize: 12, fontWeight: 900 }}>
+                    <a
+                      href={`${API_BASE}${selectedInquiry.attachmentUrl}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: COLORS.primary, textDecoration: 'underline' }}
+                    >
+                      📎 첨부파일 존재함 (클릭하여 열기)
+                    </a>
+                  </div>
+                )}
+
+                <div style={{ marginBottom: 10, fontSize: 12, fontWeight: 950, color: COLORS.muted }}>관리자 답변</div>
+                <Textarea value={replyContent} onChange={e => setReplyContent(e.target.value)} placeholder="답변 내용을 입력하세요..." />
+
+                <ModalButtonGroup style={{ marginTop: 12 }}>
+                  <ModalButton
+                    $variant="ghost"
+                    onClick={() => {
+                      setSelectedInquiry(null);
+                      setReplyContent('');
+                    }}
+                  >
+                    취소
+                  </ModalButton>
+                  <ModalButton $variant="primary" onClick={handleReplyInquiry}>
+                    {selectedInquiry.status === 'ANSWERED' ? '답변 수정' : '답변 등록'}
+                  </ModalButton>
+                </ModalButtonGroup>
+              </ModalContainer>
+            </ModalOverlay>
+          )}
+        </Body>
+      </Shell>
+    </>
   );
 };
 
