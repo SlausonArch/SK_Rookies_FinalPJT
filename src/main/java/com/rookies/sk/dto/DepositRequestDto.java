@@ -10,4 +10,6 @@ import java.math.BigDecimal;
 public class DepositRequestDto {
     private String assetType;
     private BigDecimal amount;
+    private String bankName;
+    private String accountNumber;
 }

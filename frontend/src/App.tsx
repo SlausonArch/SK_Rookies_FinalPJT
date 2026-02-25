@@ -3,6 +3,8 @@ import Login from './pages/Login';
 import Signup from './pages/Signup';
 import SignupComplete from './pages/SignupComplete';
 import Home from './pages/Home';
+import Landing from './pages/Landing';
+import BankDashboard from './pages/bank/BankDashboard';
 import OAuthCallback from './pages/OAuthCallback';
 import Community from './pages/Community';
 import CommunityDetail from './pages/community/CommunityDetail';
@@ -40,7 +42,9 @@ function App() {
         <Route path="/withdrawal-complete" element={<WithdrawalComplete />} />
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
-        <Route path="/" element={<Home />} />
+        <Route path="/" element={<Landing />} />
+        <Route path="/crypto" element={<Home />} />
+        <Route path="/bank" element={<BankDashboard />} />
       </Routes>
     </Router>
   );

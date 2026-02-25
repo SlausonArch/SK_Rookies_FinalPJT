@@ -7,6 +7,8 @@ import type { UpbitTicker } from '../services/upbitApi';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 
+const API_BASE = 'http://localhost:8080';
+
 const Container = styled.div`
   min-height: 100vh;
   background: #f5f6f7;
@@ -124,20 +126,15 @@ const Select = styled.select`
   }
 `;
 
-const ButtonGroup = styled.div`
-  display: flex;
-  gap: 12px;
-`;
-
 const Button = styled.button<{ $variant?: 'primary' | 'secondary' }>`
-  flex: 1;
-  padding: 12px 24px;
+  width: 100%;
+  padding: 14px 24px;
   background: ${props => props.$variant === 'secondary' ? '#6c757d' : '#093687'};
   color: white;
   border: none;
   border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 700;
   cursor: pointer;
   transition: opacity 0.2s;
 
@@ -149,6 +146,20 @@ const Button = styled.button<{ $variant?: 'primary' | 'secondary' }>`
     opacity: 0.5;
     cursor: not-allowed;
   }
+`;
+
+const AddressBox = styled.div`
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px dashed #ced4da;
+  word-break: break-all;
+  font-family: monospace;
+  font-size: 15px;
+  color: #1a5bc4;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 20px;
 `;
 
 const HoldingsCard = styled(Card)`
@@ -208,69 +219,65 @@ const Balances = () => {
     DOGE: 0,
   });
 
-  // 입출금 폼
-  const [depositAmount, setDepositAmount] = useState('');
-  const [withdrawAmount, setWithdrawAmount] = useState('');
-  const [selectedCoin, setSelectedCoin] = useState('BTC');
+  // 지갑 폼 지정
+  const [selectedDepositCoin, setSelectedDepositCoin] = useState('BTC');
+  const [depositAddress, setDepositAddress] = useState('');
+
+  const [selectedWithdrawCoin, setSelectedWithdrawCoin] = useState('BTC');
+  const [withdrawAddress, setWithdrawAddress] = useState('');
   const [transferAmount, setTransferAmount] = useState('');
-  const [transferType, setTransferType] = useState<'deposit' | 'withdraw'>('deposit');
+  const [transferring, setTransferring] = useState(false);
 
   // 로그인 체크, 자산 및 투자원금 조회
-  useEffect(() => {
+  const fetchData = async () => {
     const token = localStorage.getItem('accessToken');
-
     if (!token) {
-      navigate('/login', { replace: true });
+      if (!loading) navigate('/login', { replace: true });
       return;
     }
 
-    const fetchData = async () => {
-      try {
-        const headers = { Authorization: `Bearer ${token}` };
+    try {
+      const headers = { Authorization: `Bearer ${token}` };
 
-        // 자산 조회
-        const assetsResponse = await axios.get('http://localhost:8080/api/assets', { headers });
+      // 자산 조회
+      const assetsResponse = await axios.get(`${API_BASE}/api/assets`, { headers });
 
-        // HTML 응답 체크 (세션 만료/로그인 필요 시 200 OK로 로그인 페이지가 올 수 있음)
-        if (typeof assetsResponse.data === 'string' && assetsResponse.data.includes('<!DOCTYPE html>')) {
-          console.warn('인증 세션 만료됨');
-          localStorage.removeItem('accessToken');
-          navigate('/login');
-          return;
-        }
-
-        console.log('자산 API 응답:', assetsResponse.data);
-
-        const assetsData = Array.isArray(assetsResponse.data) ? assetsResponse.data : [];
-        setAssets(assetsData);
-
-        if (assetsData.length === 0) {
-          console.warn('자산 데이터가 비어있습니다.');
-        }
-
-        // 투자원금 및 KRW 잔고 조회 (summaryResponse가 더 정확함)
-        const summaryResponse = await axios.get('http://localhost:8080/api/assets/summary', { headers });
-        console.log('투자원금 API 응답:', summaryResponse.data);
-
-        const summary = summaryResponse.data;
-        setTotalInvestment(summary.totalInvestment || 0);
-
-        // KRW 잔고를 summary에서 우선 사용 (assets 리스트에 없을 수 있음)
-        if (summary.krwBalance !== undefined) {
-          setKrwBalance(summary.krwBalance);
-        } else {
-          const krw = assetsData.find((a: any) => a.assetType === 'KRW');
-          setKrwBalance(krw?.balance || 0);
-        }
-
-      } catch (error) {
-        console.error('자산 조회 실패:', error);
-      } finally {
-        setLoading(false);
+      if (typeof assetsResponse.data === 'string' && assetsResponse.data.includes('<!DOCTYPE html>')) {
+        localStorage.removeItem('accessToken');
+        navigate('/login');
+        return;
       }
-    };
 
+      const assetsData = Array.isArray(assetsResponse.data) ? assetsResponse.data : [];
+      setAssets(assetsData);
+
+      // 투자원금 및 KRW 잔고 조회
+      const summaryResponse = await axios.get(`${API_BASE}/api/assets/summary`, { headers });
+      const summary = summaryResponse.data;
+      setTotalInvestment(summary.totalInvestment || 0);
+
+      if (summary.krwBalance !== undefined) {
+        setKrwBalance(summary.krwBalance);
+      } else {
+        const krw = assetsData.find((a: any) => a.assetType === 'KRW');
+        setKrwBalance(krw?.balance || 0);
+      }
+
+    } catch (error: any) {
+      console.error('자산 조회 실패:', error);
+      if (error.response && error.response.status === 401) {
+        localStorage.removeItem('accessToken');
+        navigate('/login', { replace: true });
+      }
+    } finally {
+      if (loading) setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchData();
+    const intervalId = setInterval(fetchData, 3000);
+    return () => clearInterval(intervalId);
   }, [navigate]);
 
   // 실시간 코인 시세 조회
@@ -279,14 +286,12 @@ const Balances = () => {
       if (assets.length === 0) return;
 
       try {
-        // 보유 중인 코인만 시세 조회 (KRW 제외)
         const coinTypes = assets
           .map((a: any) => a.assetType)
           .filter((type: string) => type !== 'KRW');
 
         if (coinTypes.length === 0) return;
 
-        // 중복 제거
         const uniqueTypes = Array.from(new Set(coinTypes));
         const markets = uniqueTypes.map(type => `KRW-${type}`);
 
@@ -305,21 +310,45 @@ const Balances = () => {
     };
 
     fetchPrices();
-    const interval = setInterval(fetchPrices, 5000); // 5초마다 업데이트
+    const interval = setInterval(fetchPrices, 5000);
     return () => clearInterval(interval);
   }, [assets]);
 
-  // 총 보유 자산 (실시간 시세 반영)
-  const totalAssets = krwBalance + assets
-    .filter((a: any) => a.assetType !== 'KRW')
-    .reduce((sum, asset) => {
-      const price = coinPrices[asset.assetType as keyof typeof coinPrices] || 0;
-      return sum + (asset.balance * price);
-    }, 0);
+  // 지갑 주소 조회 (입금)
+  useEffect(() => {
+    const token = localStorage.getItem('accessToken');
+    if (!token) return;
 
-  // 수익률 (투자원금 기반)
-  const profitRate = totalInvestment > 0
-    ? ((totalAssets - totalInvestment) / totalInvestment * 100).toFixed(2)
+    axios.get(`${API_BASE}/api/wallets/${selectedDepositCoin}/address`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(res => {
+        setDepositAddress(res.data.address);
+      })
+      .catch(err => {
+        console.error("지갑 주소 조회 실패", err);
+        setDepositAddress('주소 발급 실패');
+      });
+  }, [selectedDepositCoin]);
+
+  const holdingAssets = assets.filter((a: any) => a.assetType !== 'KRW');
+
+  const totalCoinValue = holdingAssets.reduce((sum, asset) => {
+    const price = coinPrices[asset.assetType as keyof typeof coinPrices] || 0;
+    return sum + (asset.balance * price);
+  }, 0);
+
+  const totalAssets = krwBalance + totalCoinValue;
+
+  const totalCoinBuyAmount = holdingAssets.reduce((sum, asset) => {
+    const avgPrice = asset.averageBuyPrice || 0;
+    return sum + (asset.balance * avgPrice);
+  }, 0);
+
+  const totalEvaluationProfit = totalCoinValue - totalCoinBuyAmount;
+
+  const profitRate = totalCoinBuyAmount > 0
+    ? (totalEvaluationProfit / totalCoinBuyAmount * 100).toFixed(2)
     : '0.00';
 
   const formatAverageBuyPrice = (price: number) => {
@@ -339,68 +368,38 @@ const Balances = () => {
 
   const toUserMessage = (raw: unknown, fallback: string) => {
     const code = String(raw ?? '');
-    if (code.includes('WITHDRAWN_ACCOUNT')) {
-      return '탈퇴 계정입니다. 로그인이 불가능합니다. 관리자에게 문의하세요.';
-    }
-    if (code.includes('RESTRICTED_ACCOUNT')) {
-      return '입출금 및 매수매도가 제한된 계정입니다. 관리자에게 문의하세요.';
-    }
-    if (code.includes('LOCKED_ACCOUNT')) {
-      return '입출금 및 매수매도가 제한된 계정입니다. 관리자에게 문의하세요.';
-    }
+    if (code.includes('WITHDRAWN_ACCOUNT')) return '탈퇴 계정입니다. 관리자에게 문의하세요.';
+    if (code.includes('RESTRICTED_ACCOUNT')) return '입출금이 제한된 계정입니다.';
     return code || fallback;
   };
 
-  const handleCashDeposit = async () => {
-    const token = localStorage.getItem('accessToken');
-    if (!token) return;
-
-    try {
-      await axios.post('http://localhost:8080/api/assets/deposit',
-        { assetType: 'KRW', amount: parseFloat(depositAmount) },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      alert('입금이 완료되었습니다.');
-      window.location.reload();
-    } catch (error: any) {
-      const msg = toUserMessage(error.response?.data?.message || error.response?.data, '입금에 실패했습니다.');
-      alert(msg);
-    }
-  };
-
-  const handleCashWithdraw = async () => {
-    const token = localStorage.getItem('accessToken');
-    if (!token) return;
-
-    try {
-      await axios.post('http://localhost:8080/api/assets/withdraw',
-        { assetType: 'KRW', amount: parseFloat(withdrawAmount) },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      alert('출금이 완료되었습니다.');
-      window.location.reload();
-    } catch (error: any) {
-      const msg = toUserMessage(error.response?.data?.message || error.response?.data, '출금에 실패했습니다.');
-      alert(msg);
-    }
-  };
+  const availableWithdrawAmount = assets.find((a: any) => a.assetType === selectedWithdrawCoin)?.balance || 0;
 
   const handleCoinTransfer = async () => {
     const token = localStorage.getItem('accessToken');
-    if (!token) return;
+    if (!token || !withdrawAddress || !transferAmount) return;
 
-    const endpoint = transferType === 'deposit' ? 'deposit' : 'withdraw';
-
+    setTransferring(true);
     try {
-      await axios.post(`http://localhost:8080/api/assets/${endpoint}`,
-        { assetType: selectedCoin, amount: parseFloat(transferAmount) },
+      await axios.post(`${API_BASE}/api/wallets/transfer`,
+        {
+          assetType: selectedWithdrawCoin,
+          toAddress: withdrawAddress,
+          amount: parseFloat(transferAmount),
+          currentPrice: coinPrices[selectedWithdrawCoin as keyof typeof coinPrices] || 0
+        },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      alert(`${transferType === 'deposit' ? '입금' : '출금'}이 완료되었습니다.`);
-      window.location.reload();
+
+      setTransferAmount('');
+      setWithdrawAddress('');
+      alert('코인 이체가 완료되었습니다.');
+      fetchData(); // Transfer 완료 직후 갱신
     } catch (error: any) {
-      const msg = toUserMessage(error.response?.data?.message || error.response?.data, '처리에 실패했습니다.');
+      const msg = toUserMessage(error.response?.data?.message || '처리에 실패했습니다.', '처리에 실패했습니다.');
       alert(msg);
+    } finally {
+      setTransferring(false);
     }
   };
 
@@ -409,10 +408,8 @@ const Balances = () => {
       <Container>
         <Header />
         <Main>
-          <PageTitle>입출금</PageTitle>
-          <div style={{ textAlign: 'center', padding: '60px', color: '#999' }}>
-            로딩 중...
-          </div>
+          <PageTitle>자산/지갑 관리</PageTitle>
+          <div style={{ textAlign: 'center', padding: '60px', color: '#999' }}>로딩 중...</div>
         </Main>
         <Footer />
       </Container>
@@ -423,7 +420,7 @@ const Balances = () => {
     <Container>
       <Header />
       <Main>
-        <PageTitle>입출금</PageTitle>
+        <PageTitle>자산/지갑 관리</PageTitle>
 
         <TopSection>
           <BalanceRow>
@@ -444,76 +441,78 @@ const Balances = () => {
 
         <TabContainer>
           <Card>
-            <CardTitle>현금 입금</CardTitle>
+            <CardTitle>내 지갑 입금 주소</CardTitle>
             <FormGroup>
-              <Label>금액 (KRW)</Label>
-              <Input
-                type="number"
-                placeholder="입금할 금액을 입력하세요"
-                value={depositAmount}
-                onChange={(e) => setDepositAmount(e.target.value)}
-              />
+              <Label>코인 선택</Label>
+              <Select value={selectedDepositCoin} onChange={(e) => setSelectedDepositCoin(e.target.value)}>
+                <option value="BTC">비트코인 (BTC)</option>
+                <option value="ETH">이더리움 (ETH)</option>
+                <option value="XRP">리플 (XRP)</option>
+                <option value="DOGE">도지코인 (DOGE)</option>
+              </Select>
             </FormGroup>
-            <ButtonGroup>
-              <Button onClick={handleCashDeposit} disabled={!depositAmount}>
-                입금하기
-              </Button>
-            </ButtonGroup>
+
+            <Label>내 {selectedDepositCoin} 입금 주소</Label>
+            <AddressBox>
+              {depositAddress || "주소를 불러오는 중..."}
+            </AddressBox>
+            <p style={{ fontSize: '13px', color: '#868e96', marginTop: 0 }}>
+              이 주소로 다른 VCE 회원이 코인을 전송할 수 있습니다.
+            </p>
           </Card>
 
           <Card>
-            <CardTitle>현금 출금</CardTitle>
+            <CardTitle>코인 이체하기 (출금)</CardTitle>
             <FormGroup>
-              <Label>금액 (KRW)</Label>
+              <Label>
+                코인 선택
+                <span style={{ float: 'right', fontSize: '13px', color: '#093687' }}>
+                  보유량: {availableWithdrawAmount} {selectedWithdrawCoin}
+                </span>
+              </Label>
+              <Select value={selectedWithdrawCoin} onChange={(e) => {
+                setSelectedWithdrawCoin(e.target.value);
+                setTransferAmount('');
+              }}>
+                <option value="BTC">비트코인 (BTC)</option>
+                <option value="ETH">이더리움 (ETH)</option>
+                <option value="XRP">리플 (XRP)</option>
+                <option value="DOGE">도지코인 (DOGE)</option>
+              </Select>
+            </FormGroup>
+            <FormGroup>
+              <Label>받는 사람의 VCE 지갑 주소</Label>
               <Input
-                type="number"
-                placeholder="출금할 금액을 입력하세요"
-                value={withdrawAmount}
-                onChange={(e) => setWithdrawAmount(e.target.value)}
+                type="text"
+                placeholder="상대방의 지갑 주소 (예: VCE-abc...)"
+                value={withdrawAddress}
+                onChange={(e) => setWithdrawAddress(e.target.value)}
               />
             </FormGroup>
-            <ButtonGroup>
-              <Button $variant="secondary" onClick={handleCashWithdraw} disabled={!withdrawAmount}>
-                출금하기
-              </Button>
-            </ButtonGroup>
+            <FormGroup>
+              <Label>
+                수량
+                <button
+                  type="button"
+                  style={{ float: 'right', fontSize: '12px', background: 'none', border: 'none', color: '#1a5bc4', cursor: 'pointer', fontWeight: 600 }}
+                  onClick={() => setTransferAmount(String(availableWithdrawAmount))}
+                >
+                  최대
+                </button>
+              </Label>
+              <Input
+                type="number"
+                step="0.00000001"
+                placeholder="전송할 수량을 입력하세요"
+                value={transferAmount}
+                onChange={(e) => setTransferAmount(e.target.value)}
+              />
+            </FormGroup>
+            <Button onClick={handleCoinTransfer} disabled={!transferAmount || !withdrawAddress || transferring || parseFloat(transferAmount) <= 0 || parseFloat(transferAmount) > availableWithdrawAmount}>
+              {transferring ? '전송 중...' : '전송하기'}
+            </Button>
           </Card>
         </TabContainer>
-
-        <Card>
-          <CardTitle>코인 전송</CardTitle>
-          <FormGroup>
-            <Label>코인 선택</Label>
-            <Select value={selectedCoin} onChange={(e) => setSelectedCoin(e.target.value)}>
-              <option value="BTC">비트코인 (BTC)</option>
-              <option value="ETH">이더리움 (ETH)</option>
-              <option value="XRP">리플 (XRP)</option>
-              <option value="DOGE">도지코인 (DOGE)</option>
-            </Select>
-          </FormGroup>
-          <FormGroup>
-            <Label>거래 유형</Label>
-            <Select value={transferType} onChange={(e) => setTransferType(e.target.value as any)}>
-              <option value="deposit">입금</option>
-              <option value="withdraw">출금</option>
-            </Select>
-          </FormGroup>
-          <FormGroup>
-            <Label>수량</Label>
-            <Input
-              type="number"
-              step="0.00000001"
-              placeholder="전송할 수량을 입력하세요"
-              value={transferAmount}
-              onChange={(e) => setTransferAmount(e.target.value)}
-            />
-          </FormGroup>
-          <ButtonGroup>
-            <Button onClick={handleCoinTransfer} disabled={!transferAmount}>
-              {transferType === 'deposit' ? '입금' : '출금'}하기
-            </Button>
-          </ButtonGroup>
-        </Card>
 
         <HoldingsCard>
           <CardTitle>보유 코인</CardTitle>
@@ -560,7 +559,6 @@ const Balances = () => {
             </Tbody>
           </Table>
         </HoldingsCard>
-
       </Main >
       <Footer />
     </Container >

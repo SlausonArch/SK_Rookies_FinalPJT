@@ -484,6 +484,12 @@ interface Transaction {
   totalValue: number;
   fee: number;
   txDate: string;
+  fromAddress?: string;
+  toAddress?: string;
+  txHash?: string;
+  bankName?: string;
+  accountNumber?: string;
+  status?: string;
 }
 
 interface Asset {
@@ -632,6 +638,12 @@ const Investments = () => {
           totalValue: toNumber(tx.totalValue),
           fee: toNumber(tx.fee),
           txDate: String(tx.txDate ?? ''),
+          fromAddress: tx.fromAddress,
+          toAddress: tx.toAddress,
+          txHash: tx.txHash,
+          bankName: tx.bankName,
+          accountNumber: tx.accountNumber,
+          status: tx.status,
         }));
         setTransactions(normalizedTransactions);
 
@@ -648,8 +660,12 @@ const Investments = () => {
           createdAt: String(order.createdAt ?? ''),
         }));
         setOpenOrders(normalizedOpenOrders);
-      } catch (error) {
+      } catch (error: any) {
         console.error('데이터 조회 실패:', error);
+        if (error.response && error.response.status === 401) {
+          localStorage.removeItem('accessToken');
+          navigate('/login', { replace: true });
+        }
       } finally {
         setLoading(false);
       }
@@ -786,9 +802,9 @@ const Investments = () => {
       return sum + (asset.balance * info.changePrice);
     }, 0);
 
-  // 총 수익률 (투자원금 기반)
-  const profitRate = totalInvestment > 0
-    ? ((totalAssets - totalInvestment) / totalInvestment * 100)
+  // 총 수익률 (매수금액 기반)
+  const profitRate = totalCoinBuyAmount > 0
+    ? (totalEvaluationProfit / totalCoinBuyAmount * 100)
     : 0;
 
   const performancePeriodOptions = useMemo(() => {
@@ -1526,7 +1542,14 @@ const Investments = () => {
                         {(tx.txType === 'DEPOSIT' || tx.txType === 'WITHDRAW') ? '-' : `${formatDetailKrw(tx.price)} KRW`}
                       </Td>
                       <Td>{formatDetailKrw(tx.totalValue)} KRW</Td>
-                      <Td>{tx.fee > 0 ? `수수료 ${formatDetailKrw(tx.fee)} KRW` : '-'}</Td>
+                      <Td>
+                        {tx.txType === 'DEPOSIT' || tx.txType === 'WITHDRAW'
+                          ? (tx.assetType === 'KRW'
+                            ? `${tx.bankName || '가상은행'} ${tx.accountNumber || ''}`
+                            : (tx.txType === 'WITHDRAW' ? `To: ${tx.toAddress || '외부'}` : `From: ${tx.fromAddress || '외부'}`)
+                          )
+                          : (tx.fee > 0 ? `수수료 ${formatDetailKrw(tx.fee)} KRW` : '-')}
+                      </Td>
                     </Tr>
                   ))}
                 </Tbody>
@@ -1641,8 +1664,8 @@ const Investments = () => {
                       </Td>
                       <Td><strong>{tx.assetType}</strong></Td>
                       <Td>{tx.amount.toFixed(5)}</Td>
-                      <Td><StatusPill $color='green'>완료</StatusPill></Td>
-                      <Td>즉시 반영</Td>
+                      <Td><StatusPill $color='green'>{tx.status === 'PENDING' ? '대기중' : '완료'}</StatusPill></Td>
+                      <Td>{tx.assetType === 'KRW' ? tx.bankName : (tx.txType === 'WITHDRAW' ? tx.toAddress : tx.fromAddress) || '-'}</Td>
                     </Tr>
                   ))}
                 </Tbody>

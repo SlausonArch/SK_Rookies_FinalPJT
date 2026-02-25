@@ -50,8 +50,32 @@ public class Transaction {
     @Column(name = "TX_DATE")
     private LocalDateTime txDate;
 
+    // --- New fields for Bank and Internal Wallet Transfers ---
+
+    @Column(name = "FROM_ADDRESS", length = 255)
+    private String fromAddress;
+
+    @Column(name = "TO_ADDRESS", length = 255)
+    private String toAddress;
+
+    @Column(name = "TX_HASH", length = 255)
+    private String txHash;
+
+    @Column(name = "BANK_NAME", length = 50)
+    private String bankName;
+
+    @Column(name = "ACCOUNT_NUMBER", length = 100)
+    private String accountNumber;
+
+    @Column(name = "STATUS", length = 20)
+    @Builder.Default
+    private String status = "COMPLETED"; // e.g., PENDING, COMPLETED, FAILED
+
     @PrePersist
     public void prePersist() {
         this.txDate = LocalDateTime.now();
+        if (this.status == null) {
+            this.status = "COMPLETED";
+        }
     }
 }

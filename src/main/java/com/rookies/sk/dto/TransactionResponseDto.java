@@ -17,4 +17,10 @@ public class TransactionResponseDto {
     private BigDecimal totalValue;
     private BigDecimal fee;
     private LocalDateTime txDate;
+    private String fromAddress;
+    private String toAddress;
+    private String txHash;
+    private String bankName;
+    private String accountNumber;
+    private String status;
 }

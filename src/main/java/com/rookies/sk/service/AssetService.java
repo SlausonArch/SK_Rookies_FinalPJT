@@ -70,6 +70,8 @@ public class AssetService {
                                 .assetType(assetType)
                                 .amount(req.getAmount())
                                 .totalValue(req.getAmount())
+                                .bankName(req.getBankName())
+                                .accountNumber(req.getAccountNumber())
                                 .build();
                 transactionRepository.save(tx);
 
@@ -98,6 +100,8 @@ public class AssetService {
                                 .assetType(assetType)
                                 .amount(req.getAmount())
                                 .totalValue(req.getAmount())
+                                .bankName(req.getBankName())
+                                .accountNumber(req.getAccountNumber())
                                 .build();
                 transactionRepository.save(tx);
 

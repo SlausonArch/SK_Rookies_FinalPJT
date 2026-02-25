@@ -16,40 +16,46 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class TransactionService {
 
-    private final TransactionRepository transactionRepository;
-    private final MemberRepository memberRepository;
+        private final TransactionRepository transactionRepository;
+        private final MemberRepository memberRepository;
 
-    @Transactional(readOnly = true)
-    public List<TransactionResponseDto> getTransactions(String email) {
-        Member member = memberRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("회원을 찾을 수 없습니다."));
-        return transactionRepository.findByMember_MemberIdOrderByTxDateDesc(member.getMemberId())
-                .stream()
-                .map(this::toDto)
-                .collect(Collectors.toList());
-    }
+        @Transactional(readOnly = true)
+        public List<TransactionResponseDto> getTransactions(String email) {
+                Member member = memberRepository.findByEmail(email)
+                                .orElseThrow(() -> new RuntimeException("회원을 찾을 수 없습니다."));
+                return transactionRepository.findByMember_MemberIdOrderByTxDateDesc(member.getMemberId())
+                                .stream()
+                                .map(this::toDto)
+                                .collect(Collectors.toList());
+        }
 
-    @Transactional(readOnly = true)
-    public List<TransactionResponseDto> getTransactionsByAsset(String email, String assetType) {
-        Member member = memberRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("회원을 찾을 수 없습니다."));
-        return transactionRepository.findByMember_MemberIdAndAssetTypeOrderByTxDateDesc(
-                        member.getMemberId(), assetType.toUpperCase())
-                .stream()
-                .map(this::toDto)
-                .collect(Collectors.toList());
-    }
+        @Transactional(readOnly = true)
+        public List<TransactionResponseDto> getTransactionsByAsset(String email, String assetType) {
+                Member member = memberRepository.findByEmail(email)
+                                .orElseThrow(() -> new RuntimeException("회원을 찾을 수 없습니다."));
+                return transactionRepository.findByMember_MemberIdAndAssetTypeOrderByTxDateDesc(
+                                member.getMemberId(), assetType.toUpperCase())
+                                .stream()
+                                .map(this::toDto)
+                                .collect(Collectors.toList());
+        }
 
-    private TransactionResponseDto toDto(Transaction tx) {
-        return TransactionResponseDto.builder()
-                .txId(tx.getTxId())
-                .txType(tx.getTxType())
-                .assetType(tx.getAssetType())
-                .amount(tx.getAmount())
-                .price(tx.getPrice())
-                .totalValue(tx.getTotalValue())
-                .fee(tx.getFee())
-                .txDate(tx.getTxDate())
-                .build();
-    }
+        private TransactionResponseDto toDto(Transaction tx) {
+                return TransactionResponseDto.builder()
+                                .txId(tx.getTxId())
+                                .txType(tx.getTxType())
+                                .assetType(tx.getAssetType())
+                                .amount(tx.getAmount())
+                                .price(tx.getPrice())
+                                .totalValue(tx.getTotalValue())
+                                .fee(tx.getFee())
+                                .txDate(tx.getTxDate())
+                                .fromAddress(tx.getFromAddress())
+                                .toAddress(tx.getToAddress())
+                                .txHash(tx.getTxHash())
+                                .bankName(tx.getBankName())
+                                .accountNumber(tx.getAccountNumber())
+                                .status(tx.getStatus())
+                                .build();
+        }
 }
