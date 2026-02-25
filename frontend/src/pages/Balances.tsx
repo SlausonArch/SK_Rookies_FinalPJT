@@ -7,7 +7,7 @@ import type { UpbitTicker } from '../services/upbitApi';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 
-const API_BASE = 'http://localhost:8080';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 
 const Container = styled.div`
   min-height: 100vh;

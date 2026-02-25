@@ -24,6 +24,9 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
     private final JwtTokenProvider tokenProvider;
     private final MemberRepository memberRepository;
 
+    @org.springframework.beans.factory.annotation.Value("${app.frontend-url}")
+    private String frontendUrl;
+
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
             Authentication authentication) throws IOException, ServletException {
@@ -35,7 +38,7 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
                 .orElseThrow(() -> new RuntimeException("Member not found"));
 
         if (member.getStatus() == Member.Status.WITHDRAWN) {
-            String targetUrl = UriComponentsBuilder.fromUriString("http://localhost:5173/login")
+            String targetUrl = UriComponentsBuilder.fromUriString(frontendUrl + "/login")
                     .queryParam("error", "WITHDRAWN_ACCOUNT")
                     .build().toUriString();
             getRedirectStrategy().sendRedirect(request, response, targetUrl);
@@ -60,12 +63,12 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
 
         String targetUrl;
         if (member.getRole() == Member.Role.GUEST) {
-            targetUrl = UriComponentsBuilder.fromUriString("http://localhost:5173/signup/complete")
+            targetUrl = UriComponentsBuilder.fromUriString(frontendUrl + "/signup/complete")
                     .queryParam("token", accessToken)
-                    .queryParam("email", socialEmail != null ? socialEmail : "") 
+                    .queryParam("email", socialEmail != null ? socialEmail : "")
                     .build().toUriString();
         } else {
-            targetUrl = UriComponentsBuilder.fromUriString("http://localhost:5173/oauth/callback")
+            targetUrl = UriComponentsBuilder.fromUriString(frontendUrl + "/oauth/callback")
                     .queryParam("accessToken", accessToken)
                     .queryParam("refreshToken", refreshToken)
                     .build().toUriString();

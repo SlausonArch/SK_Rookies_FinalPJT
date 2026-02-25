@@ -383,13 +383,13 @@ const Trends: React.FC = () => {
 
   // fetch markets
   useEffect(() => {
-    fetchKRWMarkets().then(setMarkets).catch(() => {});
+    fetchKRWMarkets().then(setMarkets).catch(() => { });
   }, []);
 
   // fetch news
   const loadNews = useCallback(async () => {
     try {
-      const { data } = await axios.get<NewsItem[]>('http://localhost:8080/api/news');
+      const { data } = await axios.get<NewsItem[]>(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/news`);
       setNews(data);
     } catch { /* ignore */ }
   }, []);

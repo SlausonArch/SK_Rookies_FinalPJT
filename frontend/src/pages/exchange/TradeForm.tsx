@@ -4,7 +4,7 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, AlertCircle, TrendingUp, TrendingDown, Clock, Info } from 'lucide-react';
 
-const API_BASE = 'http://localhost:8080';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 
 interface Props {
   market: string;

@@ -10,7 +10,7 @@ import type { UpbitMarket, UpbitTicker } from '../services/upbitApi';
 import { useUpbitTicker } from '../hooks/useUpbitWebSocket';
 import axios from 'axios';
 
-const API_BASE = 'http://localhost:8080';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 
 const MainContainer = styled.div`
   min-height: 100vh;
@@ -316,13 +316,13 @@ const Home: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    fetchKRWMarkets().then(setMarkets).catch(() => {});
+    fetchKRWMarkets().then(setMarkets).catch(() => { });
   }, []);
 
   useEffect(() => {
     if (markets.length === 0) return;
     const codes = markets.map(m => m.market);
-    fetchTickers(codes).then(setInitialTickers).catch(() => {});
+    fetchTickers(codes).then(setInitialTickers).catch(() => { });
   }, [markets]);
 
   useEffect(() => {
@@ -333,14 +333,14 @@ const Home: React.FC = () => {
           .slice(0, 10);
         setNotices(noticeList);
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const loadNews = useCallback(async () => {
     try {
       const { data } = await axios.get<NewsItem[]>(`${API_BASE}/api/news`);
       setNews(data);
-    } catch {}
+    } catch { }
   }, []);
 
   useEffect(() => {
@@ -372,9 +372,9 @@ const Home: React.FC = () => {
     if (!mergedCoins || mergedCoins.length === 0) return [];
     const copied = [...mergedCoins];
     switch (activeTab) {
-      case 'rising':  return copied.sort((a, b) => b.changeRate - a.changeRate).slice(0, 10);
+      case 'rising': return copied.sort((a, b) => b.changeRate - a.changeRate).slice(0, 10);
       case 'falling': return copied.sort((a, b) => a.changeRate - b.changeRate).slice(0, 10);
-      case 'volume':  return copied.sort((a, b) => b.volume24h - a.volume24h).slice(0, 10);
+      case 'volume': return copied.sort((a, b) => b.volume24h - a.volume24h).slice(0, 10);
       case 'new':
         return copied
           .sort((a, b) => {

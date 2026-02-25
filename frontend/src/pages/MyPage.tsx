@@ -6,7 +6,7 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import TierModal from '../components/TierModal';
 
-const API_BASE = 'http://localhost:8080';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 
 const BANK_OPTIONS = [
   'NH농협은행',
@@ -474,11 +474,11 @@ const MyPage: React.FC = () => {
       setMember(prev =>
         prev
           ? {
-              ...prev,
-              status: data.status || prev.status,
-              hasIdPhoto: true,
-              idPhotoUrl: data.idPhotoUrl || prev.idPhotoUrl || '',
-            }
+            ...prev,
+            status: data.status || prev.status,
+            hasIdPhoto: true,
+            idPhotoUrl: data.idPhotoUrl || prev.idPhotoUrl || '',
+          }
           : prev,
       );
       setIdPhotoFile(null);
@@ -517,7 +517,7 @@ const MyPage: React.FC = () => {
     } catch (err: any) {
       alert(
         err.response?.data?.message ||
-          '회원 탈퇴 처리에 실패했습니다. 잔여 코인 또는 미체결 주문을 확인해주세요.',
+        '회원 탈퇴 처리에 실패했습니다. 잔여 코인 또는 미체결 주문을 확인해주세요.',
       );
     } finally {
       setWithdrawing(false);

@@ -281,7 +281,7 @@ const Support: React.FC = () => {
 
   const fetchFaqs = async () => {
     try {
-      const res = await axios.get('http://localhost:8080/api/support/faqs');
+      const res = await axios.get(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/support/faqs`);
       setFaqs(res.data);
     } catch (e) {
       console.error(e);
@@ -290,7 +290,7 @@ const Support: React.FC = () => {
 
   const fetchInquiries = async () => {
     try {
-      const res = await axios.get('http://localhost:8080/api/support/inquiries', {
+      const res = await axios.get(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/support/inquiries`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
       });
       setInquiries(res.data);
@@ -336,7 +336,7 @@ const Support: React.FC = () => {
         formData.append('file', file);
       }
 
-      await axios.post('http://localhost:8080/api/support/inquiries', formData, {
+      await axios.post(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/support/inquiries`, formData, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
           'Content-Type': 'multipart/form-data'
@@ -422,7 +422,7 @@ const Support: React.FC = () => {
                             {inq.content}
                             {inq.attachmentUrl && (
                               <div style={{ marginTop: '12px' }}>
-                                <a href={`http://localhost:8080${inq.attachmentUrl}`} target="_blank" rel="noreferrer" style={{ color: '#093687', fontWeight: 600, textDecoration: 'underline' }}>
+                                <a href={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}${inq.attachmentUrl}`} target="_blank" rel="noreferrer" style={{ color: '#093687', fontWeight: 600, textDecoration: 'underline' }}>
                                   📎 첨부파일 보기
                                 </a>
                               </div>

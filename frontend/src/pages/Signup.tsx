@@ -98,34 +98,34 @@ const FooterLink = styled.div`
 `;
 
 const Signup: React.FC = () => {
-    return (
-        <Container>
-            <LoginBox>
-                <LogoArea>VCE</LogoArea>
-                <Title>회원가입</Title>
-                <SubText>VCE 거래소를 이용하기 위해 가입해주세요.</SubText>
+  return (
+    <Container>
+      <LoginBox>
+        <LogoArea>VCE</LogoArea>
+        <Title>회원가입</Title>
+        <SubText>VCE 거래소를 이용하기 위해 가입해주세요.</SubText>
 
-                <SocialButton
-                    provider="kakao"
-                    href="http://localhost:8080/oauth2/authorization/kakao"
-                >
-                    카카오로 3초만에 가입하기
-                </SocialButton>
-                <SocialButton
-                    provider="naver"
-                    href="http://localhost:8080/oauth2/authorization/naver"
-                >
-                    네이버로 가입하기
-                </SocialButton>
+        <SocialButton
+          provider="kakao"
+          href={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/oauth2/authorization/kakao`}
+        >
+          카카오로 3초만에 가입하기
+        </SocialButton>
+        <SocialButton
+          provider="naver"
+          href={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/oauth2/authorization/naver`}
+        >
+          네이버로 가입하기
+        </SocialButton>
 
-                <Divider />
+        <Divider />
 
-                <FooterLink>
-                    <Link to="/login">로그인 화면으로 돌아가기</Link>
-                </FooterLink>
-            </LoginBox>
-        </Container>
-    );
+        <FooterLink>
+          <Link to="/login">로그인 화면으로 돌아가기</Link>
+        </FooterLink>
+      </LoginBox>
+    </Container>
+  );
 };
 
 export default Signup;

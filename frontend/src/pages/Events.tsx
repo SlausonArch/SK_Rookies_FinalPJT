@@ -347,7 +347,7 @@ const Events: React.FC = () => {
     }
 
     try {
-      const res = await axios.get('http://localhost:8080/api/auth/me', {
+      const res = await axios.get(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/auth/me`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.data && res.data.referralCode) {

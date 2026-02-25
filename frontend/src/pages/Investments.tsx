@@ -599,10 +599,10 @@ const Investments = () => {
         const headers = { Authorization: `Bearer ${token}` };
 
         const [balanceResponse, summaryResponse, txResponse, openOrderResponse] = await Promise.all([
-          axios.get('http://localhost:8080/api/assets', { headers }),
-          axios.get('http://localhost:8080/api/assets/summary', { headers }),
-          axios.get('http://localhost:8080/api/transactions', { headers }),
-          axios.get('http://localhost:8080/api/orders/open', { headers }),
+          axios.get(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/assets`, { headers }),
+          axios.get(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/assets/summary`, { headers }),
+          axios.get(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/transactions`, { headers }),
+          axios.get(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/orders/open`, { headers }),
         ]);
 
         // HTML 응답 체크

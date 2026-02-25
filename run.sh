@@ -28,11 +28,16 @@ sleep 1
 
 echo "🚀 Starting Vulnerability Lab Project..."
 
-# .env 파일 로드
+# .env 파일 로드 (백엔드)
 if [ -f .env ]; then
   set -a
   source .env
   set +a
+fi
+
+# 프론트엔드 .env 확인 로직 추가
+if [ ! -f frontend/.env ]; then
+  echo "⚠️ Warning: frontend/.env file not found. Frontend might use default localhost:8080 for API_BASE."
 fi
 
 # 1. Database Check (Docker)
@@ -53,9 +58,9 @@ cd frontend && npm run dev > ../logs/frontend.log 2>&1 &
 FRONTEND_PID=$!
 
 echo "✅ All systems are starting up!"
-echo "- Backend: http://localhost:8080"
-echo "- Frontend: http://localhost:5173"
-echo "- Logs: tail -f logs/backend.log"
+echo "- Backend: http://localhost:8080 (or as configured in .env)"
+echo "- Frontend: http://localhost:5173 (or as configured in frontend/.env VITE_API_BASE_URL)"
+echo "- Logs: tail -f logs/backend.log & logs/frontend.log"
 
 # 프로세스 종료 관리 (Ctrl+C 시 함께 종료)
 trap "kill $BACKEND_PID $FRONTEND_PID; echo 'Terminated Services'; exit" INT

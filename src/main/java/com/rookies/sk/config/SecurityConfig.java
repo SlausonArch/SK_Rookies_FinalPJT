@@ -33,6 +33,9 @@ public class SecurityConfig {
         private final JwtTokenProvider jwtTokenProvider;
         private final MemberRepository memberRepository;
 
+        @org.springframework.beans.factory.annotation.Value("${app.cors.allowed-origins}")
+        private List<String> allowedOrigins;
+
         @Bean
         public PasswordEncoder passwordEncoder() {
                 return new BCryptPasswordEncoder();
@@ -62,7 +65,8 @@ public class SecurityConfig {
                                                                                                          // necessarily
                                                                                                          // here.
                                 .authorizeHttpRequests(auth -> auth
-                                                .requestMatchers("/api/auth/me/**", "/api/auth/withdraw").authenticated()
+                                                .requestMatchers("/api/auth/me/**", "/api/auth/withdraw")
+                                                .authenticated()
                                                 .requestMatchers("/", "/login/**", "/oauth2/**", "/api/auth/**",
                                                                 "/error", "/uploads/**")
                                                 .permitAll()
@@ -93,8 +97,8 @@ public class SecurityConfig {
         @Bean
         public CorsConfigurationSource corsConfigurationSource() {
                 CorsConfiguration configuration = new CorsConfiguration();
-                // V-05: CORS Weakness (Allow * origin is risky)
-                configuration.setAllowedOriginPatterns(List.of("*"));
+                // Externalized CORS Origins
+                configuration.setAllowedOriginPatterns(allowedOrigins);
                 configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
                 configuration.setAllowedHeaders(List.of("*"));
                 configuration.setAllowCredentials(true);

@@ -162,7 +162,7 @@ const Login: React.FC = () => {
     setLoading(true);
     setError('');
     try {
-      const { data } = await axios.post('http://localhost:8080/api/auth/test/login', {
+      const { data } = await axios.post(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/auth/test/login`, {
         email: 'test@vce.com',
         password: 'test1234',
       });
@@ -188,13 +188,13 @@ const Login: React.FC = () => {
 
         <SocialButton
           provider="kakao"
-          href="http://localhost:8080/oauth2/authorization/kakao"
+          href={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/oauth2/authorization/kakao`}
         >
           카카오로 시작하기
         </SocialButton>
         <SocialButton
           provider="naver"
-          href="http://localhost:8080/oauth2/authorization/naver"
+          href={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/oauth2/authorization/naver`}
         >
           네이버로 시작하기
         </SocialButton>

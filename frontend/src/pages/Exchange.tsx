@@ -216,7 +216,7 @@ const MyHistory = ({ market }: { market: string }) => {
       setLoading(true);
       try {
         const assetType = market.replace('KRW-', '');
-        const res = await axios.get(`http://localhost:8080/api/transactions?assetType=${assetType}`, {
+        const res = await axios.get(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/transactions?assetType=${assetType}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         setData(res.data || []);
