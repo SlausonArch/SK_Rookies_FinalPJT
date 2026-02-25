@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { fetchTickers } from '../services/upbitApi';
 import type { UpbitTicker } from '../services/upbitApi';
+import { TrendingUp, TrendingDown, ArrowRightLeft, Download, Upload, Clock } from 'lucide-react';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 
@@ -36,10 +37,11 @@ const StatsGrid = styled.div`
   margin-bottom: 32px;
 `;
 
-const StatCard = styled.div<{ $positive?: boolean }>`
-  background: ${props => props.$positive ?
-    'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)' :
-    'linear-gradient(135deg, #093687 0%, #0a4099 100%)'};
+const StatCard = styled.div<{ $type?: 'positive' | 'negative' | 'default' }>`
+  background: ${props =>
+    props.$type === 'negative' ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' :
+      props.$type === 'positive' ? 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)' :
+        'linear-gradient(135deg, #093687 0%, #0a4099 100%)'};
   padding: 24px;
   border-radius: 12px;
   color: white;
@@ -197,7 +199,10 @@ const SymbolButton = styled.button`
 `;
 
 const Badge = styled.span<{ type: string }>`
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   padding: 4px 12px;
   border-radius: 12px;
   font-size: 12px;
@@ -207,7 +212,10 @@ const Badge = styled.span<{ type: string }>`
 `;
 
 const StatusPill = styled.span<{ $color: 'gray' | 'blue' | 'green' }>`
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   padding: 4px 10px;
   border-radius: 999px;
   font-size: 12px;
@@ -549,7 +557,7 @@ const sectionTabs: Array<{ key: SubSectionKey; label: string }> = [
   { key: 'performance', label: '투자손익' },
   { key: 'history', label: '거래내역' },
   { key: 'openOrders', label: '미체결' },
-  { key: 'pendingTransfers', label: '입출금대기' },
+  { key: 'pendingTransfers', label: '입출금 내역' },
 ];
 
 const Investments = () => {
@@ -1192,9 +1200,9 @@ const Investments = () => {
         <PageTitle>투자 내역</PageTitle>
 
         <StatsGrid>
-          <StatCard $positive={todayProfit >= 0}>
+          <StatCard $type={todayProfit > 0 ? 'positive' : todayProfit < 0 ? 'negative' : 'positive'}>
             <StatLabel>오늘의 수익</StatLabel>
-            <StatValue>{todayProfit >= 0 ? '+' : ''}≈ {Math.round(todayProfit).toLocaleString()} KRW</StatValue>
+            <StatValue>{todayProfit > 0 ? '+' : todayProfit < 0 ? '-' : '+'}≈ {Math.abs(Math.round(todayProfit)).toLocaleString()} KRW</StatValue>
             <StatChange>{todayProfit >= 0 ? '수익' : '손실'}</StatChange>
           </StatCard>
           <StatCard>
@@ -1531,9 +1539,9 @@ const Investments = () => {
                       <Td>{formatDate(tx.txDate)}</Td>
                       <Td>
                         <Badge type={tx.txType}>
-                          {tx.txType === 'BUY' ? '매수' :
-                            tx.txType === 'SELL' ? '매도' :
-                              tx.txType === 'DEPOSIT' ? '입금' : '출금'}
+                          {tx.txType === 'BUY' ? <><TrendingUp size={14} /> 매수</> :
+                            tx.txType === 'SELL' ? <><TrendingDown size={14} /> 매도</> :
+                              tx.txType === 'DEPOSIT' ? <><Download size={14} /> 입금</> : <><Upload size={14} /> 출금</>}
                         </Badge>
                       </Td>
                       <Td><strong>{tx.assetType}</strong></Td>
@@ -1611,7 +1619,7 @@ const Investments = () => {
                         <Td>{formatDate(order.createdAt)}</Td>
                         <Td>
                           <Badge type={order.orderType}>
-                            {order.orderType === 'BUY' ? '지정가 매수' : '지정가 매도'}
+                            {order.orderType === 'BUY' ? <><TrendingUp size={14} /> 지정가 매수</> : <><TrendingDown size={14} /> 지정가 매도</>}
                           </Badge>
                         </Td>
                         <Td><strong>{order.assetType}</strong></Td>
@@ -1634,14 +1642,9 @@ const Investments = () => {
         {activeSection === 'pendingTransfers' && (
           <Card>
             <CardHeader>
-              <CardTitle>입출금대기</CardTitle>
-              <CardDescription>코인 이동/출금 요청의 대기 내역을 확인하는 영역입니다.</CardDescription>
+              <CardTitle>입출금 내역</CardTitle>
+              <CardDescription>가상계좌 이체 및 다른 지갑 간의 코인 입출금 내역을 모두 조회할 수 있습니다.</CardDescription>
             </CardHeader>
-
-            <InfoBanner>
-              현재 버전은 입출금 요청을 즉시 반영하며 별도 승인 대기(PENDING) 상태를 저장하지 않습니다.
-              승인 플로우가 연동되면 이 탭에서 대기 건만 표시됩니다.
-            </InfoBanner>
 
             {transferRequests.length > 0 ? (
               <Table>

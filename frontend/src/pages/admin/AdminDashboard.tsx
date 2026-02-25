@@ -475,6 +475,80 @@ const FilterRow = styled.div`
   margin-bottom: 12px;
 `;
 
+const SearchInput = styled.input`
+  width: 260px;
+  padding: 10px 14px 10px 38px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 700;
+  outline: none;
+  background: rgba(0, 0, 0, 0.02);
+  transition: all 180ms ease;
+
+  &:focus {
+    background: #fff;
+    border-color: ${COLORS.borderHover};
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  }
+
+  &::placeholder {
+    color: #a0aabf;
+    font-weight: 600;
+  }
+`;
+
+const ImageModalOverlay = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+`;
+
+const ImageModalContent = styled.div`
+  position: relative;
+  background: #fff;
+  padding: 8px;
+  border-radius: 12px;
+  max-width: 90vw;
+  max-height: 90vh;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+  
+  img {
+    max-width: 100%;
+    max-height: calc(90vh - 16px);
+    object-fit: contain;
+    border-radius: 8px;
+  }
+`;
+
+const CloseButton = styled.button`
+  position: absolute;
+  top: -16px;
+  right: -16px;
+  width: 32px;
+  height: 32px;
+  border-radius: 16px;
+  background: #fff;
+  border: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #333;
+  
+  &:hover {
+    background: #f0f0f0;
+  }
+`;
 const Input = styled.input`
   height: 38px;
   padding: 0 12px;
@@ -866,6 +940,7 @@ const AdminDashboard = () => {
   const [selectedPost, setSelectedPost] = useState<any>(null);
   const [selectedInquiry, setSelectedInquiry] = useState<InquiryRow | null>(null);
   const [replyContent, setReplyContent] = useState('');
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   const [settingsMsg, setSettingsMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [newPw, setNewPw] = useState('');
@@ -1226,14 +1301,12 @@ const AdminDashboard = () => {
                       </td>
                       <td>
                         {m.idPhotoUrl ? (
-                          <a
-                            href={m.idPhotoUrl.startsWith('http') ? m.idPhotoUrl : `${API_BASE}${m.idPhotoUrl}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={{ color: COLORS.primary, textDecoration: 'underline', fontWeight: 900 }}
+                          <span
+                            onClick={() => setSelectedImage(m.idPhotoUrl!.startsWith('http') ? m.idPhotoUrl! : `${API_BASE}${m.idPhotoUrl!}`)}
+                            style={{ color: COLORS.primary, textDecoration: 'underline', fontWeight: 900, cursor: 'pointer' }}
                           >
                             원본 보기
-                          </a>
+                          </span>
                         ) : (
                           '-'
                         )}
@@ -1847,6 +1920,17 @@ const AdminDashboard = () => {
           )}
         </Body>
       </Shell>
+
+      {selectedImage && (
+        <ImageModalOverlay onClick={() => setSelectedImage(null)}>
+          <ImageModalContent onClick={e => e.stopPropagation()}>
+            <CloseButton onClick={() => setSelectedImage(null)}>
+              X
+            </CloseButton>
+            <img src={selectedImage} alt="ID Card Original" />
+          </ImageModalContent>
+        </ImageModalOverlay>
+      )}
     </>
   );
 };

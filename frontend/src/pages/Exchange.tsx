@@ -29,9 +29,11 @@ const ExchangeBody = styled.div`
   grid-template-rows: 1fr 380px;
 
   flex: 1;
-  gap: 1px;
-  background: #dfe7f6;
+  gap: 16px;
+  padding: 16px;
+  background: transparent;
   min-height: 0;
+
 
   @media (max-width: 1200px) {
     grid-template-columns: 1fr 280px;
@@ -46,6 +48,8 @@ const SidebarPanel = styled.div`
   grid-column: 1 / 2;
   grid-row: 1 / 3;
   background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.04);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -59,6 +63,8 @@ const ChartPanel = styled.div`
   grid-column: 2 / 3;
   grid-row: 1 / 2;
   background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.04);
   min-height: 0;
   overflow: hidden;
 
@@ -71,6 +77,8 @@ const OrderbookPanel = styled.div`
   grid-column: 3 / 4;
   grid-row: 1 / 2;
   background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.04);
   overflow: hidden;
 
   @media (max-width: 1200px) {
@@ -85,6 +93,8 @@ const RecentTradesPanel = styled.div`
   grid-column: 3 / 4;
   grid-row: 2 / 3;
   background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.04);
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -151,6 +161,8 @@ const TradePanelContainer = styled.div`
   grid-column: 2 / 3;
   grid-row: 2 / 3;
   background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.04);
   min-height: 0;
   display: flex;
   flex-direction: column;

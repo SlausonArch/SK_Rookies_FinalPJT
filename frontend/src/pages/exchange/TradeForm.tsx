@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import styled from 'styled-components';
+import styled, { keyframes } from 'styled-components';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { CheckCircle2, AlertCircle, TrendingUp, TrendingDown, Clock, Info } from 'lucide-react';
 
 const API_BASE = 'http://localhost:8080';
 
@@ -113,6 +114,10 @@ const LoginMessage = styled.div`
   text-align: center;
   color: #999;
   font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
   a {
     color: #093687;
     text-decoration: none;
@@ -120,14 +125,40 @@ const LoginMessage = styled.div`
   }
 `;
 
-const ResultMessage = styled.div<{ $success: boolean }>`
-  padding: 8px;
-  margin-top: 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  text-align: center;
-  background: ${(p: { $success: boolean }) => p.$success ? '#e8f5e8' : '#fde8e8'};
+const slideIn = keyframes`
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+`;
+
+const ToastContainer = styled.div`
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 1000;
+`;
+
+const Toast = styled.div<{ $success: boolean }>`
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: white;
   color: ${(p: { $success: boolean }) => p.$success ? '#2e7d32' : '#c62828'};
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border-left: 4px solid ${(p: { $success: boolean }) => p.$success ? '#2e7d32' : '#c62828'};
+  animation: ${slideIn} 0.3s ease-out forwards;
 `;
 
 const DepositBtn = styled.button`
@@ -186,10 +217,18 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
 
 
   useEffect(() => {
-    if (currentPrice > 0) {
+    // When market changes, clear the price so it will auto-update to the new market's price
+    setPrice('');
+    setAmount('');
+  }, [market]);
+
+  useEffect(() => {
+    // Only update price automatically if it hasn't been set manually
+    // Allow users to keep their static limit price unless they change market
+    if (currentPrice > 0 && !price) {
       setPrice(String(currentPrice));
     }
-  }, [currentPrice, market]);
+  }, [currentPrice, price]);
 
   useEffect(() => {
     if (selectedPrice && selectedPrice > 0) {
@@ -220,7 +259,10 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
   const total = parseNumber(price) * parseNumber(amount);
 
   const handlePercent = (pct: number) => {
-    const p = parseNumber(price);
+    // 시장가 매수는 버튼 누르는 순간의 현재가가 반영되어야 하므로, 퍼센트 버튼 클릭 시 입력창의 price가 아닌
+    // 현재 currentPrice 혹은 입력된 price 중 의도에 맞게 적용: 일반적으로 시장가 매수 기능을 위해서는
+    // 수량 계산 기준가격을 현재가로 하거나, 입력된 지정가로 합니다.
+    const p = parseNumber(price) || currentPrice;
     if (p <= 0) return;
 
     if (tradeType === 'buy') {
@@ -234,6 +276,15 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
       setAmount((coinBalance * pct / 100).toFixed(5));
     }
   };
+
+  useEffect(() => {
+    if (message) {
+      const timer = setTimeout(() => {
+        setMessage(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [message]);
 
   const handleDeposit = async () => {
     if (!token) return;
@@ -251,12 +302,22 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
     }
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (isMarket: boolean) => {
     if (!token || loading) return;
-    const p = parseNumber(price);
-    const a = parseNumber(amount);
-    if (!p || !a || p <= 0 || a <= 0) {
-      setMessage({ text: '가격과 수량을 입력해 주세요.', success: false });
+
+    // 시장가 주문 시에는 무조건 currentPrice 사용, 지정가는 입력된 price 사용
+    const p = isMarket ? currentPrice : parseNumber(price);
+
+    // 수량 계산
+    let a = parseNumber(amount);
+
+    if (!p || p <= 0) {
+      setMessage({ text: '가격 정보가 올바르지 않습니다.', success: false });
+      return;
+    }
+
+    if (!a || a <= 0) {
+      setMessage({ text: '수량을 입력해 주세요.', success: false });
       return;
     }
 
@@ -266,7 +327,7 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
     try {
       await axios.post(`${API_BASE}/api/orders`, {
         orderType: tradeType === 'buy' ? 'BUY' : 'SELL',
-        priceType: 'LIMIT',
+        priceType: isMarket ? 'MARKET' : 'LIMIT',
         assetType,
         price: p,
         amount: a,
@@ -274,7 +335,9 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
         headers: { Authorization: `Bearer ${token}` },
       });
       setMessage({
-        text: `${tradeType === 'buy' ? '매수' : '매도'} 주문이 체결되었습니다.`,
+        text: isMarket
+          ? `시장가 ${tradeType === 'buy' ? '매수' : '매도'} 주문이 체결되었습니다.`
+          : `지정가 ${tradeType === 'buy' ? '매수' : '매도'} 주문이 접수되었습니다. (체결 대기)`,
         success: true,
       });
       setAmount('');
@@ -292,7 +355,8 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
     return (
       <Container>
         <LoginMessage>
-          <a href="/login">로그인</a> 후 이용해 주세요.
+          <Info size={32} color="#999" />
+          <span><a href="/login">로그인</a> 후 지정가 주문 및 거래를 이용해 주세요.</span>
         </LoginMessage>
       </Container>
     );
@@ -344,15 +408,30 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
           <Input type="text" value={total > 0 ? `≈ ${Math.round(total).toLocaleString()}` : ''} readOnly />
         </FormRow>
 
-        <ButtonContainer>
-          <SubmitBtn $type={tradeType} onClick={handleSubmit} disabled={loading}>
-            {loading ? '처리 중...' : tradeType === 'buy' ? `${assetType} 매수` : `${assetType} 매도`}
-          </SubmitBtn>
-          <HistoryBtn onClick={() => navigate('/investments')}>내역</HistoryBtn>
+        <ButtonContainer style={{ flexDirection: 'column' }}>
+          <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
+            <SubmitBtn $type={tradeType} onClick={() => handleSubmit(false)} disabled={loading} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', flex: 1, padding: '10px' }}>
+              {tradeType === 'buy' ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
+              지정가 {tradeType === 'buy' ? '매수' : '매도'}
+            </SubmitBtn>
+            <SubmitBtn $type={tradeType} onClick={() => handleSubmit(true)} disabled={loading} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', flex: 1, padding: '10px', background: tradeType === 'buy' ? '#ff8a80' : '#90caf9', color: tradeType === 'buy' ? '#d60000' : '#0051c7' }}>
+              시장가 {tradeType === 'buy' ? '매수' : '매도'}
+            </SubmitBtn>
+          </div>
+          <HistoryBtn onClick={() => navigate('/investments')} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', padding: '10px' }}>
+            <Clock size={16} /> 거래 내역 조회
+          </HistoryBtn>
         </ButtonContainer>
-
-        {message && <ResultMessage $success={message.success}>{message.text}</ResultMessage>}
       </FormBody>
+
+      {message && (
+        <ToastContainer>
+          <Toast $success={message.success}>
+            {message.success ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+            <span>{message.text}</span>
+          </Toast>
+        </ToastContainer>
+      )}
     </Container>
   );
 };

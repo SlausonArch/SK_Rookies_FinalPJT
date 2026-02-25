@@ -1,5 +1,6 @@
 import React from 'react';
-import styled from 'styled-components';
+import styled, { keyframes } from 'styled-components';
+import { Activity } from 'lucide-react';
 import type { TradeWS } from '../../hooks/useUpbitWebSocket';
 
 interface Props {
@@ -14,10 +15,13 @@ const Container = styled.div`
 
 const Title = styled.div`
   padding: 10px 12px;
-  font-size: 13px;
-  font-weight: 700;
-  color: #333;
-  border-bottom: 1px solid #eee;
+  font-size: 14px;
+  font-weight: 800;
+  color: #111;
+  border-bottom: 2px solid #eee;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 `;
 
 const TableHeader = styled.div`
@@ -34,12 +38,18 @@ const TradeList = styled.div`
   overflow-y: auto;
 `;
 
+const flash = keyframes`
+  0% { background-color: rgba(255, 235, 59, 0.4); }
+  100% { background-color: transparent; }
+`;
+
 const TradeRow = styled.div<{ $type: 'ASK' | 'BID' }>`
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   padding: 4px 12px;
   font-size: 11px;
   border-bottom: 1px solid #fafafa;
+  animation: ${flash} 0.8s ease-out forwards;
 `;
 
 const PriceCell = styled.div<{ $type: 'ASK' | 'BID' }>`
@@ -84,7 +94,7 @@ function formatTradeTimeKst(tradeTimestamp: number): string {
 const RecentTrades: React.FC<Props> = ({ trades }) => {
   return (
     <Container>
-      <Title>체결</Title>
+      <Title><Activity size={16} color="#093687" /> 실시간 체결</Title>
       <TableHeader>
         <div>가격(KRW)</div>
         <div style={{ textAlign: 'right' }}>수량</div>
