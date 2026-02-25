@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import styled from 'styled-components';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
@@ -335,6 +335,7 @@ type MyPageTab = 'profile' | 'account' | 'idPhoto';
 
 const MyPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [member, setMember] = useState<MemberInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -360,11 +361,12 @@ const MyPage: React.FC = () => {
   });
 
   const getToken = () => localStorage.getItem('accessToken') || localStorage.getItem('token');
+  const loginRedirectUrl = `/login?redirect=${encodeURIComponent(`${location.pathname}${location.search || ''}`)}`;
 
   useEffect(() => {
     const token = getToken();
     if (!token) {
-      navigate('/login', { replace: true });
+      navigate(loginRedirectUrl, { replace: true });
       return;
     }
 
@@ -392,11 +394,11 @@ const MyPage: React.FC = () => {
         if (err.response?.status === 401) {
           localStorage.removeItem('accessToken');
           localStorage.removeItem('token');
-          navigate('/login', { replace: true });
+          navigate(loginRedirectUrl, { replace: true });
         }
       })
       .finally(() => setLoading(false));
-  }, [navigate]);
+  }, [navigate, loginRedirectUrl]);
 
   const handleEdit = () => {
     setEditing(true);

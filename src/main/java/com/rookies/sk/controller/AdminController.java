@@ -1,5 +1,6 @@
 package com.rookies.sk.controller;
 
+import com.rookies.sk.dto.AdminAssetReclaimRequestDto;
 import com.rookies.sk.service.AdminService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -42,6 +43,20 @@ public class AdminController {
     @PatchMapping("/members/{memberId}/approve-id")
     public ResponseEntity<Map<String, Object>> approveMemberIdentity(@PathVariable Long memberId) {
         return ResponseEntity.ok(adminService.approveMemberIdentity(memberId));
+    }
+
+    @PatchMapping("/members/{memberId}/assets/reclaim")
+    public ResponseEntity<Map<String, Object>> reclaimMemberAsset(
+            @PathVariable Long memberId,
+            @RequestBody AdminAssetReclaimRequestDto body) {
+        return ResponseEntity.ok(
+                adminService.reclaimMemberAsset(
+                        memberId,
+                        body.getAssetType(),
+                        body.getAmount(),
+                        body.getReason()
+                )
+        );
     }
 
     @GetMapping("/orders")

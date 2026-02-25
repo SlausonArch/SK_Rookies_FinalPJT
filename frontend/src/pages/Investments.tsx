@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import styled from 'styled-components';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { fetchTickers } from '../services/upbitApi';
 import type { UpbitTicker } from '../services/upbitApi';
@@ -562,6 +562,7 @@ const sectionTabs: Array<{ key: SubSectionKey; label: string }> = [
 
 const Investments = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [activeSection, setActiveSection] = useState<SubSectionKey>('holdings');
   const [performancePeriod, setPerformancePeriod] = useState<PerformancePeriod>('monthly');
   const [performanceMetric, setPerformanceMetric] = useState<PerformanceMetric>('amountWeighted');
@@ -582,15 +583,31 @@ const Investments = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [openOrders, setOpenOrders] = useState<OpenOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const loginRedirectUrl = `/login?redirect=${encodeURIComponent(`${location.pathname}${location.search || ''}`)}`;
+  const [cancelingOrderId, setCancelingOrderId] = useState<number | null>(null);
 
   const [assets, setAssets] = useState<Asset[]>([]);
+
+  const normalizeOpenOrders = (openOrderData: any[]): OpenOrder[] => {
+    return openOrderData.map((order: any) => ({
+      orderId: toNumber(order.orderId),
+      orderType: String(order.orderType ?? ''),
+      priceType: String(order.priceType ?? ''),
+      assetType: String(order.assetType ?? ''),
+      price: toNumber(order.price),
+      amount: toNumber(order.amount),
+      filledAmount: toNumber(order.filledAmount),
+      status: String(order.status ?? ''),
+      createdAt: String(order.createdAt ?? ''),
+    }));
+  };
 
   // 로그인 체크 및 데이터 조회
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
 
     if (!token) {
-      navigate('/login', { replace: true });
+      navigate(loginRedirectUrl, { replace: true });
       return;
     }
 
@@ -609,7 +626,7 @@ const Investments = () => {
         if (typeof balanceResponse.data === 'string' && balanceResponse.data.includes('<!DOCTYPE html>')) {
           console.warn('인증 세션 만료됨');
           localStorage.removeItem('accessToken');
-          navigate('/login');
+          navigate(loginRedirectUrl);
           return;
         }
 
@@ -656,23 +673,12 @@ const Investments = () => {
         setTransactions(normalizedTransactions);
 
         const openOrderData = Array.isArray(openOrderResponse.data) ? openOrderResponse.data : [];
-        const normalizedOpenOrders: OpenOrder[] = openOrderData.map((order: any) => ({
-          orderId: toNumber(order.orderId),
-          orderType: String(order.orderType ?? ''),
-          priceType: String(order.priceType ?? ''),
-          assetType: String(order.assetType ?? ''),
-          price: toNumber(order.price),
-          amount: toNumber(order.amount),
-          filledAmount: toNumber(order.filledAmount),
-          status: String(order.status ?? ''),
-          createdAt: String(order.createdAt ?? ''),
-        }));
-        setOpenOrders(normalizedOpenOrders);
+        setOpenOrders(normalizeOpenOrders(openOrderData));
       } catch (error: any) {
         console.error('데이터 조회 실패:', error);
         if (error.response && error.response.status === 401) {
           localStorage.removeItem('accessToken');
-          navigate('/login', { replace: true });
+          navigate(loginRedirectUrl, { replace: true });
         }
       } finally {
         setLoading(false);
@@ -680,7 +686,33 @@ const Investments = () => {
     };
 
     fetchData();
-  }, [navigate]);
+  }, [navigate, loginRedirectUrl]);
+
+  const handleCancelOpenOrder = async (orderId: number) => {
+    const token = localStorage.getItem('accessToken');
+    if (!token) {
+      navigate(loginRedirectUrl, { replace: true });
+      return;
+    }
+    if (!window.confirm('해당 지정가 주문을 취소하시겠습니까?')) return;
+
+    setCancelingOrderId(orderId);
+    try {
+      const headers = { Authorization: `Bearer ${token}` };
+      await axios.delete(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/orders/${orderId}`, { headers });
+
+      const openOrderResponse = await axios.get(
+        `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/orders/open`,
+        { headers }
+      );
+      const openOrderData = Array.isArray(openOrderResponse.data) ? openOrderResponse.data : [];
+      setOpenOrders(normalizeOpenOrders(openOrderData));
+    } catch (error: any) {
+      alert(error?.response?.data?.message || error?.response?.data || '주문 취소에 실패했습니다.');
+    } finally {
+      setCancelingOrderId(null);
+    }
+  };
 
   // 실시간 코인 시세 조회
   useEffect(() => {
@@ -932,48 +964,76 @@ const Investments = () => {
 
     let index = 0;
     let cumBuy = 0;
-    let cumSell = 0;
-    let cumFee = 0;
+    let realizedPnl = 0;
     let twrAccum = 0;
+    let prevPnl = 0;
+    const positions = new Map<string, { qty: number; cost: number; lastPrice: number }>();
     const points: Array<{ label: string; pnl: number; amountRate: number; twrRate: number; cumBuy: number }> = [];
 
     buckets.forEach(bucket => {
       const prevCumBuy = cumBuy;
-      let deltaBuy = 0;
-      let deltaSell = 0;
-      let deltaFee = 0;
 
       while (index < periodTransactions.length) {
         const tx = periodTransactions[index];
         const txTime = new Date(tx.txDate).getTime();
         if (txTime > bucket.endAt) break;
 
-        if (tx.txType === 'BUY') {
-          cumBuy += tx.totalValue;
-          deltaBuy += tx.totalValue;
-        } else {
-          cumSell += tx.totalValue;
-          deltaSell += tx.totalValue;
+        const symbol = tx.assetType;
+        const amountNum = Math.max(toNumber(tx.amount), 0);
+        const gross = Math.max(toNumber(tx.totalValue), 0);
+        const feeNum = Math.max(toNumber(tx.fee), 0);
+        const tradePrice = Math.max(toNumber(tx.price), 0);
+        const state = positions.get(symbol) || { qty: 0, cost: 0, lastPrice: 0 };
+        if (tradePrice > 0) {
+          state.lastPrice = tradePrice;
         }
-        cumFee += tx.fee;
-        deltaFee += tx.fee;
+
+        if (tx.txType === 'BUY') {
+          const buyCost = gross + feeNum;
+          state.qty += amountNum;
+          state.cost += buyCost;
+          cumBuy += buyCost;
+        } else {
+          const proceedsNet = Math.max(gross - feeNum, 0);
+          const matchedQty = state.qty > 0 ? Math.min(state.qty, amountNum) : 0;
+          const avgCost = state.qty > 0 ? state.cost / state.qty : 0;
+          const costBasis = avgCost * matchedQty;
+          realizedPnl += (proceedsNet - costBasis);
+
+          if (matchedQty > 0) {
+            state.qty -= matchedQty;
+            state.cost -= costBasis;
+            if (state.qty <= 0.00000001 || state.cost <= 0.00000001) {
+              state.qty = 0;
+              state.cost = 0;
+            }
+          }
+        }
+        positions.set(symbol, state);
         index += 1;
       }
 
-      const deltaPnl = deltaSell - deltaBuy - deltaFee;
-      const twrBase = prevCumBuy > 0 ? prevCumBuy : deltaBuy;
+      const unrealizedPnl = [...positions.entries()].reduce((sum, [symbol, state]) => {
+        if (state.qty <= 0) return sum;
+        const marketPrice = coinPrices[symbol]?.price || state.lastPrice || 0;
+        return sum + ((state.qty * marketPrice) - state.cost);
+      }, 0);
+
+      const pnl = realizedPnl + unrealizedPnl;
+      const deltaPnl = pnl - prevPnl;
+      const twrBase = prevCumBuy > 0 ? prevCumBuy : cumBuy;
       if (twrBase > 0) {
         twrAccum += (deltaPnl / twrBase);
       }
+      prevPnl = pnl;
 
-      const pnl = cumSell - cumBuy - cumFee;
       const amountRate = cumBuy > 0 ? (pnl / cumBuy) * 100 : 0;
       const twrRate = twrAccum * 100;
       points.push({ label: bucket.label, pnl, amountRate, twrRate, cumBuy });
     });
 
     return points;
-  }, [performancePeriod, periodTransactions, selectedPeriodRange]);
+  }, [coinPrices, performancePeriod, periodTransactions, selectedPeriodRange]);
 
   const selectedRateSeries = useMemo(
     () => performancePoints.map(point => (performanceMetric === 'timeWeighted' ? point.twrRate : point.amountRate)),
@@ -1609,6 +1669,7 @@ const Investments = () => {
                     <Th>체결수량</Th>
                     <Th>미체결량</Th>
                     <Th>상태</Th>
+                    <Th>취소</Th>
                   </Tr>
                 </Thead>
                 <Tbody>
@@ -1624,10 +1685,19 @@ const Investments = () => {
                         </Td>
                         <Td><strong>{order.assetType}</strong></Td>
                         <Td>{formatDetailKrw(order.price)} KRW</Td>
-                        <Td>{order.amount.toFixed(5)}</Td>
-                        <Td>{order.filledAmount.toFixed(5)}</Td>
-                        <Td>{unfilled.toFixed(5)}</Td>
+                        <Td>{order.amount.toFixed(8).replace(/\.?0+$/, '')}</Td>
+                        <Td>{order.filledAmount.toFixed(8).replace(/\.?0+$/, '')}</Td>
+                        <Td>{unfilled.toFixed(8).replace(/\.?0+$/, '')}</Td>
                         <Td><StatusPill $color='blue'>{order.status || 'PENDING'}</StatusPill></Td>
+                        <Td>
+                          <PageButton
+                            type='button'
+                            onClick={() => handleCancelOpenOrder(order.orderId)}
+                            disabled={cancelingOrderId === order.orderId}
+                          >
+                            취소
+                          </PageButton>
+                        </Td>
                       </Tr>
                     );
                   })}

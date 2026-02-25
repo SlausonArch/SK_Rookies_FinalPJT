@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { fetchTickers } from '../services/upbitApi';
 import type { UpbitTicker } from '../services/upbitApi';
@@ -202,7 +202,9 @@ const Td = styled.td`
 
 const Balances = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
+  const loginRedirectUrl = `/login?redirect=${encodeURIComponent(`${location.pathname}${location.search || ''}`)}`;
 
   // 자산 정보
   const [krwBalance, setKrwBalance] = useState(0);
@@ -232,7 +234,7 @@ const Balances = () => {
   const fetchData = async () => {
     const token = localStorage.getItem('accessToken');
     if (!token) {
-      if (!loading) navigate('/login', { replace: true });
+      if (!loading) navigate(loginRedirectUrl, { replace: true });
       return;
     }
 
@@ -244,7 +246,7 @@ const Balances = () => {
 
       if (typeof assetsResponse.data === 'string' && assetsResponse.data.includes('<!DOCTYPE html>')) {
         localStorage.removeItem('accessToken');
-        navigate('/login');
+        navigate(loginRedirectUrl);
         return;
       }
 
@@ -267,7 +269,7 @@ const Balances = () => {
       console.error('자산 조회 실패:', error);
       if (error.response && error.response.status === 401) {
         localStorage.removeItem('accessToken');
-        navigate('/login', { replace: true });
+        navigate(loginRedirectUrl, { replace: true });
       }
     } finally {
       if (loading) setLoading(false);
@@ -278,7 +280,7 @@ const Balances = () => {
     fetchData();
     const intervalId = setInterval(fetchData, 3000);
     return () => clearInterval(intervalId);
-  }, [navigate]);
+  }, [navigate, loginRedirectUrl]);
 
   // 실시간 코인 시세 조회
   useEffect(() => {
@@ -366,6 +368,27 @@ const Balances = () => {
     return `₩${price.toLocaleString('ko-KR', options)}`;
   };
 
+  const formatKrwPrice = (value: number) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return '-';
+    if (n >= 100) return n.toLocaleString('ko-KR', { maximumFractionDigits: 0 });
+    if (n >= 1) return n.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (n >= 0.0001) return n.toLocaleString('ko-KR', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+    return n.toLocaleString('ko-KR', { maximumFractionDigits: 8 });
+  };
+
+  const formatKrwValue = (value: number) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return '-';
+    return n.toLocaleString('ko-KR', { maximumFractionDigits: 4 });
+  };
+
+  const formatCoinAmount = (value: number) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return '0';
+    return n.toFixed(8).replace(/\.?0+$/, '');
+  };
+
   const toUserMessage = (raw: unknown, fallback: string) => {
     const code = String(raw ?? '');
     if (code.includes('WITHDRAWN_ACCOUNT')) return '탈퇴 계정입니다. 관리자에게 문의하세요.';
@@ -425,11 +448,11 @@ const Balances = () => {
         <TopSection>
           <BalanceRow>
             <BalanceLabel>보유 현금</BalanceLabel>
-            <BalanceValue>≈ {Math.round(krwBalance).toLocaleString()} KRW</BalanceValue>
+            <BalanceValue>{formatKrwValue(krwBalance)} KRW</BalanceValue>
           </BalanceRow>
           <BalanceRow>
             <BalanceLabel>총 보유 자산</BalanceLabel>
-            <BalanceValue>≈ {Math.round(totalAssets).toLocaleString()} KRW</BalanceValue>
+            <BalanceValue>{formatKrwValue(totalAssets)} KRW</BalanceValue>
           </BalanceRow>
           <Subtitle>
             <span>투자 수익률</span>
@@ -467,7 +490,7 @@ const Balances = () => {
               <Label>
                 코인 선택
                 <span style={{ float: 'right', fontSize: '13px', color: '#093687' }}>
-                  보유량: {availableWithdrawAmount} {selectedWithdrawCoin}
+                  보유량: {formatCoinAmount(availableWithdrawAmount)} {selectedWithdrawCoin}
                 </span>
               </Label>
               <Select value={selectedWithdrawCoin} onChange={(e) => {
@@ -495,7 +518,7 @@ const Balances = () => {
                 <button
                   type="button"
                   style={{ float: 'right', fontSize: '12px', background: 'none', border: 'none', color: '#1a5bc4', cursor: 'pointer', fontWeight: 600 }}
-                  onClick={() => setTransferAmount(String(availableWithdrawAmount))}
+                  onClick={() => setTransferAmount(formatCoinAmount(availableWithdrawAmount))}
                 >
                   최대
                 </button>
@@ -539,10 +562,10 @@ const Balances = () => {
                 return (
                   <Tr key={symbol}>
                     <Td><strong>{symbol}</strong></Td>
-                    <Td>{balance.toFixed(5)} {symbol}</Td>
+                    <Td>{formatCoinAmount(balance)} {symbol}</Td>
                     <Td>{formatAverageBuyPrice(avgPrice)}</Td>
-                    <Td>≈ {Math.round(price).toLocaleString()} KRW</Td>
-                    <Td>≈ {Math.round(value).toLocaleString()} KRW</Td>
+                    <Td>{formatKrwPrice(price)} KRW</Td>
+                    <Td>{formatKrwValue(value)} KRW</Td>
                     <Td style={{ color: profitRate > 0 ? '#d60000' : profitRate < 0 ? '#0051c7' : '#333' }}>
                       {profitRate > 0 ? '+' : ''}{profitRate.toFixed(2)}%
                     </Td>

@@ -1,6 +1,14 @@
 import React, { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
+function sanitizeRedirectTarget(target: string | null | undefined): string {
+    if (!target) return '/';
+    const trimmed = target.trim();
+    if (!trimmed.startsWith('/') || trimmed.startsWith('//')) return '/';
+    if (trimmed.startsWith('/login') || trimmed.startsWith('/oauth/callback')) return '/';
+    return trimmed;
+}
+
 const OAuthCallback: React.FC = () => {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
@@ -12,11 +20,13 @@ const OAuthCallback: React.FC = () => {
         if (accessToken && refreshToken) {
             localStorage.setItem('accessToken', accessToken);
             localStorage.setItem('refreshToken', refreshToken);
-            // 로그인 성공 시 메인으로 이동
-            window.location.href = '/'; 
+            const target = sanitizeRedirectTarget(localStorage.getItem('postLoginRedirect'));
+            localStorage.removeItem('postLoginRedirect');
+            window.location.href = target;
         } else {
             alert('로그인 정보가 올바르지 않습니다.');
-            navigate('/login');
+            const redirect = sanitizeRedirectTarget(localStorage.getItem('postLoginRedirect'));
+            navigate(`/login?redirect=${encodeURIComponent(redirect)}`);
         }
     }, [searchParams, navigate]);
 

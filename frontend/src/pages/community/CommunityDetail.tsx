@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import axios from 'axios';
 import styled from 'styled-components';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
 import {
@@ -189,7 +189,9 @@ const Empty = styled.div`
 function CommunityDetail() {
   const { postId } = useParams<{ postId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const token = getAccessToken();
+  const loginRedirectUrl = `/login?redirect=${encodeURIComponent(`${location.pathname}${location.search || ''}`)}`;
   const authHeaders = useMemo(() => getAuthHeaders(token), [token]);
 
   const [post, setPost] = useState<Post | null>(null);
@@ -239,7 +241,7 @@ function CommunityDetail() {
     if (!post || savingLike) return;
     if (!token) {
       alert('로그인이 필요합니다.');
-      navigate('/login');
+      navigate(loginRedirectUrl);
       return;
     }
     if (post.userLiked) {
@@ -266,7 +268,7 @@ function CommunityDetail() {
     e.preventDefault();
     if (!post || !token) {
       alert('로그인이 필요합니다.');
-      navigate('/login');
+      navigate(loginRedirectUrl);
       return;
     }
     setSavingComment(true);

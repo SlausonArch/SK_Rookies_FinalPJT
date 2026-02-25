@@ -1,6 +1,6 @@
 import React from 'react';
 import styled from 'styled-components';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 // Header.tsx (스타일만 교체/추가)
 
@@ -120,7 +120,10 @@ const LogoutButton = styled.button`
 
 
 const Header: React.FC = () => {
+  const location = useLocation();
   const isLoggedIn = !!localStorage.getItem('accessToken');
+  const redirectTarget = `${location.pathname}${location.search || ''}`;
+  const loginUrl = `/login?redirect=${encodeURIComponent(redirectTarget)}`;
 
   const handleLogout = () => {
     localStorage.removeItem('accessToken');
@@ -132,7 +135,7 @@ const Header: React.FC = () => {
     <HeaderBar>
       <HeaderInner>
         <Logo>
-          <Link to="/">VCE</Link>
+          <Link to="/crypto">VCE</Link>
         </Logo>
 
         <Nav>
@@ -153,7 +156,7 @@ const Header: React.FC = () => {
             </>
           ) : (
             <>
-              <AuthLink to="/login">로그인</AuthLink>
+              <AuthLink to={loginUrl}>로그인</AuthLink>
               <AuthLink to="/signup">회원가입</AuthLink>
             </>
           )}

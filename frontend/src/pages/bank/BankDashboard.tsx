@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import styled from 'styled-components';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
@@ -196,6 +196,7 @@ const ModeBtn = styled.button<{ $active: boolean }>`
 
 const BankDashboard: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [balance, setBalance] = useState<number>(0);
   const [mode, setMode] = useState<'main' | 'deposit' | 'withdraw'>('main');
   const [amount, setAmount] = useState('');
@@ -203,6 +204,7 @@ const BankDashboard: React.FC = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const token = localStorage.getItem('accessToken');
+  const loginRedirectUrl = `/login?redirect=${encodeURIComponent(`${location.pathname}${location.search || ''}`)}`;
 
   const [exchangeBalance, setExchangeBalance] = useState<number>(0);
 
@@ -247,7 +249,7 @@ const BankDashboard: React.FC = () => {
         console.error("거래소 잔고 조회 실패", e);
         if (e.response && e.response.status === 401) {
           localStorage.removeItem('accessToken');
-          navigate('/login', { replace: true });
+          navigate(loginRedirectUrl, { replace: true });
         }
       });
   };
@@ -305,7 +307,7 @@ const BankDashboard: React.FC = () => {
       setError(err.response?.data?.message || '거래 처리 중 오류가 발생했습니다.');
       if (err.response && err.response.status === 401) {
         localStorage.removeItem('accessToken');
-        navigate('/login', { replace: true });
+        navigate(loginRedirectUrl, { replace: true });
       }
     } finally {
       setLoading(false);
@@ -318,7 +320,7 @@ const BankDashboard: React.FC = () => {
         <DashboardCard>
           <BankLogo>🏦 VCE 가상은행</BankLogo>
           <p>서비스를 이용하려면 거래소 로그인이 필요합니다.</p>
-          <SubmitButton style={{ background: '#1a5bc4', marginTop: '20px' }} onClick={() => navigate('/login')}>로 그 인</SubmitButton>
+          <SubmitButton style={{ background: '#1a5bc4', marginTop: '20px' }} onClick={() => navigate(loginRedirectUrl)}>로 그 인</SubmitButton>
         </DashboardCard>
       </PageContainer>
     );

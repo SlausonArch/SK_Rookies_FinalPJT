@@ -3,10 +3,13 @@ package com.rookies.sk.service;
 import com.rookies.sk.entity.*;
 import com.rookies.sk.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -19,6 +22,9 @@ import java.time.LocalDateTime;
 @Service
 @RequiredArgsConstructor
 public class AdminService {
+
+    private static final int ASSET_SCALE = 8;
+    private static final BigDecimal EPSILON = new BigDecimal("0.00000001");
 
     private final MemberRepository memberRepository;
     private final OrderRepository orderRepository;
@@ -126,6 +132,65 @@ public class AdminService {
         return map;
     }
 
+    @Transactional
+    public Map<String, Object> reclaimMemberAsset(Long memberId, String assetType, BigDecimal amount, String reason) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "회원을 찾을 수 없습니다."));
+
+        String normalizedAssetType = normalizeAssetType(assetType);
+        BigDecimal reclaimAmount = normalizeAmount(amount);
+        if (isBlank(normalizedAssetType)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "자산 코드를 입력해 주세요.");
+        }
+        if (reclaimAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "회수 수량은 0보다 커야 합니다.");
+        }
+        if (isBlank(reason)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "회수 사유를 입력해 주세요.");
+        }
+
+        Asset asset = assetRepository.findWithLockByMember_MemberIdAndAssetType(memberId, normalizedAssetType)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "해당 회원의 자산을 찾을 수 없습니다."));
+
+        BigDecimal balance = normalizeAmount(asset.getBalance());
+        BigDecimal lockedBalance = normalizeAmount(asset.getLockedBalance());
+        BigDecimal availableBalance = nonNegative(balance.subtract(lockedBalance));
+        if (availableBalance.compareTo(reclaimAmount) < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "회수 가능한 잔고가 부족합니다.");
+        }
+
+        BigDecimal nextBalance = nonNegative(balance.subtract(reclaimAmount));
+        if (nextBalance.abs().compareTo(EPSILON) <= 0) {
+            nextBalance = BigDecimal.ZERO;
+        }
+
+        asset.setBalance(nextBalance);
+        assetRepository.save(asset);
+
+        Transaction tx = Transaction.builder()
+                .member(member)
+                .txType("ADMIN_RECLAIM")
+                .assetType(normalizedAssetType)
+                .amount(reclaimAmount)
+                .totalValue(reclaimAmount)
+                .fee(BigDecimal.ZERO)
+                .status("COMPLETED")
+                .build();
+        transactionRepository.save(tx);
+
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("memberId", member.getMemberId());
+        map.put("memberEmail", member.getEmail());
+        map.put("assetType", normalizedAssetType);
+        map.put("reclaimedAmount", reclaimAmount);
+        map.put("balance", asset.getBalance());
+        map.put("lockedBalance", lockedBalance);
+        map.put("availableBalance", nonNegative(asset.getBalance().subtract(lockedBalance)));
+        map.put("reason", reason != null ? reason.trim() : "");
+        map.put("message", "자산 회수가 완료되었습니다.");
+        return map;
+    }
+
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getAllOrders() {
         return orderRepository.findAll().stream().map(o -> {
@@ -150,6 +215,7 @@ public class AdminService {
         return assetRepository.findAll().stream().map(a -> {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("assetId", a.getAssetId());
+            map.put("memberId", a.getMember().getMemberId());
             map.put("memberEmail", a.getMember().getEmail());
             map.put("memberName", a.getMember().getName());
             map.put("assetType", a.getAssetType());
@@ -310,5 +376,20 @@ public class AdminService {
 
     private boolean isBlank(String s) {
         return s == null || s.isBlank();
+    }
+
+    private String normalizeAssetType(String assetType) {
+        return assetType == null ? "" : assetType.trim().toUpperCase();
+    }
+
+    private BigDecimal normalizeAmount(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value.setScale(ASSET_SCALE, RoundingMode.DOWN);
+    }
+
+    private BigDecimal nonNegative(BigDecimal value) {
+        if (value.compareTo(BigDecimal.ZERO) < 0 && value.abs().compareTo(EPSILON) <= 0) {
+            return BigDecimal.ZERO;
+        }
+        return value.max(BigDecimal.ZERO);
     }
 }

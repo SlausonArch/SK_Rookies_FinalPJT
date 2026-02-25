@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import styled from 'styled-components';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { API_BASE, formatDate, getAccessToken, getAuthHeaders, parseRoleFromToken } from './community/common';
@@ -203,7 +203,9 @@ const PageButton = styled.button<{ active: boolean }>`
 
 function Community() {
   const navigate = useNavigate();
+  const location = useLocation();
   const token = getAccessToken();
+  const loginRedirectUrl = `/login?redirect=${encodeURIComponent(`${location.pathname}${location.search || ''}`)}`;
   const role = parseRoleFromToken(token);
   const isAdmin = role === 'ADMIN';
   const authHeaders = getAuthHeaders(token);
@@ -262,7 +264,7 @@ function Community() {
   const onClickWrite = () => {
     if (!token) {
       alert('로그인 후 글쓰기가 가능합니다.');
-      navigate('/login');
+      navigate(loginRedirectUrl);
       return;
     }
     navigate('/community/write');

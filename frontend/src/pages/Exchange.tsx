@@ -206,7 +206,11 @@ const TabContent = styled.div`
 // 내 거래내역 컴포넌트 (Exchange 내부용)
 const MyHistory = ({ market }: { market: string }) => {
   const [data, setData] = useState<any[]>([]);
+  const [openOrders, setOpenOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [cancellingOrderId, setCancellingOrderId] = useState<number | null>(null);
+
+  const assetType = market.replace('KRW-', '');
 
   useEffect(() => {
     const fetchHistory = async () => {
@@ -215,11 +219,19 @@ const MyHistory = ({ market }: { market: string }) => {
 
       setLoading(true);
       try {
-        const assetType = market.replace('KRW-', '');
-        const res = await axios.get(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/transactions?assetType=${assetType}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        setData(res.data || []);
+        const headers = { Authorization: `Bearer ${token}` };
+        const [txRes, openRes] = await Promise.all([
+          axios.get(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/transactions?assetType=${assetType}`, {
+            headers,
+          }),
+          axios.get(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/orders/open`, {
+            headers,
+          }),
+        ]);
+
+        setData(txRes.data || []);
+        const allOpen = Array.isArray(openRes.data) ? openRes.data : [];
+        setOpenOrders(allOpen.filter((o: any) => o.assetType === assetType));
       } catch (err) {
         console.error(err);
       } finally {
@@ -228,13 +240,92 @@ const MyHistory = ({ market }: { market: string }) => {
     };
 
     fetchHistory();
-  }, [market]);
+  }, [assetType, market]);
+
+  const handleCancelOrder = async (orderId: number) => {
+    const token = localStorage.getItem('accessToken');
+    if (!token) {
+      alert('로그인이 필요합니다.');
+      return;
+    }
+
+    if (!window.confirm('해당 지정가 주문을 취소하시겠습니까?')) return;
+
+    setCancellingOrderId(orderId);
+    try {
+      await axios.delete(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/orders/${orderId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setOpenOrders(prev => prev.filter((o: any) => o.orderId !== orderId));
+      alert('주문이 취소되었습니다.');
+    } catch (err: any) {
+      alert(err?.response?.data?.message || err?.response?.data || '주문 취소에 실패했습니다.');
+    } finally {
+      setCancellingOrderId(null);
+    }
+  };
 
   if (loading) return <div style={{ padding: '20px', textAlign: 'center' }}>로딩 중...</div>;
-  if (data.length === 0) return <div style={{ padding: '20px', textAlign: 'center', color: '#999' }}>거래 내역이 없습니다.</div>;
+  if (data.length === 0 && openOrders.length === 0) {
+    return <div style={{ padding: '20px', textAlign: 'center', color: '#999' }}>거래 내역과 미체결 주문이 없습니다.</div>;
+  }
 
   return (
     <div style={{ fontSize: '12px' }}>
+      <div style={{ fontWeight: 700, padding: '10px 8px', color: '#1a2e57' }}>미체결 지정가 주문</div>
+      {openOrders.length === 0 ? (
+        <div style={{ padding: '0 8px 12px', color: '#999' }}>현재 미체결 주문이 없습니다.</div>
+      ) : (
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '10px' }}>
+          <thead>
+            <tr style={{ background: '#f8f9fa', color: '#666', borderBottom: '1px solid #eee' }}>
+              <th style={{ padding: '8px', textAlign: 'left' }}>주문시간</th>
+              <th style={{ padding: '8px', textAlign: 'center' }}>구분</th>
+              <th style={{ padding: '8px', textAlign: 'right' }}>주문가</th>
+              <th style={{ padding: '8px', textAlign: 'right' }}>미체결</th>
+              <th style={{ padding: '8px', textAlign: 'center' }}>관리</th>
+            </tr>
+          </thead>
+          <tbody>
+            {openOrders.map((order: any) => {
+              const remaining = Math.max(Number(order.amount || 0) - Number(order.filledAmount || 0), 0);
+              return (
+                <tr key={order.orderId} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                  <td style={{ padding: '8px', color: '#666' }}>
+                    {new Date(order.createdAt).toLocaleDateString()}<br />
+                    {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </td>
+                  <td style={{ padding: '8px', textAlign: 'center', fontWeight: 700, color: order.orderType === 'BUY' ? '#d60000' : '#0051c7' }}>
+                    {order.orderType === 'BUY' ? '매수' : '매도'}
+                  </td>
+                  <td style={{ padding: '8px', textAlign: 'right' }}>{Math.round(Number(order.price || 0)).toLocaleString()}</td>
+                  <td style={{ padding: '8px', textAlign: 'right' }}>{remaining.toFixed(8).replace(/\.?0+$/, '')}</td>
+                  <td style={{ padding: '8px', textAlign: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={() => handleCancelOrder(Number(order.orderId))}
+                      disabled={cancellingOrderId === Number(order.orderId)}
+                      style={{
+                        border: '1px solid #d9dee8',
+                        background: '#fff',
+                        color: '#444',
+                        borderRadius: '6px',
+                        padding: '4px 8px',
+                        cursor: cancellingOrderId === Number(order.orderId) ? 'not-allowed' : 'pointer',
+                        opacity: cancellingOrderId === Number(order.orderId) ? 0.6 : 1
+                      }}
+                    >
+                      취소
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+
+      <div style={{ fontWeight: 700, padding: '10px 8px', color: '#1a2e57' }}>체결 거래 내역</div>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
           <tr style={{ background: '#f8f9fa', color: '#666', borderBottom: '1px solid #eee' }}>
@@ -245,24 +336,30 @@ const MyHistory = ({ market }: { market: string }) => {
           </tr>
         </thead>
         <tbody>
-          {data.map((tx: any) => (
-            <tr key={tx.txId} style={{ borderBottom: '1px solid #f0f0f0' }}>
-              <td style={{ padding: '8px', color: '#666' }}>
-                {new Date(tx.txDate).toLocaleDateString()}<br />
-                {new Date(tx.txDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </td>
-              <td style={{ padding: '8px', textAlign: 'center' }}>
-                <span style={{
-                  color: tx.txType === 'BUY' ? '#d60000' : tx.txType === 'SELL' ? '#0051c7' : '#333',
-                  fontWeight: 'bold'
-                }}>
-                  {tx.txType === 'BUY' ? '매수' : tx.txType === 'SELL' ? '매도' : tx.txType === 'DEPOSIT' ? '입금' : '출금'}
-                </span>
-              </td>
-              <td style={{ padding: '8px', textAlign: 'right' }}>{(tx.txType === 'DEPOSIT' || tx.txType === 'WITHDRAW') ? '-' : `≈ ${Math.round(tx.price).toLocaleString()}`}</td>
-              <td style={{ padding: '8px', textAlign: 'right' }}>{Number(tx.amount).toFixed(5)}</td>
+          {data.length === 0 ? (
+            <tr>
+              <td colSpan={4} style={{ padding: '14px', textAlign: 'center', color: '#999' }}>체결 내역이 없습니다.</td>
             </tr>
-          ))}
+          ) : (
+            data.map((tx: any) => (
+              <tr key={tx.txId} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                <td style={{ padding: '8px', color: '#666' }}>
+                  {new Date(tx.txDate).toLocaleDateString()}<br />
+                  {new Date(tx.txDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </td>
+                <td style={{ padding: '8px', textAlign: 'center' }}>
+                  <span style={{
+                    color: tx.txType === 'BUY' ? '#d60000' : tx.txType === 'SELL' ? '#0051c7' : '#333',
+                    fontWeight: 'bold'
+                  }}>
+                    {tx.txType === 'BUY' ? '매수' : tx.txType === 'SELL' ? '매도' : tx.txType === 'DEPOSIT' ? '입금' : '출금'}
+                  </span>
+                </td>
+                <td style={{ padding: '8px', textAlign: 'right' }}>{(tx.txType === 'DEPOSIT' || tx.txType === 'WITHDRAW') ? '-' : `${Math.round(tx.price).toLocaleString()}`}</td>
+                <td style={{ padding: '8px', textAlign: 'right' }}>{Number(tx.amount).toFixed(8).replace(/\.?0+$/, '')}</td>
+              </tr>
+            ))
+          )}
         </tbody>
       </table>
     </div>

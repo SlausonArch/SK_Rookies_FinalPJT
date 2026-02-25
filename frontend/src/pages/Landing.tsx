@@ -30,6 +30,32 @@ const CanvasWrapper = styled.div`
   z-index: 1;
 `;
 
+const TopActions = styled.div`
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 20;
+  display: flex;
+  gap: 10px;
+  pointer-events: auto;
+`;
+
+const TopActionButton = styled.button`
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 10px;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+`;
+
 const Overlay = styled.div`
   position: relative;
   z-index: 10;
@@ -85,6 +111,7 @@ const ActionButton = styled.button<{ $variant?: 'bank' | 'crypto' }>`
 const Landing: React.FC = () => {
     const sceneRef = useRef<HTMLDivElement>(null);
     const navigate = useNavigate();
+    const isLoggedIn = !!localStorage.getItem('accessToken');
 
     useEffect(() => {
         if (!sceneRef.current) return;
@@ -207,6 +234,11 @@ const Landing: React.FC = () => {
     return (
         <Container>
             <CanvasWrapper ref={sceneRef} />
+            {!isLoggedIn && (
+                <TopActions>
+                    <TopActionButton onClick={() => navigate(`/login?redirect=${encodeURIComponent('/')}`)}>로그인</TopActionButton>
+                </TopActions>
+            )}
             <Overlay>
                 <Title>디지털 자산의 모든 것</Title>
                 <Subtitle>은행 시스템과 가상 자산 거래소를 하나의 플랫폼에서 경험하세요.</Subtitle>

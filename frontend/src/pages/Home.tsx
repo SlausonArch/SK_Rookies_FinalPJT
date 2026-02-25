@@ -428,7 +428,7 @@ const Home: React.FC = () => {
 
           <HeroActions>
             <CTAButton to="/exchange">거래소 둘러보기</CTAButton>
-            {!isLoggedIn && <LoginButton to="/login">로그인</LoginButton>}
+            {!isLoggedIn && <LoginButton to={`/login?redirect=${encodeURIComponent('/crypto')}`}>로그인</LoginButton>}
           </HeroActions>
         </HeroSection>
 

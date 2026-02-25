@@ -842,6 +842,7 @@ interface OrderRow {
 }
 interface AssetRow {
   assetId: number;
+  memberId: number;
   memberEmail: string;
   memberName: string;
   assetType: string;
@@ -914,6 +915,7 @@ function toneFromTxType(t: string): 'success' | 'danger' | 'warn' | 'info' | 'ne
   if (t === 'SELL') return 'info';
   if (t === 'DEPOSIT') return 'success';
   if (t === 'WITHDRAW') return 'warn';
+  if (t === 'ADMIN_RECLAIM') return 'danger';
   return 'neutral';
 }
 
@@ -941,6 +943,10 @@ const AdminDashboard = () => {
   const [selectedInquiry, setSelectedInquiry] = useState<InquiryRow | null>(null);
   const [replyContent, setReplyContent] = useState('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [reclaimTarget, setReclaimTarget] = useState<AssetRow | null>(null);
+  const [reclaimAmount, setReclaimAmount] = useState('');
+  const [reclaimReason, setReclaimReason] = useState('');
+  const [isReclaiming, setIsReclaiming] = useState(false);
 
   const [settingsMsg, setSettingsMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [newPw, setNewPw] = useState('');
@@ -1071,6 +1077,56 @@ const AdminDashboard = () => {
       alert('신분증 승인 완료: 회원 상태가 ACTIVE로 변경되었습니다.');
     } catch (err: any) {
       alert(err?.response?.data?.message || '신분증 승인 처리에 실패했습니다.');
+    }
+  };
+
+  const openReclaimModal = (asset: AssetRow) => {
+    setReclaimTarget(asset);
+    setReclaimAmount('');
+    setReclaimReason('');
+  };
+
+  const closeReclaimModal = () => {
+    if (isReclaiming) return;
+    setReclaimTarget(null);
+    setReclaimAmount('');
+    setReclaimReason('');
+  };
+
+  const handleReclaimAsset = async () => {
+    if (!reclaimTarget) return;
+
+    const parsedAmount = Number(reclaimAmount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      alert('회수 수량은 0보다 커야 합니다.');
+      return;
+    }
+    if (!reclaimReason.trim()) {
+      alert('회수 사유를 입력해 주세요.');
+      return;
+    }
+
+    try {
+      setIsReclaiming(true);
+      const response = await axios.patch(
+        `${API_BASE}/api/admin/members/${reclaimTarget.memberId}/assets/reclaim`,
+        {
+          assetType: reclaimTarget.assetType,
+          amount: reclaimAmount,
+          reason: reclaimReason.trim(),
+        },
+        { headers }
+      );
+
+      setReclaimTarget(null);
+      setReclaimAmount('');
+      setReclaimReason('');
+      fetchData();
+      alert(response?.data?.message || '자산 회수가 완료되었습니다.');
+    } catch (err: any) {
+      alert(err?.response?.data?.message || '자산 회수에 실패했습니다.');
+    } finally {
+      setIsReclaiming(false);
     }
   };
 
@@ -1384,18 +1440,29 @@ const AdminDashboard = () => {
                     <th>자산</th>
                     <th>잔고</th>
                     <th>잠금</th>
+                    <th>관리</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {assets.map(a => (
-                    <tr key={a.assetId}>
-                      <td>{a.memberName}</td>
-                      <td>{a.memberEmail}</td>
-                      <td>{a.assetType}</td>
-                      <td>{a.assetType === 'KRW' ? fmt(a.balance) : a.balance}</td>
-                      <td>{a.lockedBalance > 0 ? a.lockedBalance : '-'}</td>
-                    </tr>
-                  ))}
+                  {assets.map(a => {
+                    const reclaimable = Math.max(0, Number(a.balance) - Number(a.lockedBalance));
+                    return (
+                      <tr key={a.assetId}>
+                        <td>{a.memberName}</td>
+                        <td>{a.memberEmail}</td>
+                        <td>{a.assetType}</td>
+                        <td>{a.assetType === 'KRW' ? fmt(a.balance) : a.balance}</td>
+                        <td>{a.lockedBalance > 0 ? a.lockedBalance : '-'}</td>
+                        <td>
+                          {a.assetType !== 'KRW' && (
+                            <GhostButton onClick={() => openReclaimModal(a)} disabled={reclaimable <= 0}>
+                              코인 회수
+                            </GhostButton>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </Table>
             )}
@@ -1420,6 +1487,7 @@ const AdminDashboard = () => {
                 <option value="WITHDRAW">WITHDRAW</option>
                 <option value="BUY">BUY</option>
                 <option value="SELL">SELL</option>
+                <option value="ADMIN_RECLAIM">ADMIN_RECLAIM</option>
               </Select>
               <Input
                 type="date"
@@ -1913,6 +1981,50 @@ const AdminDashboard = () => {
                   </ModalButton>
                   <ModalButton $variant="primary" onClick={handleReplyInquiry}>
                     {selectedInquiry.status === 'ANSWERED' ? '답변 수정' : '답변 등록'}
+                  </ModalButton>
+                </ModalButtonGroup>
+              </ModalContainer>
+            </ModalOverlay>
+          )}
+
+          {reclaimTarget && (
+            <ModalOverlay onClick={closeReclaimModal}>
+              <ModalContainer onClick={e => e.stopPropagation()} style={{ width: '560px' }}>
+                <ModalTitle>코인 회수</ModalTitle>
+                <ModalMeta>
+                  대상 회원: {reclaimTarget.memberName} ({reclaimTarget.memberEmail})
+                  <br />
+                  가용 잔고: {fmt(Math.max(0, Number(reclaimTarget.balance) - Number(reclaimTarget.lockedBalance)), 8)} {reclaimTarget.assetType}
+                </ModalMeta>
+
+                <div style={{ marginBottom: 6, fontSize: 12, fontWeight: 950, color: COLORS.muted }}>회수 코인</div>
+                <Input value={reclaimTarget.assetType} disabled style={{ width: '100%', marginBottom: 10, opacity: 0.8 }} />
+
+                <div style={{ marginBottom: 6, fontSize: 12, fontWeight: 950, color: COLORS.muted }}>회수 수량</div>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.00000001"
+                  value={reclaimAmount}
+                  onChange={e => setReclaimAmount(e.target.value)}
+                  placeholder="예: 12.34567890"
+                  style={{ width: '100%', marginBottom: 10 }}
+                />
+
+                <div style={{ marginBottom: 6, fontSize: 12, fontWeight: 950, color: COLORS.muted }}>회수 사유</div>
+                <Textarea
+                  value={reclaimReason}
+                  onChange={e => setReclaimReason(e.target.value)}
+                  placeholder="오지급, 부정 사용 등 회수 사유를 입력하세요."
+                  style={{ minHeight: 96 }}
+                />
+
+                <ModalButtonGroup style={{ marginTop: 12 }}>
+                  <ModalButton $variant="ghost" onClick={closeReclaimModal} disabled={isReclaiming}>
+                    취소
+                  </ModalButton>
+                  <ModalButton $variant="danger" onClick={handleReclaimAsset} disabled={isReclaiming}>
+                    {isReclaiming ? '회수 중...' : '회수 실행'}
                   </ModalButton>
                 </ModalButtonGroup>
               </ModalContainer>

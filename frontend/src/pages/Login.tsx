@@ -130,10 +130,30 @@ const FooterLink = styled.div`
   }
 `;
 
+function sanitizeRedirectTarget(target: string | null | undefined): string {
+  if (!target) return '/';
+  const trimmed = target.trim();
+  if (!trimmed.startsWith('/') || trimmed.startsWith('//')) return '/';
+  if (trimmed.startsWith('/login') || trimmed.startsWith('/oauth/callback')) return '/';
+  return trimmed;
+}
+
 const Login: React.FC = () => {
   const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const redirectFromQuery = sanitizeRedirectTarget(searchParams.get('redirect'));
+
+  const rememberRedirectTarget = () => {
+    localStorage.setItem('postLoginRedirect', redirectFromQuery);
+  };
+
+  const resolveRedirectTarget = () => {
+    const fromStorage = sanitizeRedirectTarget(localStorage.getItem('postLoginRedirect'));
+    const target = fromStorage !== '/' ? fromStorage : redirectFromQuery;
+    localStorage.removeItem('postLoginRedirect');
+    return target;
+  };
 
   const toUserMessage = (raw: unknown) => {
     const code = String(raw ?? '');
@@ -158,6 +178,15 @@ const Login: React.FC = () => {
     window.alert(msg);
   }, [searchParams]);
 
+  useEffect(() => {
+    rememberRedirectTarget();
+  }, [redirectFromQuery]);
+
+  const handleSocialLogin = (provider: 'kakao' | 'naver') => {
+    rememberRedirectTarget();
+    window.location.href = `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/oauth2/authorization/${provider}`;
+  };
+
   const handleTestLogin = async () => {
     setLoading(true);
     setError('');
@@ -168,7 +197,7 @@ const Login: React.FC = () => {
       });
       localStorage.setItem('accessToken', data.accessToken);
       localStorage.setItem('refreshToken', data.refreshToken);
-      window.location.href = '/';
+      window.location.href = resolveRedirectTarget();
     } catch (e: any) {
       const msg = toUserMessage(e.response?.data?.message || e.response?.data);
       setError(msg);
@@ -188,13 +217,21 @@ const Login: React.FC = () => {
 
         <SocialButton
           provider="kakao"
-          href={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/oauth2/authorization/kakao`}
+          href="#"
+          onClick={(e) => {
+            e.preventDefault();
+            handleSocialLogin('kakao');
+          }}
         >
           카카오로 시작하기
         </SocialButton>
         <SocialButton
           provider="naver"
-          href={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/oauth2/authorization/naver`}
+          href="#"
+          onClick={(e) => {
+            e.preventDefault();
+            handleSocialLogin('naver');
+          }}
         >
           네이버로 시작하기
         </SocialButton>

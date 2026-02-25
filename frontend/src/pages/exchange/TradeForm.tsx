@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import styled, { keyframes } from 'styled-components';
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { CheckCircle2, AlertCircle, TrendingUp, TrendingDown, Clock, Info } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
@@ -199,8 +199,30 @@ function showRestrictionPopupIfNeeded(msg: string): void {
   }
 }
 
+const COIN_SCALE = 8;
+const ORDER_EPSILON = 0.00000001;
+
+function parseNumber(str: string): number {
+  const normalized = str.replace(/,/g, '').trim();
+  if (!normalized) return 0;
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function floorToScale(value: number, scale: number): number {
+  if (!Number.isFinite(value)) return 0;
+  const factor = 10 ** scale;
+  return Math.floor((value + Number.EPSILON) * factor) / factor;
+}
+
+function formatScaleValue(value: number, scale: number): string {
+  const floored = floorToScale(value, scale);
+  return floored.toFixed(scale).replace(/\.?0+$/, '');
+}
+
 const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, tradeType }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   // const [tab, setTab] = useState<'buy' | 'sell'>('buy'); // 제거됨
   const [price, setPrice] = useState('');
   const [amount, setAmount] = useState('');
@@ -212,6 +234,7 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
   const token = getToken();
   const isLoggedIn = !!token;
   const assetType = market.replace('KRW-', '');
+  const currentRoute = `${location.pathname}${location.search || ''}`;
 
   // ... (useEffect 및 핸들러들은 그대로 유지)
 
@@ -254,8 +277,6 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
       .catch(() => { });
   }, [isLoggedIn, token, assetType, message]);
 
-  // 쉼표 제거하여 파싱
-  const parseNumber = (str: string) => parseFloat(str.replace(/,/g, '')) || 0;
   const total = parseNumber(price) * parseNumber(amount);
 
   const handlePercent = (pct: number) => {
@@ -267,13 +288,14 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
 
     if (tradeType === 'buy') {
       // 매수 시: 필요한 총 KRW = (현재가 * 수량) + (현재가 * 수량 * 수수료율)
-      const feeRate = 0.0005; // 임시 기본 수수료
+      const feeRate = 0.0008; // 백엔드 잠금 로직의 최대 수수료 기준
       const allocatedBalance = krwBalance * (pct / 100);
       const maxAmount = allocatedBalance / (p * (1 + feeRate));
 
-      setAmount(maxAmount.toFixed(5));
+      setAmount(formatScaleValue(maxAmount, COIN_SCALE));
     } else {
-      setAmount((coinBalance * pct / 100).toFixed(5));
+      const sellAmount = pct === 100 ? coinBalance : (coinBalance * pct / 100);
+      setAmount(formatScaleValue(sellAmount, COIN_SCALE));
     }
   };
 
@@ -306,10 +328,10 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
     if (!token || loading) return;
 
     // 시장가 주문 시에는 무조건 currentPrice 사용, 지정가는 입력된 price 사용
-    const p = isMarket ? currentPrice : parseNumber(price);
+    const p = floorToScale(isMarket ? currentPrice : parseNumber(price), 8);
 
     // 수량 계산
-    let a = parseNumber(amount);
+    let a = floorToScale(parseNumber(amount), COIN_SCALE);
 
     if (!p || p <= 0) {
       setMessage({ text: '가격 정보가 올바르지 않습니다.', success: false });
@@ -321,11 +343,22 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
       return;
     }
 
+    if (tradeType === 'sell') {
+      const available = floorToScale(coinBalance, COIN_SCALE);
+      if (a > available && (a - available) <= ORDER_EPSILON * 5) {
+        a = available;
+      }
+      if (a > available + ORDER_EPSILON) {
+        setMessage({ text: `${assetType} 주문 가능 수량을 초과했습니다.`, success: false });
+        return;
+      }
+    }
+
     setLoading(true);
     setMessage(null);
 
     try {
-      await axios.post(`${API_BASE}/api/orders`, {
+      const { data } = await axios.post(`${API_BASE}/api/orders`, {
         orderType: tradeType === 'buy' ? 'BUY' : 'SELL',
         priceType: isMarket ? 'MARKET' : 'LIMIT',
         assetType,
@@ -334,12 +367,17 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
       }, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setMessage({
-        text: isMarket
-          ? `시장가 ${tradeType === 'buy' ? '매수' : '매도'} 주문이 체결되었습니다.`
-          : `지정가 ${tradeType === 'buy' ? '매수' : '매도'} 주문이 접수되었습니다. (체결 대기)`,
-        success: true,
-      });
+      const status = String(data?.status || '');
+      let successText = `지정가 ${tradeType === 'buy' ? '매수' : '매도'} 주문이 접수되었습니다. (체결 대기)`;
+      if (isMarket) {
+        successText = `시장가 ${tradeType === 'buy' ? '매수' : '매도'} 주문이 체결되었습니다.`;
+      } else if (status === 'FILLED') {
+        successText = `지정가 ${tradeType === 'buy' ? '매수' : '매도'} 주문이 체결되었습니다.`;
+      } else if (status === 'PARTIAL') {
+        successText = `지정가 ${tradeType === 'buy' ? '매수' : '매도'} 주문이 일부 체결되었습니다.`;
+      }
+
+      setMessage({ text: successText, success: true });
       setAmount('');
     } catch (err: any) {
       const raw = err.response?.data?.message || err.response?.data || '주문에 실패했습니다.';
@@ -356,7 +394,9 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
       <Container>
         <LoginMessage>
           <Info size={32} color="#999" />
-          <span><a href="/login">로그인</a> 후 지정가 주문 및 거래를 이용해 주세요.</span>
+          <span>
+            <a href={`/login?redirect=${encodeURIComponent(currentRoute)}`}>로그인</a> 후 지정가 주문 및 거래를 이용해 주세요.
+          </span>
         </LoginMessage>
       </Container>
     );
@@ -367,9 +407,9 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
       <FormBody>
         <BalanceInfo>
           {tradeType === 'buy' ? (
-            <>주문가능: <span>≈ {Math.round(krwBalance).toLocaleString()} KRW</span></>
+            <>주문가능: <span>{Math.round(krwBalance).toLocaleString()} KRW</span></>
           ) : (
-            <>주문가능: <span>{Number(coinBalance).toFixed(5)} {assetType}</span></>
+            <>주문가능: <span>{formatScaleValue(coinBalance, COIN_SCALE)} {assetType}</span></>
           )}
         </BalanceInfo>
 

@@ -302,7 +302,8 @@ const Support: React.FC = () => {
   const handleWriteClick = () => {
     if (!isLoggedIn) {
       alert('로그인이 필요한 서비스입니다.');
-      window.location.href = '/login';
+      const redirect = encodeURIComponent(`${window.location.pathname}${window.location.search}`);
+      window.location.href = `/login?redirect=${redirect}`;
       return;
     }
     setIsWriting(true);
