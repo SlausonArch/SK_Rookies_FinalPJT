@@ -72,6 +72,7 @@ public class SecurityConfig {
                                                 .permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/api/community/posts/**").permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/api/news").permitAll()
+                                                .requestMatchers(HttpMethod.GET, "/api/market/**").permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/api/support/faqs").permitAll()
                                                 .requestMatchers("/api/auth/signup/complete").hasRole("GUEST") // Need
                                                                                                                // Guest

@@ -1,6 +1,8 @@
 import axios from 'axios';
 
 const UPBIT_API = 'https://api.upbit.com/v1';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+const PROXY_API = `${API_BASE}/api/market`;
 
 export interface UpbitMarket {
   market: string;
@@ -34,16 +36,28 @@ export interface UpbitCandle {
 }
 
 export async function fetchKRWMarkets(): Promise<UpbitMarket[]> {
-  const { data } = await axios.get<UpbitMarket[]>(`${UPBIT_API}/market/all`);
-  return data.filter(m => m.market.startsWith('KRW-'));
+  try {
+    const { data } = await axios.get<UpbitMarket[]>(`${PROXY_API}/all`);
+    return data.filter(m => m.market.startsWith('KRW-'));
+  } catch {
+    const { data } = await axios.get<UpbitMarket[]>(`${UPBIT_API}/market/all`);
+    return data.filter(m => m.market.startsWith('KRW-'));
+  }
 }
 
 export async function fetchTickers(markets: string[]): Promise<UpbitTicker[]> {
   if (markets.length === 0) return [];
-  const { data } = await axios.get<UpbitTicker[]>(
-    `${UPBIT_API}/ticker?markets=${markets.join(',')}`
-  );
-  return data;
+  try {
+    const { data } = await axios.get<UpbitTicker[]>(`${PROXY_API}/ticker`, {
+      params: { markets: markets.join(',') },
+    });
+    return data;
+  } catch {
+    const { data } = await axios.get<UpbitTicker[]>(
+      `${UPBIT_API}/ticker?markets=${markets.join(',')}`
+    );
+    return data;
+  }
 }
 
 export async function fetchMinuteCandles(
@@ -51,18 +65,32 @@ export async function fetchMinuteCandles(
   unit: number = 1,
   count: number = 200
 ): Promise<UpbitCandle[]> {
-  const { data } = await axios.get<UpbitCandle[]>(
-    `${UPBIT_API}/candles/minutes/${unit}?market=${market}&count=${count}`
-  );
-  return data.reverse();
+  try {
+    const { data } = await axios.get<UpbitCandle[]>(`${PROXY_API}/candles/minutes/${unit}`, {
+      params: { market, count },
+    });
+    return data.reverse();
+  } catch {
+    const { data } = await axios.get<UpbitCandle[]>(
+      `${UPBIT_API}/candles/minutes/${unit}?market=${market}&count=${count}`
+    );
+    return data.reverse();
+  }
 }
 
 export async function fetchDayCandles(
   market: string,
   count: number = 200
 ): Promise<UpbitCandle[]> {
-  const { data } = await axios.get<UpbitCandle[]>(
-    `${UPBIT_API}/candles/days?market=${market}&count=${count}`
-  );
-  return data.reverse();
+  try {
+    const { data } = await axios.get<UpbitCandle[]>(`${PROXY_API}/candles/days`, {
+      params: { market, count },
+    });
+    return data.reverse();
+  } catch {
+    const { data } = await axios.get<UpbitCandle[]>(
+      `${UPBIT_API}/candles/days?market=${market}&count=${count}`
+    );
+    return data.reverse();
+  }
 }
