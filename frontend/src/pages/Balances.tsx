@@ -211,7 +211,7 @@ const Balances = () => {
   const [assets, setAssets] = useState<any[]>([]);
 
   // 투자 원금 및 수익률
-  const [totalInvestment, setTotalInvestment] = useState(0);
+  const [, setTotalInvestment] = useState(0);
 
   // 실시간 코인 시세
   const [coinPrices, setCoinPrices] = useState({

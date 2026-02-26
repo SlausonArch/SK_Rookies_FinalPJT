@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { fetchTickers } from '../services/upbitApi';
 import type { UpbitTicker } from '../services/upbitApi';
-import { TrendingUp, TrendingDown, ArrowRightLeft, Download, Upload, Clock } from 'lucide-react';
+import { TrendingUp, TrendingDown, Download, Upload } from 'lucide-react';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 
@@ -255,16 +255,6 @@ const PageButton = styled.button<{ $active?: boolean }>`
     opacity: 0.45;
     cursor: not-allowed;
   }
-`;
-
-const InfoBanner = styled.div`
-  border: 1px solid #dbe6ff;
-  background: #f3f7ff;
-  color: #334155;
-  border-radius: 10px;
-  padding: 12px 14px;
-  font-size: 13px;
-  margin-bottom: 16px;
 `;
 
 const PerformanceNotice = styled.div`
@@ -575,7 +565,7 @@ const Investments = () => {
   const [krwBalance, setKrwBalance] = useState(0);
 
   // 투자원금
-  const [totalInvestment, setTotalInvestment] = useState(0);
+  const [, setTotalInvestment] = useState(0);
 
   // 실시간 코인 시세 및 변동액
   const [coinPrices, setCoinPrices] = useState<Record<string, { price: number, changePrice: number }>>({});

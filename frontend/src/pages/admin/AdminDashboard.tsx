@@ -475,29 +475,6 @@ const FilterRow = styled.div`
   margin-bottom: 12px;
 `;
 
-const SearchInput = styled.input`
-  width: 260px;
-  padding: 10px 14px 10px 38px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 8px;
-  font-size: 13.5px;
-  font-weight: 700;
-  outline: none;
-  background: rgba(0, 0, 0, 0.02);
-  transition: all 180ms ease;
-
-  &:focus {
-    background: #fff;
-    border-color: ${COLORS.borderHover};
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-  }
-
-  &::placeholder {
-    color: #a0aabf;
-    font-weight: 600;
-  }
-`;
-
 const ImageModalOverlay = styled.div`
   position: fixed;
   top: 0;
