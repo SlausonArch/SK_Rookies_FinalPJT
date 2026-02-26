@@ -45,19 +45,59 @@ export async function fetchKRWMarkets(): Promise<UpbitMarket[]> {
   }
 }
 
+export interface UpbitOrderbook {
+  market: string;
+  timestamp: number;
+  total_ask_size: number;
+  total_bid_size: number;
+  orderbook_units: {
+    ask_price: number;
+    bid_price: number;
+    ask_size: number;
+    bid_size: number;
+  }[];
+}
+
+export interface UpbitTradeTick {
+  market: string;
+  trade_price: number;
+  trade_volume: number;
+  ask_bid: 'ASK' | 'BID';
+  timestamp: number;
+  sequential_id: number;
+  trade_date_utc?: string;
+  trade_time_utc?: string;
+}
+
+const chunkMarkets = (markets: string[], size: number) => {
+  const chunks: string[][] = [];
+  for (let i = 0; i < markets.length; i += size) {
+    chunks.push(markets.slice(i, i + size));
+  }
+  return chunks;
+};
+
 export async function fetchTickers(markets: string[]): Promise<UpbitTicker[]> {
   if (markets.length === 0) return [];
-  try {
-    const { data } = await axios.get<UpbitTicker[]>(`${PROXY_API}/ticker`, {
-      params: { markets: markets.join(',') },
-    });
-    return data;
-  } catch {
-    const { data } = await axios.get<UpbitTicker[]>(
-      `${UPBIT_API}/ticker?markets=${markets.join(',')}`
-    );
-    return data;
+
+  const chunks = chunkMarkets(markets, 100);
+  const merged: UpbitTicker[] = [];
+
+  for (const chunk of chunks) {
+    try {
+      const { data } = await axios.get<UpbitTicker[]>(`${PROXY_API}/ticker`, {
+        params: { markets: chunk.join(',') },
+      });
+      merged.push(...data);
+    } catch {
+      const { data } = await axios.get<UpbitTicker[]>(
+        `${UPBIT_API}/ticker?markets=${chunk.join(',')}`
+      );
+      merged.push(...data);
+    }
   }
+
+  return merged;
 }
 
 export async function fetchMinuteCandles(
@@ -92,5 +132,40 @@ export async function fetchDayCandles(
       `${UPBIT_API}/candles/days?market=${market}&count=${count}`
     );
     return data.reverse();
+  }
+}
+
+export async function fetchOrderbook(market: string): Promise<UpbitOrderbook | null> {
+  if (!market) return null;
+
+  try {
+    const { data } = await axios.get<UpbitOrderbook[]>(`${PROXY_API}/orderbook`, {
+      params: { markets: market },
+    });
+    return Array.isArray(data) && data.length > 0 ? data[0] : null;
+  } catch {
+    const { data } = await axios.get<UpbitOrderbook[]>(
+      `${UPBIT_API}/orderbook?markets=${market}`
+    );
+    return Array.isArray(data) && data.length > 0 ? data[0] : null;
+  }
+}
+
+export async function fetchTradeTicks(
+  market: string,
+  count: number = 50
+): Promise<UpbitTradeTick[]> {
+  if (!market) return [];
+
+  try {
+    const { data } = await axios.get<UpbitTradeTick[]>(`${PROXY_API}/trades/ticks`, {
+      params: { market, count },
+    });
+    return Array.isArray(data) ? data : [];
+  } catch {
+    const { data } = await axios.get<UpbitTradeTick[]>(
+      `${UPBIT_API}/trades/ticks?market=${market}&count=${count}`
+    );
+    return Array.isArray(data) ? data : [];
   }
 }

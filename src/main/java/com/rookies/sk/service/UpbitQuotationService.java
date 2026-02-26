@@ -52,6 +52,21 @@ public class UpbitQuotationService {
         return sendGet(UPBIT_API + "/candles/days?market=" + encodedMarket + "&count=" + count);
     }
 
+    public String fetchOrderbook(String markets) {
+        if (markets == null || markets.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "markets query is required");
+        }
+        String encoded = URLEncoder.encode(markets, StandardCharsets.UTF_8);
+        return sendGet(UPBIT_API + "/orderbook?markets=" + encoded);
+    }
+
+    public String fetchTradeTicks(String market, int count) {
+        validateMarket(market);
+        validateCount(count);
+        String encodedMarket = URLEncoder.encode(market, StandardCharsets.UTF_8);
+        return sendGet(UPBIT_API + "/trades/ticks?market=" + encodedMarket + "&count=" + count);
+    }
+
     private void validateMarket(String market) {
         if (market == null || market.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "market query is required");

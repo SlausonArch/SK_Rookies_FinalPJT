@@ -51,4 +51,21 @@ public class MarketController {
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(upbitQuotationService.fetchDayCandles(market, count));
     }
+
+    @GetMapping(value = "/orderbook", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<String> getOrderbook(@RequestParam String markets) {
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(upbitQuotationService.fetchOrderbook(markets));
+    }
+
+    @GetMapping(value = "/trades/ticks", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<String> getTradeTicks(
+            @RequestParam String market,
+            @RequestParam(defaultValue = "50") int count
+    ) {
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(upbitQuotationService.fetchTradeTicks(market, count));
+    }
 }

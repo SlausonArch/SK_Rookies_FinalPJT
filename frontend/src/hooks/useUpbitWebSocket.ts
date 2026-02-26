@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { fetchOrderbook, fetchTickers, fetchTradeTicks } from '../services/upbitApi';
 
 export interface TickerWS {
   type: 'ticker';
@@ -46,31 +47,108 @@ export function useUpbitTicker(markets: string[]) {
   useEffect(() => {
     if (markets.length === 0) return;
 
-    const ws = new WebSocket('wss://api.upbit.com/websocket/v1');
-    wsRef.current = ws;
+    let cancelled = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
 
-    ws.onopen = () => {
-      ws.send(JSON.stringify([
-        { ticket: 'vce-ticker' },
-        { type: 'ticker', codes: markets }
-      ]));
+    const decodeJson = async (raw: unknown) => {
+      try {
+        if (typeof raw === 'string') return JSON.parse(raw);
+        if (raw instanceof Blob) return JSON.parse(await raw.text());
+        if (raw instanceof ArrayBuffer) {
+          return JSON.parse(new TextDecoder().decode(raw));
+        }
+      } catch {
+        return null;
+      }
+      return null;
     };
 
-    ws.onmessage = async (event) => {
+    const updateFromRest = async () => {
       try {
-        const text = event.data instanceof Blob
-          ? await event.data.text()
-          : event.data;
-        const data: TickerWS = JSON.parse(text);
-        setTickers((prev: Map<string, TickerWS>) => {
-          const next = new Map(prev);
-          next.set(data.code, data);
+        const rows = await fetchTickers(markets);
+        if (cancelled) return;
+        setTickers(() => {
+          const next = new Map<string, TickerWS>();
+          rows.forEach((r) => {
+            next.set(r.market, {
+              type: 'ticker',
+              code: r.market,
+              trade_price: r.trade_price,
+              signed_change_rate: r.signed_change_rate,
+              signed_change_price: r.signed_change_price,
+              acc_trade_price_24h: r.acc_trade_price_24h,
+              change: r.change,
+              opening_price: r.opening_price,
+              high_price: r.high_price,
+              low_price: r.low_price,
+            });
+          });
           return next;
         });
-      } catch { /* ignore parse errors */ }
+      } catch {
+        // ignore
+      }
     };
 
+    const startPolling = () => {
+      if (pollTimer) return;
+      void updateFromRest();
+      pollTimer = setInterval(() => {
+        void updateFromRest();
+      }, 3000);
+    };
+
+    const stopPolling = () => {
+      if (!pollTimer) return;
+      clearInterval(pollTimer);
+      pollTimer = null;
+    };
+
+    const connect = () => {
+      if (cancelled) return;
+
+      const ws = new WebSocket('wss://api.upbit.com/websocket/v1');
+      ws.binaryType = 'arraybuffer';
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        const wsCodes = markets.slice(0, 100);
+        ws.send(JSON.stringify([
+          { ticket: 'vce-ticker' },
+          { type: 'ticker', codes: wsCodes }
+        ]));
+      };
+
+      ws.onmessage = async (event) => {
+        const data = await decodeJson(event.data);
+        if (!data || data.type !== 'ticker' || !data.code) return;
+
+        setTickers((prev: Map<string, TickerWS>) => {
+          const next = new Map(prev);
+          next.set(data.code, data as TickerWS);
+          return next;
+        });
+      };
+
+      ws.onerror = () => {
+        startPolling();
+      };
+
+      ws.onclose = () => {
+        startPolling();
+        if (cancelled) return;
+        reconnectTimer = setTimeout(connect, 2000);
+      };
+    };
+
+    startPolling();
+    connect();
+
     return () => {
+      cancelled = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      stopPolling();
       if (wsRef.current) {
         wsRef.current.close();
       }
@@ -88,27 +166,92 @@ export function useUpbitOrderbook(market: string) {
   useEffect(() => {
     if (!market) return;
 
-    const ws = new WebSocket('wss://api.upbit.com/websocket/v1');
-    wsRef.current = ws;
+    let cancelled = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
 
-    ws.onopen = () => {
-      ws.send(JSON.stringify([
-        { ticket: 'vce-orderbook' },
-        { type: 'orderbook', codes: [market] }
-      ]));
-    };
-
-    ws.onmessage = async (event) => {
+    const decodeJson = async (raw: unknown) => {
       try {
-        const text = event.data instanceof Blob
-          ? await event.data.text()
-          : event.data;
-        const data: OrderbookWS = JSON.parse(text);
-        setOrderbook(data);
-      } catch { /* ignore */ }
+        if (typeof raw === 'string') return JSON.parse(raw);
+        if (raw instanceof Blob) return JSON.parse(await raw.text());
+        if (raw instanceof ArrayBuffer) {
+          return JSON.parse(new TextDecoder().decode(raw));
+        }
+      } catch {
+        return null;
+      }
+      return null;
     };
+
+    const updateFromRest = async () => {
+      try {
+        const data = await fetchOrderbook(market);
+        if (cancelled || !data) return;
+        setOrderbook({
+          type: 'orderbook',
+          code: data.market,
+          orderbook_units: data.orderbook_units,
+          total_ask_size: data.total_ask_size,
+          total_bid_size: data.total_bid_size,
+        });
+      } catch {
+        // ignore
+      }
+    };
+
+    const startPolling = () => {
+      if (pollTimer) return;
+      void updateFromRest();
+      pollTimer = setInterval(() => {
+        void updateFromRest();
+      }, 1500);
+    };
+
+    const stopPolling = () => {
+      if (!pollTimer) return;
+      clearInterval(pollTimer);
+      pollTimer = null;
+    };
+
+    const connect = () => {
+      if (cancelled) return;
+
+      const ws = new WebSocket('wss://api.upbit.com/websocket/v1');
+      ws.binaryType = 'arraybuffer';
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify([
+          { ticket: 'vce-orderbook' },
+          { type: 'orderbook', codes: [market] }
+        ]));
+        stopPolling();
+      };
+
+      ws.onmessage = async (event) => {
+        const data = await decodeJson(event.data);
+        if (!data || data.type !== 'orderbook') return;
+        setOrderbook(data as OrderbookWS);
+      };
+
+      ws.onerror = () => {
+        startPolling();
+      };
+
+      ws.onclose = () => {
+        startPolling();
+        if (cancelled) return;
+        reconnectTimer = setTimeout(connect, 2000);
+      };
+    };
+
+    startPolling();
+    connect();
 
     return () => {
+      cancelled = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      stopPolling();
       if (wsRef.current) {
         wsRef.current.close();
       }
@@ -127,27 +270,97 @@ export function useUpbitTrades(market: string) {
     if (!market) return;
     setTrades([]);
 
-    const ws = new WebSocket('wss://api.upbit.com/websocket/v1');
-    wsRef.current = ws;
+    let cancelled = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
 
-    ws.onopen = () => {
-      ws.send(JSON.stringify([
-        { ticket: 'vce-trade' },
-        { type: 'trade', codes: [market] }
-      ]));
-    };
-
-    ws.onmessage = async (event) => {
+    const decodeJson = async (raw: unknown) => {
       try {
-        const text = event.data instanceof Blob
-          ? await event.data.text()
-          : event.data;
-        const data: TradeWS = JSON.parse(text);
-        setTrades((prev: TradeWS[]) => [data, ...prev].slice(0, 50));
-      } catch { /* ignore */ }
+        if (typeof raw === 'string') return JSON.parse(raw);
+        if (raw instanceof Blob) return JSON.parse(await raw.text());
+        if (raw instanceof ArrayBuffer) {
+          return JSON.parse(new TextDecoder().decode(raw));
+        }
+      } catch {
+        return null;
+      }
+      return null;
     };
+
+    const updateFromRest = async () => {
+      try {
+        const rows = await fetchTradeTicks(market, 50);
+        if (cancelled) return;
+        const mapped: TradeWS[] = rows.map((row) => ({
+          type: 'trade',
+          code: row.market,
+          trade_price: row.trade_price,
+          trade_volume: row.trade_volume,
+          ask_bid: row.ask_bid,
+          trade_date: row.trade_date_utc || '',
+          trade_time: row.trade_time_utc || '',
+          trade_timestamp: row.timestamp,
+          sequential_id: row.sequential_id,
+        }));
+        setTrades(mapped);
+      } catch {
+        // ignore
+      }
+    };
+
+    const startPolling = () => {
+      if (pollTimer) return;
+      void updateFromRest();
+      pollTimer = setInterval(() => {
+        void updateFromRest();
+      }, 2000);
+    };
+
+    const stopPolling = () => {
+      if (!pollTimer) return;
+      clearInterval(pollTimer);
+      pollTimer = null;
+    };
+
+    const connect = () => {
+      if (cancelled) return;
+
+      const ws = new WebSocket('wss://api.upbit.com/websocket/v1');
+      ws.binaryType = 'arraybuffer';
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify([
+          { ticket: 'vce-trade' },
+          { type: 'trade', codes: [market] }
+        ]));
+        stopPolling();
+      };
+
+      ws.onmessage = async (event) => {
+        const data = await decodeJson(event.data);
+        if (!data || data.type !== 'trade') return;
+        setTrades((prev: TradeWS[]) => [data as TradeWS, ...prev].slice(0, 50));
+      };
+
+      ws.onerror = () => {
+        startPolling();
+      };
+
+      ws.onclose = () => {
+        startPolling();
+        if (cancelled) return;
+        reconnectTimer = setTimeout(connect, 2000);
+      };
+    };
+
+    startPolling();
+    connect();
 
     return () => {
+      cancelled = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      stopPolling();
       if (wsRef.current) {
         wsRef.current.close();
       }
