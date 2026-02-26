@@ -26,6 +26,7 @@ export interface Comment {
 }
 
 export const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+const KST_TIME_ZONE = 'Asia/Seoul';
 
 export function getAccessToken(): string | null {
   return localStorage.getItem('accessToken') || localStorage.getItem('token');
@@ -58,9 +59,40 @@ export function formatDate(value: string | null): string {
     return '-';
   }
 
-  const date = new Date(value);
+  const normalized = value.includes('T') ? value : value.replace(' ', 'T');
+  const hasTimezone = /([zZ]|[+\-]\d{2}:\d{2})$/.test(normalized);
+  const date = new Date(hasTimezone ? normalized : `${normalized}Z`);
   if (Number.isNaN(date.getTime())) {
     return '-';
   }
-  return date.toLocaleString('ko-KR');
+  return date.toLocaleString('ko-KR', {
+    timeZone: KST_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  });
+}
+
+export function formatDateOnly(value: string | null): string {
+  if (!value) {
+    return '-';
+  }
+
+  const normalized = value.includes('T') ? value : value.replace(' ', 'T');
+  const hasTimezone = /([zZ]|[+\-]\d{2}:\d{2})$/.test(normalized);
+  const date = new Date(hasTimezone ? normalized : `${normalized}Z`);
+  if (Number.isNaN(date.getTime())) {
+    return '-';
+  }
+
+  return date.toLocaleDateString('ko-KR', {
+    timeZone: KST_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
 }

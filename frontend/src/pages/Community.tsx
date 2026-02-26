@@ -4,7 +4,7 @@ import styled from 'styled-components';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
-import { API_BASE, formatDate, getAccessToken, getAuthHeaders, parseRoleFromToken } from './community/common';
+import { API_BASE, formatDateOnly, getAccessToken, getAuthHeaders, parseRoleFromToken } from './community/common';
 import type { Post } from './community/common';
 
 type TabType = 'all' | 'notice' | 'general';
@@ -239,13 +239,30 @@ function Community() {
   }, [keyword]);
 
   const filteredPosts = useMemo(() => {
-    if (tab === 'notice') {
-      return posts.filter(post => post.notice);
-    }
-    if (tab === 'general') {
-      return posts.filter(post => !post.notice);
-    }
-    return posts;
+    const byTab = tab === 'notice'
+      ? posts.filter(post => post.notice)
+      : tab === 'general'
+        ? posts.filter(post => !post.notice)
+        : posts;
+
+    return [...byTab].sort((a, b) => {
+      const noticeOrder = (b.notice ? 1 : 0) - (a.notice ? 1 : 0);
+      if (noticeOrder !== 0) return noticeOrder;
+
+      const parseCreatedAt = (value: string | null) => {
+        if (!value) return 0;
+        const normalized = value.includes('T') ? value : value.replace(' ', 'T');
+        const hasTimezone = /([zZ]|[+\-]\d{2}:\d{2})$/.test(normalized);
+        const parsed = Date.parse(hasTimezone ? normalized : `${normalized}Z`);
+        return Number.isNaN(parsed) ? 0 : parsed;
+      };
+
+      const aTime = parseCreatedAt(a.createdAt);
+      const bTime = parseCreatedAt(b.createdAt);
+      if (bTime !== aTime) return bTime - aTime;
+
+      return b.postId - a.postId;
+    });
   }, [posts, tab]);
 
   const totalPages = Math.max(1, Math.ceil(filteredPosts.length / PAGE_SIZE));
@@ -324,7 +341,7 @@ function Community() {
                   <td>{post.authorName}</td>
                   <td>{post.likeCount}</td>
                   <td>{post.viewCount}</td>
-                  <td>{formatDate(post.createdAt).slice(0, 10)}</td>
+                  <td>{formatDateOnly(post.createdAt)}</td>
                 </tr>
               ))}
             </tbody>

@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -76,6 +77,7 @@ public class CommunityService {
                 posts = List.of();
             }
         }
+        posts = sortPosts(posts);
 
         return posts.stream()
                 .map(post -> toPostResponse(post, currentMemberId, isAdmin))
@@ -333,5 +335,17 @@ public class CommunityService {
             return false;
         }
         return communityLikeRepository.existsByTargetTypeAndTargetIdAndMember_MemberId("POST", postId, memberId);
+    }
+
+    private List<Post> sortPosts(List<Post> posts) {
+        return posts.stream()
+                .sorted(
+                        Comparator
+                                .comparing((Post p) -> "Y".equals(p.getIsNotice()) ? 0 : 1)
+                                .thenComparing(Post::getCreatedAt,
+                                        Comparator.nullsLast(Comparator.reverseOrder()))
+                                .thenComparing(Post::getPostId,
+                                        Comparator.nullsLast(Comparator.reverseOrder())))
+                .collect(Collectors.toList());
     }
 }
