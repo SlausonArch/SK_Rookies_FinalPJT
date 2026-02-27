@@ -869,7 +869,9 @@ function fmt(n: number, d = 0) {
 }
 function fmtDate(v: string | null) {
   if (!v) return '-';
-  return new Date(v).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+  // Java LocalDateTime은 타임존 없이 직렬화됨 → 'Z' 추가로 UTC 파싱 후 KST(+9) 변환
+  const utcStr = v.endsWith('Z') ? v : v + 'Z';
+  return new Date(utcStr).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
 }
 
 function toneFromStatus(s: string): 'success' | 'danger' | 'warn' | 'info' | 'neutral' {
