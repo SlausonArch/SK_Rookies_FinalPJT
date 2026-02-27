@@ -1,5 +1,6 @@
 import React from 'react';
 import styled from 'styled-components';
+import { Link } from 'react-router-dom';
 
 const FooterContainer = styled.footer`
   background-color: white;
@@ -28,6 +29,21 @@ const Copy = styled.div`
   color: #999;
 `;
 
+const PolicyLinks = styled.div`
+  display: flex;
+  gap: 12px;
+
+  a {
+    color: #4b5563;
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  a:hover {
+    text-decoration: underline;
+  }
+`;
+
 const Footer: React.FC = () => {
     return (
         <FooterContainer>
@@ -36,6 +52,9 @@ const Footer: React.FC = () => {
                     <strong>VCE (Vulnerability Crypto Exchange)</strong>
                     <span>SK Rookies Final Project</span>
                     <span>Designed for Security Research & Education</span>
+                    <PolicyLinks>
+                      <Link to="/privacy-policy">개인정보처리방침</Link>
+                    </PolicyLinks>
                     <Copy>Copyright © 2026 VCE. All rights reserved.</Copy>
                 </Info>
                 <Info>
