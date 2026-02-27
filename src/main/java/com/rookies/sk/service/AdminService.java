@@ -174,7 +174,6 @@ public class AdminService {
                 .amount(reclaimAmount)
                 .totalValue(reclaimAmount)
                 .fee(BigDecimal.ZERO)
-                .status("COMPLETED")
                 .build();
         transactionRepository.save(tx);
 

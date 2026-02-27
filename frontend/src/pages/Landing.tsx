@@ -157,30 +157,23 @@ const Landing: React.FC = () => {
 
         Composite.add(world, [ground, wallLeft, wallRight]);
 
-        // Add falling items (Coins and Banknotes)
-        const items: Matter.Body[] = [];
-
-        for (let i = 0; i < 40; i++) {
-            const x = Math.random() * width;
-            const y = Math.random() * -height; // Start above screen
+        // Add continuous falling items (Coins and Banknotes)
+        const createItem = (startX: number, startY: number) => {
             const isCoin = Math.random() > 0.5;
-
-            let body;
             if (isCoin) {
                 const radius = 25 + Math.random() * 15;
-                body = Bodies.circle(x, y, radius, {
+                return Bodies.circle(startX, startY, radius, {
                     restitution: 0.8,
                     render: {
-                        fillStyle: i % 2 === 0 ? '#F0A202' : '#FFD700',
+                        fillStyle: Math.random() > 0.5 ? '#F0A202' : '#FFD700',
                         strokeStyle: '#d98c00',
                         lineWidth: 3
                     }
                 });
             } else {
-                // Banknote
                 const bw = 80 + Math.random() * 40;
                 const bh = 40 + Math.random() * 20;
-                body = Bodies.rectangle(x, y, bw, bh, {
+                return Bodies.rectangle(startX, startY, bw, bh, {
                     restitution: 0.4,
                     frictionAir: 0.05,
                     render: {
@@ -190,10 +183,23 @@ const Landing: React.FC = () => {
                     }
                 });
             }
-            items.push(body);
-        }
+        };
 
-        Composite.add(world, items);
+        const initialItems: Matter.Body[] = [];
+        for (let i = 0; i < 40; i++) {
+            initialItems.push(createItem(Math.random() * width, Math.random() * -height));
+        }
+        Composite.add(world, initialItems);
+
+        // Infinite stacking: continuously add bodies
+        const spawnInterval = setInterval(() => {
+            const currentBodies = Composite.allBodies(world).filter(b => !b.isStatic);
+            // Limit body count to prevent browser crash from infinite physics processing
+            if (currentBodies.length < 500) {
+                const x = Math.random() * window.innerWidth;
+                Composite.add(world, createItem(x, -50));
+            }
+        }, 400); // spawn every 400ms
 
         // Add mouse control
         const mouse = Mouse.create(render.canvas);
@@ -221,6 +227,7 @@ const Landing: React.FC = () => {
         window.addEventListener('resize', handleResize);
 
         return () => {
+            clearInterval(spawnInterval);
             window.removeEventListener('resize', handleResize);
             Render.stop(render);
             Runner.stop(runner);

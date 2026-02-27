@@ -64,9 +64,6 @@ public class WalletService {
         Member sender = findMemberByEmail(senderEmail);
         String assetUpper = assetType.toUpperCase();
 
-        // 송금자의 지갑 주소 확인 (기록용)
-        String fromAddress = getOrCreateDepositAddress(senderEmail, assetUpper);
-
         // 수신자 지갑 확인
         Wallet recipientWallet = walletRepository.findByDepositAddress(toAddress)
                 .orElseThrow(() -> new IllegalArgumentException("유효하지 않은 지갑 주소입니다."));
@@ -125,9 +122,6 @@ public class WalletService {
         recipientAsset.setAverageBuyPrice(newAvgPrice);
         assetRepository.save(recipientAsset);
 
-        // 트랜잭션 기록 (동일한 txHash 로 묶음)
-        String txHash = "TX-" + UUID.randomUUID().toString().substring(0, 16);
-
         // 송금자 출금 기록
         Transaction withdrawTx = Transaction.builder()
                 .member(sender)
@@ -135,10 +129,6 @@ public class WalletService {
                 .assetType(assetUpper)
                 .amount(amount)
                 .totalValue(amount)
-                .fromAddress(fromAddress)
-                .toAddress(toAddress)
-                .txHash(txHash)
-                .status("COMPLETED")
                 .build();
         transactionRepository.save(withdrawTx);
 
@@ -149,10 +139,6 @@ public class WalletService {
                 .assetType(assetUpper)
                 .amount(amount)
                 .totalValue(amount)
-                .fromAddress(fromAddress)
-                .toAddress(toAddress)
-                .txHash(txHash)
-                .status("COMPLETED")
                 .build();
         transactionRepository.save(depositTx);
     }

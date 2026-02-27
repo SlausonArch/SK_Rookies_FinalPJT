@@ -68,5 +68,6 @@ app:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:8080}
 
 server:
+  forward-headers-strategy: framework
   tomcat:
     max-http-form-post-size: 10MB
