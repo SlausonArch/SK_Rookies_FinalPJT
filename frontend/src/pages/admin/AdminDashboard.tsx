@@ -869,7 +869,7 @@ function fmt(n: number, d = 0) {
 }
 function fmtDate(v: string | null) {
   if (!v) return '-';
-  return new Date(v).toLocaleString('ko-KR');
+  return new Date(v).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
 }
 
 function toneFromStatus(s: string): 'success' | 'danger' | 'warn' | 'info' | 'neutral' {
