@@ -1,17 +1,19 @@
 package com.rookies.sk.service;
 
 import com.rookies.sk.dto.SignupRequestDto;
-import com.rookies.sk.entity.Member;
 import com.rookies.sk.entity.Asset;
+import com.rookies.sk.entity.Member;
 import com.rookies.sk.entity.Transaction;
-import com.rookies.sk.repository.MemberRepository;
 import com.rookies.sk.repository.AssetRepository;
+import com.rookies.sk.repository.MemberRepository;
 import com.rookies.sk.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.security.SecureRandom;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -39,39 +41,19 @@ public class MemberService {
         member.setAccountHolder(dto.getName());
         member.setIdPhotoUrl(itemsUrl);
 
-        // 추천인 코드 생성 로직 (영문 대문자 + 숫자 8자리)
         member.setReferralCode(generateReferralCode());
 
-        String referredByCode = dto.getReferredByCode();
-        if (referredByCode != null && !referredByCode.trim().isEmpty()) {
+        String referredByCode = normalizeReferralCode(dto.getReferredByCode());
+        if (!referredByCode.isEmpty()) {
             member.setReferredByCode(referredByCode);
-            // 추천인 찾기 및 리워드 지급 (70,000 KRW)
-            memberRepository.findByReferralCode(referredByCode).ifPresent(referrer -> {
-                Asset referrerKrw = assetRepository.findByMember_MemberIdAndAssetType(referrer.getMemberId(), "KRW")
-                        .orElseGet(() -> {
-                            Asset newAsset = Asset.builder()
-                                    .member(referrer)
-                                    .assetType("KRW")
-                                    .balance(java.math.BigDecimal.ZERO)
-                                    .lockedBalance(java.math.BigDecimal.ZERO)
-                                    .build();
-                            return assetRepository.save(newAsset);
-                        });
-
-                java.math.BigDecimal rewardAmount = new java.math.BigDecimal("70000");
-                referrerKrw.setBalance(referrerKrw.getBalance().add(rewardAmount));
-                assetRepository.save(referrerKrw);
-
-                Transaction tx = Transaction.builder()
-                        .member(referrer)
-                        .txType("DEPOSIT")
-                        .assetType("KRW")
-                        .amount(rewardAmount)
-                        .totalValue(rewardAmount)
-                        .fee(java.math.BigDecimal.ZERO)
-                        .build();
-                transactionRepository.save(tx);
-            });
+            memberRepository.findByReferralCode(referredByCode)
+                    .filter(referrer -> !referrer.getMemberId().equals(member.getMemberId()))
+                    .ifPresent(referrer -> {
+                        BigDecimal rewardAmount = new BigDecimal("70000");
+                        // Fix: reward both referrer and newly joined member.
+                        creditKrwReward(referrer, rewardAmount);
+                        creditKrwReward(member, rewardAmount);
+                    });
         }
 
         member.setRole(Member.Role.USER);
@@ -111,6 +93,38 @@ public class MemberService {
         return sb.toString();
     }
 
+    private String normalizeReferralCode(String referredByCode) {
+        if (referredByCode == null) {
+            return "";
+        }
+        return referredByCode.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private void creditKrwReward(Member target, BigDecimal rewardAmount) {
+        Asset krwAsset = assetRepository.findByMember_MemberIdAndAssetType(target.getMemberId(), "KRW")
+                .orElseGet(() -> assetRepository.save(
+                        Asset.builder()
+                                .member(target)
+                                .assetType("KRW")
+                                .balance(BigDecimal.ZERO)
+                                .lockedBalance(BigDecimal.ZERO)
+                                .build()
+                ));
+
+        krwAsset.setBalance(krwAsset.getBalance().add(rewardAmount));
+        assetRepository.save(krwAsset);
+
+        Transaction tx = Transaction.builder()
+                .member(target)
+                .txType("DEPOSIT")
+                .assetType("KRW")
+                .amount(rewardAmount)
+                .totalValue(rewardAmount)
+                .fee(BigDecimal.ZERO)
+                .build();
+        transactionRepository.save(tx);
+    }
+
     @Transactional
     public void assignReferralCode(Member member) {
         if (member.getReferralCode() == null || member.getReferralCode().isEmpty()) {
@@ -119,7 +133,6 @@ public class MemberService {
         }
     }
 
-    // V-01: IDOR - No check if the requesting user matches the requested ID
     @Transactional(readOnly = true)
     public Member getUserInfo(Long memberId) {
         return memberRepository.findById(memberId)

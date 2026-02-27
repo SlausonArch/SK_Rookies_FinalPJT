@@ -18,6 +18,7 @@ public class PostResponseDto {
     private boolean hidden;
     private long viewCount;
     private long likeCount;
+    private long commentCount;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private boolean canEdit;

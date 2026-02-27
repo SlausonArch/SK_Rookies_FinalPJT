@@ -117,6 +117,16 @@ const LoginButton = styled(Link)`
   }
 `;
 
+const BankButton = styled(LoginButton)`
+  background: #ffffff;
+  color: #093687;
+  border: 1px solid rgba(255,255,255,0.9);
+
+  &:hover {
+    background: #f3f6ff;
+  }
+`;
+
 const SectionHeader = styled.div`
   display: flex;
   align-items: center;
@@ -428,6 +438,7 @@ const Home: React.FC = () => {
 
           <HeroActions>
             <CTAButton to="/exchange">거래소 둘러보기</CTAButton>
+            {isLoggedIn && <BankButton to="/bank">은행 바로가기</BankButton>}
             {!isLoggedIn && <LoginButton to={`/login?redirect=${encodeURIComponent('/crypto')}`}>로그인</LoginButton>}
           </HeroActions>
         </HeroSection>

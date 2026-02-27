@@ -238,6 +238,7 @@ public class CommunityService {
     private PostResponseDto toPostResponse(Post post, Long currentMemberId, boolean isAdmin) {
         Long ownerId = post.getMember() != null ? post.getMember().getMemberId() : null;
         boolean canEdit = isAdmin || (ownerId != null && ownerId.equals(currentMemberId));
+        long commentCount = commentRepository.countByPost_PostId(post.getPostId());
 
         String authorName = resolveDisplayName(post.getMember());
 
@@ -252,6 +253,7 @@ public class CommunityService {
                 .hidden("Y".equals(post.getIsHidden()))
                 .viewCount(post.getViewCount() == null ? 0L : post.getViewCount())
                 .likeCount(post.getLikeCount() == null ? 0L : post.getLikeCount())
+                .commentCount(commentCount)
                 .createdAt(post.getCreatedAt())
                 .updatedAt(post.getUpdatedAt())
                 .canEdit(canEdit)

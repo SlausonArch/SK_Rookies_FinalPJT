@@ -9,6 +9,7 @@ export interface Post {
   hidden: boolean;
   viewCount: number;
   likeCount: number;
+  commentCount?: number;
   createdAt: string | null;
   updatedAt: string | null;
   canEdit: boolean;

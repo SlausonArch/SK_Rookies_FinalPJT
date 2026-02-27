@@ -8,6 +8,7 @@ import { API_BASE, formatDateOnly, getAccessToken, getAuthHeaders, parseRoleFrom
 import type { Post } from './community/common';
 
 type TabType = 'all' | 'notice' | 'general';
+type SortType = 'latest' | 'likes';
 
 const PAGE_SIZE = 12;
 
@@ -71,10 +72,10 @@ const Tabs = styled.div`
   flex-wrap: wrap;
 `;
 
-const Tab = styled.button<{ active: boolean }>`
-  border: 1px solid ${props => (props.active ? '#093687' : '#cad4e7')};
-  background: ${props => (props.active ? '#093687' : '#f8fbff')};
-  color: ${props => (props.active ? '#fff' : '#2f446b')};
+const Tab = styled.button<{ $active: boolean }>`
+  border: 1px solid ${props => (props.$active ? '#093687' : '#cad4e7')};
+  background: ${props => (props.$active ? '#093687' : '#f8fbff')};
+  color: ${props => (props.$active ? '#fff' : '#2f446b')};
   border-radius: 999px;
   padding: 7px 14px;
   font-weight: 700;
@@ -110,6 +111,33 @@ const ActionRow = styled.div`
 const Count = styled.span`
   color: #506387;
   font-size: 14px;
+`;
+
+const RightActions = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+`;
+
+const SortControls = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: #f1f5fc;
+  border: 1px solid #d4deef;
+  border-radius: 999px;
+`;
+
+const SortButton = styled.button<{ $active: boolean }>`
+  border: none;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: ${props => (props.$active ? '#fff' : '#49608a')};
+  background: ${props => (props.$active ? '#093687' : 'transparent')};
+  cursor: pointer;
 `;
 
 const PrimaryButton = styled.button`
@@ -178,6 +206,13 @@ const NoticeBadge = styled.span`
   margin-right: 8px;
 `;
 
+const CommentCount = styled.span`
+  margin-left: 6px;
+  color: #6a7ea3;
+  font-size: 12px;
+  font-weight: 700;
+`;
+
 const Empty = styled.div`
   padding: 60px 20px;
   text-align: center;
@@ -191,15 +226,23 @@ const Pagination = styled.div`
   padding: 18px;
 `;
 
-const PageButton = styled.button<{ active: boolean }>`
-  border: 1px solid ${props => (props.active ? '#093687' : '#d4dded')};
-  color: ${props => (props.active ? '#fff' : '#2f446b')};
-  background: ${props => (props.active ? '#093687' : '#fff')};
+const PageButton = styled.button<{ $active: boolean }>`
+  border: 1px solid ${props => (props.$active ? '#093687' : '#d4dded')};
+  color: ${props => (props.$active ? '#fff' : '#2f446b')};
+  background: ${props => (props.$active ? '#093687' : '#fff')};
   border-radius: 8px;
   width: 34px;
   height: 34px;
   cursor: pointer;
 `;
+
+const parseCreatedAt = (value: string | null): number => {
+  if (!value) return 0;
+  const normalized = value.includes('T') ? value : value.replace(' ', 'T');
+  const hasTimezone = /([zZ]|[+\-]\d{2}:\d{2})$/.test(normalized);
+  const parsed = Date.parse(hasTimezone ? normalized : `${normalized}Z`);
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
 
 function Community() {
   const navigate = useNavigate();
@@ -214,6 +257,7 @@ function Community() {
   const [keywordInput, setKeywordInput] = useState('');
   const [keyword, setKeyword] = useState('');
   const [tab, setTab] = useState<TabType>('all');
+  const [sortBy, setSortBy] = useState<SortType>('latest');
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -224,7 +268,7 @@ function Community() {
     try {
       const response = await axios.get<Post[]>(`${API_BASE}/api/community/posts`, {
         params: q ? { keyword: q } : {},
-        headers: authHeaders
+        headers: authHeaders,
       });
       setPosts(response.data);
     } catch {
@@ -249,13 +293,9 @@ function Community() {
       const noticeOrder = (b.notice ? 1 : 0) - (a.notice ? 1 : 0);
       if (noticeOrder !== 0) return noticeOrder;
 
-      const parseCreatedAt = (value: string | null) => {
-        if (!value) return 0;
-        const normalized = value.includes('T') ? value : value.replace(' ', 'T');
-        const hasTimezone = /([zZ]|[+\-]\d{2}:\d{2})$/.test(normalized);
-        const parsed = Date.parse(hasTimezone ? normalized : `${normalized}Z`);
-        return Number.isNaN(parsed) ? 0 : parsed;
-      };
+      if (sortBy === 'likes' && b.likeCount !== a.likeCount) {
+        return b.likeCount - a.likeCount;
+      }
 
       const aTime = parseCreatedAt(a.createdAt);
       const bTime = parseCreatedAt(b.createdAt);
@@ -263,7 +303,7 @@ function Community() {
 
       return b.postId - a.postId;
     });
-  }, [posts, tab]);
+  }, [posts, tab, sortBy]);
 
   const totalPages = Math.max(1, Math.ceil(filteredPosts.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -271,7 +311,7 @@ function Community() {
 
   useEffect(() => {
     setPage(1);
-  }, [tab, filteredPosts.length]);
+  }, [tab, sortBy, filteredPosts.length]);
 
   const onSearchSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -292,15 +332,15 @@ function Community() {
       <Header />
       <Hero>
         <h1>커뮤니티</h1>
-        <p>공지사항과 일반 게시글을 확인하고, 의견을 나눠보세요.</p>
+        <p>공지사항과 일반 게시글을 확인하고 자유롭게 소통해 보세요.</p>
       </Hero>
       <Wrapper>
         <Board>
           <TopBar>
             <Tabs>
-              <Tab type="button" active={tab === 'all'} onClick={() => setTab('all')}>전체</Tab>
-              <Tab type="button" active={tab === 'notice'} onClick={() => setTab('notice')}>공지사항</Tab>
-              <Tab type="button" active={tab === 'general'} onClick={() => setTab('general')}>일반글</Tab>
+              <Tab type="button" $active={tab === 'all'} onClick={() => setTab('all')}>전체</Tab>
+              <Tab type="button" $active={tab === 'notice'} onClick={() => setTab('notice')}>공지사항</Tab>
+              <Tab type="button" $active={tab === 'general'} onClick={() => setTab('general')}>일반글</Tab>
             </Tabs>
             <SearchBox onSubmit={onSearchSubmit}>
               <Input
@@ -314,9 +354,19 @@ function Community() {
 
           <ActionRow>
             <Count>총 {filteredPosts.length}개 글</Count>
-            {(tab !== 'notice' || isAdmin) && (
-              <PrimaryButton type="button" onClick={onClickWrite}>글쓰기</PrimaryButton>
-            )}
+            <RightActions>
+              <SortControls>
+                <SortButton type="button" $active={sortBy === 'latest'} onClick={() => setSortBy('latest')}>
+                  최신순
+                </SortButton>
+                <SortButton type="button" $active={sortBy === 'likes'} onClick={() => setSortBy('likes')}>
+                  좋아요순
+                </SortButton>
+              </SortControls>
+              {(tab !== 'notice' || isAdmin) && (
+                <PrimaryButton type="button" onClick={onClickWrite}>글쓰기</PrimaryButton>
+              )}
+            </RightActions>
           </ActionRow>
 
           <Table>
@@ -337,6 +387,7 @@ function Community() {
                   <TitleCell>
                     {post.notice && <NoticeBadge>공지</NoticeBadge>}
                     {post.title}
+                    <CommentCount>[{post.commentCount ?? 0}]</CommentCount>
                   </TitleCell>
                   <td>{post.authorName}</td>
                   <td>{post.likeCount}</td>
@@ -357,7 +408,7 @@ function Community() {
                 <PageButton
                   key={num}
                   type="button"
-                  active={num === currentPage}
+                  $active={num === currentPage}
                   onClick={() => setPage(num)}
                 >
                   {num}

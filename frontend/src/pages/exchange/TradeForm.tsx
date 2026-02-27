@@ -200,6 +200,7 @@ function showRestrictionPopupIfNeeded(msg: string): void {
 }
 
 const COIN_SCALE = 8;
+const PRICE_SCALE = 8;
 const ORDER_EPSILON = 0.00000001;
 
 function parseNumber(str: string): number {
@@ -207,6 +208,22 @@ function parseNumber(str: string): number {
   if (!normalized) return 0;
   const n = Number(normalized);
   return Number.isFinite(n) ? n : 0;
+}
+
+function sanitizeDecimalInput(value: string, scale: number): string {
+  const raw = value.replace(/,/g, '').trim();
+  if (!raw) return '';
+
+  const cleaned = raw.replace(/[^0-9.]/g, '');
+  const parts = cleaned.split('.');
+  const intPart = (parts[0] ?? '').replace(/^0+(?=\d)/, '');
+
+  if (parts.length === 1) {
+    return intPart;
+  }
+
+  const decimalPart = parts.slice(1).join('').slice(0, scale);
+  return `${intPart || '0'}.${decimalPart}`;
 }
 
 function floorToScale(value: number, scale: number): number {
@@ -421,8 +438,11 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
           <Label>가격 (KRW)</Label>
           <Input
             type="text"
-            value={price ? parseNumber(price).toLocaleString('ko-KR') : ''}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPrice(e.target.value.replace(/,/g, ''))}
+            inputMode="decimal"
+            value={price}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              setPrice(sanitizeDecimalInput(e.target.value, PRICE_SCALE))
+            }
             placeholder="주문 가격"
           />
         </FormRow>
@@ -431,8 +451,11 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
           <Label>수량 ({assetType})</Label>
           <Input
             type="text"
+            inputMode="decimal"
             value={amount}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAmount(e.target.value.replace(/,/g, ''))}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              setAmount(sanitizeDecimalInput(e.target.value, COIN_SCALE))
+            }
             placeholder="주문 수량"
           />
         </FormRow>
