@@ -810,11 +810,181 @@ const StatDesc = styled.div`
   margin-top: 2px;
 `;
 
+// ───────────── TryIt Styled Components ─────────────
+const TryItSection = styled.div`
+  margin-top: 20px;
+  border: 1.5px solid #e0e7ff;
+  border-radius: 10px;
+  overflow: hidden;
+`;
+
+const TryItBar = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #eef2ff;
+  border-bottom: 1px solid #e0e7ff;
+`;
+
+const TryItLabel = styled.span`
+  font-size: 12px;
+  font-weight: 700;
+  color: #3730a3;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+`;
+
+const TryItBtn = styled.button<{ $active: boolean }>`
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 14px;
+  border-radius: 6px;
+  border: 1.5px solid ${p => p.$active ? '#c7d2fe' : '#6366f1'};
+  background: ${p => p.$active ? '#c7d2fe' : '#6366f1'};
+  color: ${p => p.$active ? '#3730a3' : 'white'};
+  cursor: pointer;
+  transition: all 0.15s;
+  &:hover { opacity: 0.85; }
+`;
+
+const TryItBody = styled.div`
+  padding: 16px;
+  background: #f8f9ff;
+`;
+
+const TryItInputGrid = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+`;
+
+const TryItInputRow = styled.div`
+  display: grid;
+  grid-template-columns: 160px 80px 1fr;
+  align-items: center;
+  gap: 10px;
+`;
+
+const TryItParamName = styled.div`
+  font-size: 13px;
+  font-family: 'Consolas', monospace;
+  font-weight: 600;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+`;
+
+const TryItInput = styled.input`
+  padding: 7px 10px;
+  border: 1.5px solid #c7d2fe;
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+  background: white;
+  font-family: 'Consolas', monospace;
+  width: 100%;
+  box-sizing: border-box;
+  &:focus {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
+  }
+`;
+
+const AuthTokenRow = styled.div`
+  display: grid;
+  grid-template-columns: 160px 80px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+  border-bottom: 1px dashed #c7d2fe;
+`;
+
+const SendBtn = styled.button<{ $loading: boolean }>`
+  padding: 9px 24px;
+  background: ${p => p.$loading ? '#a5b4fc' : '#6366f1'};
+  color: white;
+  border: none;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: ${p => p.$loading ? 'not-allowed' : 'pointer'};
+  transition: background 0.15s;
+  &:hover { background: ${p => p.$loading ? '#a5b4fc' : '#4f46e5'}; }
+`;
+
+const ResponseArea = styled.div`
+  margin-top: 14px;
+`;
+
+const ResponseStatusRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+`;
+
+const ResponseStatusBadge = styled.span<{ $status: number }>`
+  font-size: 13px;
+  font-weight: 800;
+  padding: 4px 12px;
+  border-radius: 6px;
+  background: ${p =>
+    p.$status >= 200 && p.$status < 300 ? '#dcfce7' :
+    p.$status >= 400 ? '#fde8e8' : '#fef9c3'};
+  color: ${p =>
+    p.$status >= 200 && p.$status < 300 ? '#166534' :
+    p.$status >= 400 ? '#991b1b' : '#854d0e'};
+`;
+
+const ResponseBodyBlock = styled.pre`
+  background: #1e2535;
+  color: #a8d8a8;
+  padding: 14px 18px;
+  border-radius: 8px;
+  font-size: 12px;
+  overflow-x: auto;
+  margin: 0;
+  max-height: 400px;
+  overflow-y: auto;
+  font-family: 'Consolas', 'Fira Code', monospace;
+  line-height: 1.5;
+`;
+
+const CurlBlock = styled.pre`
+  background: #2d2d2d;
+  color: #f8f8f2;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 12px;
+  overflow-x: auto;
+  margin: 0;
+  font-family: 'Consolas', 'Fira Code', monospace;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+`;
+
 // ───────────── Component ─────────────
+interface TryItState {
+  status: number;
+  body: string;
+  loading: boolean;
+  error?: string;
+}
+
 const ApiDocs: React.FC = () => {
   const [openEndpoint, setOpenEndpoint] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [activeTag, setActiveTag] = useState('인증');
+
+  // Try It state
+  const [tryItMode, setTryItMode] = useState<Set<string>>(new Set());
+  const [paramValues, setParamValues] = useState<Record<string, Record<string, string>>>({});
+  const [tryItResponse, setTryItResponse] = useState<Record<string, TryItState>>({});
 
   const totalEndpoints = API_GROUPS.reduce((s, g) => s + g.endpoints.length, 0);
 
@@ -831,6 +1001,123 @@ const ApiDocs: React.FC = () => {
     const el = document.getElementById(`group-${tag}`);
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     setActiveTag(tag);
+  };
+
+  const toggleTryIt = (key: string) => {
+    setTryItMode(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const setParam = (epKey: string, paramName: string, value: string) => {
+    setParamValues(prev => ({
+      ...prev,
+      [epKey]: { ...(prev[epKey] || {}), [paramName]: value },
+    }));
+  };
+
+  const buildCurl = (ep: Endpoint, key: string): string => {
+    const values = paramValues[key] || {};
+    const BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+
+    let url = ep.path;
+    (ep.params || []).filter(p => p.in === 'path').forEach(p => {
+      url = url.replace(`{${p.name}}`, values[p.name] || `{${p.name}}`);
+    });
+
+    const queryParts = (ep.params || [])
+      .filter(p => p.in === 'query' && values[p.name])
+      .map(p => `${p.name}=${encodeURIComponent(values[p.name])}`);
+    if (queryParts.length) url += `?${queryParts.join('&')}`;
+
+    const token = values['__token__'] || localStorage.getItem('accessToken') || '';
+    const headerLines = ep.auth !== 'none' && token
+      ? `  -H "Authorization: Bearer ${token}" \\\n`
+      : '';
+
+    const bodyParams = (ep.params || []).filter(p => p.in === 'body');
+    const formDataParams = (ep.params || []).filter(p => p.in === 'formData');
+
+    let bodyLine = '';
+    if (bodyParams.length > 0 && ep.method !== 'GET') {
+      const obj: Record<string, string | number> = {};
+      bodyParams.forEach(p => {
+        if (values[p.name]) obj[p.name] = p.type === 'number' ? Number(values[p.name]) : values[p.name];
+      });
+      bodyLine = `  -H "Content-Type: application/json" \\\n  -d '${JSON.stringify(obj)}' \\\n`;
+    } else if (formDataParams.length > 0 && ep.method !== 'GET') {
+      const fdParts = formDataParams
+        .filter(p => values[p.name])
+        .map(p => `  -F "${p.name}=${values[p.name]}" \\\n`)
+        .join('');
+      bodyLine = fdParts;
+    }
+
+    return `curl -X ${ep.method} "${BASE}${url}" \\\n${headerLines}${bodyLine}`.replace(/\\\n$/, '');
+  };
+
+  const sendRequest = async (ep: Endpoint, key: string) => {
+    const values = paramValues[key] || {};
+    const BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+
+    let url = ep.path;
+    (ep.params || []).filter(p => p.in === 'path').forEach(p => {
+      url = url.replace(`{${p.name}}`, encodeURIComponent(values[p.name] || ''));
+    });
+
+    const queryParts = (ep.params || [])
+      .filter(p => p.in === 'query' && values[p.name])
+      .map(p => `${encodeURIComponent(p.name)}=${encodeURIComponent(values[p.name])}`);
+    if (queryParts.length) url += `?${queryParts.join('&')}`;
+
+    const headers: Record<string, string> = {};
+    const token = values['__token__'] || localStorage.getItem('accessToken') || '';
+    if (ep.auth !== 'none' && token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    let body: BodyInit | undefined;
+    const bodyParams = (ep.params || []).filter(p => p.in === 'body');
+    const formDataParams = (ep.params || []).filter(p => p.in === 'formData');
+
+    if (bodyParams.length > 0 && ep.method !== 'GET') {
+      headers['Content-Type'] = 'application/json';
+      const obj: Record<string, string | number> = {};
+      bodyParams.forEach(p => {
+        if (values[p.name] !== undefined && values[p.name] !== '') {
+          obj[p.name] = p.type === 'number' ? Number(values[p.name]) : values[p.name];
+        }
+      });
+      body = JSON.stringify(obj);
+    } else if (formDataParams.length > 0 && ep.method !== 'GET') {
+      const fd = new FormData();
+      formDataParams.forEach(p => {
+        if (values[p.name]) fd.append(p.name, values[p.name]);
+      });
+      body = fd;
+    }
+
+    setTryItResponse(prev => ({ ...prev, [key]: { status: 0, body: '', loading: true } }));
+
+    try {
+      const res = await fetch(`${BASE}${url}`, {
+        method: ep.method,
+        headers,
+        body: ep.method !== 'GET' && ep.method !== 'DELETE' ? body : undefined,
+      });
+      const text = await res.text();
+      let formatted = text;
+      try { formatted = JSON.stringify(JSON.parse(text), null, 2); } catch { /* not JSON */ }
+      setTryItResponse(prev => ({ ...prev, [key]: { status: res.status, body: formatted, loading: false } }));
+    } catch (err) {
+      setTryItResponse(prev => ({
+        ...prev,
+        [key]: { status: 0, body: String(err), loading: false, error: String(err) },
+      }));
+    }
   };
 
   return (
@@ -887,6 +1174,9 @@ const ApiDocs: React.FC = () => {
               {group.endpoints.map(ep => {
                 const key = `${ep.method}-${ep.path}`;
                 const isOpen = openEndpoint === key;
+                const isTryIt = tryItMode.has(key);
+                const values = paramValues[key] || {};
+                const resp = tryItResponse[key];
 
                 return (
                   <EndpointRow key={key} $open={isOpen}>
@@ -947,6 +1237,96 @@ const ApiDocs: React.FC = () => {
                             <CodeBlock>{ep.responseExample}</CodeBlock>
                           </DetailSection>
                         )}
+
+                        {/* ── Try It Out ── */}
+                        <DetailSection>
+                          <TryItSection>
+                            <TryItBar>
+                              <TryItLabel>Try it out</TryItLabel>
+                              <TryItBtn
+                                $active={isTryIt}
+                                onClick={e => { e.stopPropagation(); toggleTryIt(key); }}
+                              >
+                                {isTryIt ? '닫기' : '실행해보기'}
+                              </TryItBtn>
+                            </TryItBar>
+
+                            {isTryIt && (
+                              <TryItBody>
+                                <TryItInputGrid>
+                                  {/* Auth token field */}
+                                  {ep.auth !== 'none' && (
+                                    <AuthTokenRow>
+                                      <TryItParamName>
+                                        <ParamIn>header</ParamIn>
+                                        <span>Authorization</span>
+                                      </TryItParamName>
+                                      <span style={{ fontSize: 11, color: '#6366f1', fontWeight: 700 }}>Token</span>
+                                      <TryItInput
+                                        placeholder={`Bearer ${localStorage.getItem('accessToken') ? '(localStorage에서 자동 로드됨)' : '<accessToken>'}`}
+                                        value={values['__token__'] || ''}
+                                        onChange={e => setParam(key, '__token__', e.target.value)}
+                                      />
+                                    </AuthTokenRow>
+                                  )}
+
+                                  {/* Param fields */}
+                                  {(ep.params || []).map(p => (
+                                    <TryItInputRow key={p.name}>
+                                      <TryItParamName>
+                                        <ParamIn>{p.in}</ParamIn>
+                                        <span>{p.name}{p.required && <RequiredMark>*</RequiredMark>}</span>
+                                      </TryItParamName>
+                                      <span style={{ fontSize: 11, color: '#888' }}>{p.type}</span>
+                                      <TryItInput
+                                        placeholder={p.description}
+                                        value={values[p.name] || ''}
+                                        onChange={e => setParam(key, p.name, e.target.value)}
+                                        type={p.type === 'number' ? 'number' : 'text'}
+                                      />
+                                    </TryItInputRow>
+                                  ))}
+                                </TryItInputGrid>
+
+                                {/* cURL preview */}
+                                <DetailLabel>cURL 미리보기</DetailLabel>
+                                <CurlBlock>{buildCurl(ep, key)}</CurlBlock>
+
+                                <div style={{ marginTop: 12, display: 'flex', gap: 10, alignItems: 'center' }}>
+                                  <SendBtn
+                                    $loading={!!resp?.loading}
+                                    disabled={resp?.loading}
+                                    onClick={() => sendRequest(ep, key)}
+                                  >
+                                    {resp?.loading ? '요청 중...' : '▶ Execute'}
+                                  </SendBtn>
+                                  {resp && !resp.loading && (
+                                    <span style={{ fontSize: 12, color: '#888' }}>
+                                      응답 완료
+                                    </span>
+                                  )}
+                                </div>
+
+                                {resp && !resp.loading && (
+                                  <ResponseArea>
+                                    <DetailLabel style={{ marginTop: 14 }}>응답</DetailLabel>
+                                    <ResponseStatusRow>
+                                      <ResponseStatusBadge $status={resp.status}>
+                                        {resp.status === 0 ? 'ERROR' : `HTTP ${resp.status}`}
+                                      </ResponseStatusBadge>
+                                      <span style={{ fontSize: 12, color: '#888' }}>
+                                        {resp.status >= 200 && resp.status < 300 ? '성공' :
+                                          resp.status >= 400 ? '클라이언트 오류' :
+                                          resp.status >= 500 ? '서버 오류' : '네트워크 오류'}
+                                      </span>
+                                    </ResponseStatusRow>
+                                    <ResponseBodyBlock>{resp.body || '(응답 없음)'}</ResponseBodyBlock>
+                                  </ResponseArea>
+                                )}
+                              </TryItBody>
+                            )}
+                          </TryItSection>
+                        </DetailSection>
                       </EndpointDetail>
                     )}
                   </EndpointRow>
