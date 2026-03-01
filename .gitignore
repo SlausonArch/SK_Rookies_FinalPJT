@@ -77,3 +77,11 @@ frontend/node_modules*/
 node_modules*/
 
 server.pid
+# Multi-env files
+.env.mac
+.env.windows
+.env.aws_linux
+.env.app
+frontend/.env.mac
+frontend/.env.windows
+frontend/.env.aws_linux
