@@ -1,0 +1,22 @@
+.git
+.gitignore
+.gradle
+.vscode
+build
+logs
+uploads
+oracle-data
+node_modules
+frontend/node_modules
+frontend/node_modules_old
+frontend/node_modules 3
+frontend/dist
+frontend/build
+frontend/.vite
+frontend/.env
+frontend/.env.*
+*.log
+*.pid
+README.md
+docs
+report_20260218.md
