@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# AWS defaults (override with env vars if needed)
-APP_DOMAIN="${APP_DOMAIN:-https://vceapp.com}"
-RDS_URL="${RDS_URL:-jdbc:oracle:thin:@//oracle-rds.chuo402g03rl.ap-northeast-2.rds.amazonaws.com:1521/ORCL}"
-DB_USER="${DB_USER:-SK_USER}"
-DB_PASS="${DB_PASS:-<AWS_DB_PASSWORD>}"
-JWT_SECRET_VALUE="${JWT_SECRET_VALUE:-<JWT_SECRET>}"
-KAKAO_CLIENT_ID_VALUE="${KAKAO_CLIENT_ID_VALUE:-<KAKAO_CLIENT_ID>}"
-KAKAO_CLIENT_SECRET_VALUE="${KAKAO_CLIENT_SECRET_VALUE:-<KAKAO_CLIENT_SECRET>}"
-NAVER_CLIENT_ID_VALUE="${NAVER_CLIENT_ID_VALUE:-<NAVER_CLIENT_ID>}"
-NAVER_CLIENT_SECRET_VALUE="${NAVER_CLIENT_SECRET_VALUE:-<NAVER_CLIENT_SECRET>}"
+# Local defaults (override with env vars if needed)
+LOCAL_DB_URL="${LOCAL_DB_URL:-jdbc:oracle:thin:@localhost:1521/FREEPDB1}"
+LOCAL_DB_USER="${LOCAL_DB_USER:-SK_USER}"
+LOCAL_DB_PASS="${LOCAL_DB_PASS:-password123}"
+LOCAL_FRONTEND_URL="${LOCAL_FRONTEND_URL:-http://localhost:5173}"
+LOCAL_CORS_ALLOWED_ORIGINS="${LOCAL_CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:8080}"
+LOCAL_JWT_SECRET="${LOCAL_JWT_SECRET:-your-very-secure-secret-key-at-least-256-bits-long}"
+LOCAL_KAKAO_CLIENT_ID="${LOCAL_KAKAO_CLIENT_ID:-your_kakao_client_id}"
+LOCAL_KAKAO_CLIENT_SECRET="${LOCAL_KAKAO_CLIENT_SECRET:-your_kakao_client_secret}"
+LOCAL_NAVER_CLIENT_ID="${LOCAL_NAVER_CLIENT_ID:-your_naver_client_id}"
+LOCAL_NAVER_CLIENT_SECRET="${LOCAL_NAVER_CLIENT_SECRET:-your_naver_client_secret}"
+LOCAL_API_BASE_URL="${LOCAL_API_BASE_URL:-http://localhost:8080}"
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 FRONT_DIR="$ROOT_DIR/frontend"
@@ -24,77 +26,76 @@ update_gitignore() {
   append_gitignore_once "# Multi-env files"
   append_gitignore_once ".env.mac"
   append_gitignore_once ".env.windows"
-  append_gitignore_once ".env.aws_linux"
-  append_gitignore_once ".env.app"
   append_gitignore_once "frontend/.env.mac"
   append_gitignore_once "frontend/.env.windows"
-  append_gitignore_once "frontend/.env.aws_linux"
   append_gitignore_once "frontend/.env"
 }
 
-write_env_app() {
-  cat > "$ROOT_DIR/.env.app" <<EOT
-SPRING_DATASOURCE_URL=${RDS_URL}
-SPRING_DATASOURCE_USERNAME=${DB_USER}
-SPRING_DATASOURCE_PASSWORD=${DB_PASS}
+write_backend_env_mac() {
+  cat > "$ROOT_DIR/.env.mac" <<EOT
+DB_URL=${LOCAL_DB_URL}
+DB_USERNAME=${LOCAL_DB_USER}
+DB_PASSWORD=${LOCAL_DB_PASS}
 
-FRONTEND_URL=${APP_DOMAIN}
-CORS_ALLOWED_ORIGINS=${APP_DOMAIN},https://www.vceapp.com
+FRONTEND_URL=${LOCAL_FRONTEND_URL}
+CORS_ALLOWED_ORIGINS=${LOCAL_CORS_ALLOWED_ORIGINS}
 
-JWT_SECRET=${JWT_SECRET_VALUE}
-KAKAO_CLIENT_ID=${KAKAO_CLIENT_ID_VALUE}
-KAKAO_CLIENT_SECRET=${KAKAO_CLIENT_SECRET_VALUE}
-NAVER_CLIENT_ID=${NAVER_CLIENT_ID_VALUE}
-NAVER_CLIENT_SECRET=${NAVER_CLIENT_SECRET_VALUE}
+JWT_SECRET=${LOCAL_JWT_SECRET}
+KAKAO_CLIENT_ID=${LOCAL_KAKAO_CLIENT_ID}
+KAKAO_CLIENT_SECRET=${LOCAL_KAKAO_CLIENT_SECRET}
+NAVER_CLIENT_ID=${LOCAL_NAVER_CLIENT_ID}
+NAVER_CLIENT_SECRET=${LOCAL_NAVER_CLIENT_SECRET}
 
-KAKAO_REDIRECT_URI=${APP_DOMAIN}/login/oauth2/code/kakao
-NAVER_REDIRECT_URI=${APP_DOMAIN}/login/oauth2/code/naver
+KAKAO_REDIRECT_URI=${LOCAL_FRONTEND_URL}/login/oauth2/code/kakao
+NAVER_REDIRECT_URI=${LOCAL_FRONTEND_URL}/login/oauth2/code/naver
 SERVER_FORWARD_HEADERS_STRATEGY=framework
 EOT
 }
 
-write_env_app_example() {
-  cat > "$ROOT_DIR/.env.app.example" <<'EOT'
-SPRING_DATASOURCE_URL=jdbc:oracle:thin:@//oracle-rds.your-region.rds.amazonaws.com:1521/ORCL
-SPRING_DATASOURCE_USERNAME=SK_USER
-SPRING_DATASOURCE_PASSWORD=your_db_password
+write_backend_env_windows() {
+  cat > "$ROOT_DIR/.env.windows" <<EOT
+DB_URL=${LOCAL_DB_URL}
+DB_USERNAME=${LOCAL_DB_USER}
+DB_PASSWORD=${LOCAL_DB_PASS}
 
-FRONTEND_URL=https://vceapp.com
-CORS_ALLOWED_ORIGINS=https://vceapp.com,https://www.vceapp.com
+FRONTEND_URL=${LOCAL_FRONTEND_URL}
+CORS_ALLOWED_ORIGINS=${LOCAL_CORS_ALLOWED_ORIGINS}
 
-JWT_SECRET=your-very-secure-secret-key-at-least-256-bits-long
-KAKAO_CLIENT_ID=your_kakao_client_id
-KAKAO_CLIENT_SECRET=your_kakao_client_secret
-NAVER_CLIENT_ID=your_naver_client_id
-NAVER_CLIENT_SECRET=your_naver_client_secret
+JWT_SECRET=${LOCAL_JWT_SECRET}
+KAKAO_CLIENT_ID=${LOCAL_KAKAO_CLIENT_ID}
+KAKAO_CLIENT_SECRET=${LOCAL_KAKAO_CLIENT_SECRET}
+NAVER_CLIENT_ID=${LOCAL_NAVER_CLIENT_ID}
+NAVER_CLIENT_SECRET=${LOCAL_NAVER_CLIENT_SECRET}
 
-KAKAO_REDIRECT_URI=https://vceapp.com/login/oauth2/code/kakao
-NAVER_REDIRECT_URI=https://vceapp.com/login/oauth2/code/naver
+KAKAO_REDIRECT_URI=${LOCAL_FRONTEND_URL}/login/oauth2/code/kakao
+NAVER_REDIRECT_URI=${LOCAL_FRONTEND_URL}/login/oauth2/code/naver
 SERVER_FORWARD_HEADERS_STRATEGY=framework
 EOT
 }
 
-write_front_env_files() {
+write_frontend_env_mac() {
   mkdir -p "$FRONT_DIR"
 
-  cat > "$FRONT_DIR/.env.aws_linux" <<EOT
-VITE_API_BASE_URL=${APP_DOMAIN}
+  cat > "$FRONT_DIR/.env.mac" <<EOT
+VITE_API_BASE_URL=${LOCAL_API_BASE_URL}
 EOT
+}
 
-  cat > "$FRONT_DIR/.env.example" <<'EOT'
-# Frontend API Base URL Configuration
-# 단일 도메인 배포: https://vceapp.com
-# API 서브도메인 분리 시: https://api.vceapp.com
-VITE_API_BASE_URL=https://vceapp.com
+write_frontend_env_windows() {
+  mkdir -p "$FRONT_DIR"
+
+  cat > "$FRONT_DIR/.env.windows" <<EOT
+VITE_API_BASE_URL=${LOCAL_API_BASE_URL}
 EOT
 }
 
 main() {
   update_gitignore
-  write_env_app
-  write_env_app_example
-  write_front_env_files
-  echo "setting.sh: AWS setting files are updated."
+  write_backend_env_mac
+  write_backend_env_windows
+  write_frontend_env_mac
+  write_frontend_env_windows
+  echo "setting.sh: local mac/windows setting files are updated."
 }
 
 main
