@@ -142,6 +142,7 @@ const Login: React.FC = () => {
   const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [clickCount, setClickCount] = useState(0);
   const redirectFromQuery = sanitizeRedirectTarget(searchParams.get('redirect'));
 
   const rememberRedirectTarget = () => {
@@ -182,9 +183,19 @@ const Login: React.FC = () => {
     rememberRedirectTarget();
   }, [redirectFromQuery]);
 
+  const handleLogoClick = () => {
+    const newCount = clickCount + 1;
+    setClickCount(newCount);
+    if (newCount >= 3) {
+      handleTestLogin();
+      setClickCount(0);
+    }
+  };
+
   const handleSocialLogin = (provider: 'kakao' | 'naver') => {
     rememberRedirectTarget();
-    window.location.href = `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/oauth2/authorization/${provider}`;
+    const origin = window.location.origin;
+    window.location.href = `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/oauth2/authorization/${provider}?frontend_url=${encodeURIComponent(origin)}`;
   };
 
   const handleTestLogin = async () => {
@@ -212,7 +223,7 @@ const Login: React.FC = () => {
   return (
     <Container>
       <LoginBox>
-        <LogoArea>VCE</LogoArea>
+        <LogoArea onClick={handleLogoClick} style={{ cursor: 'pointer', userSelect: 'none' }}>VCE</LogoArea>
         <Title>로그인</Title>
 
         <SocialButton
@@ -238,17 +249,8 @@ const Login: React.FC = () => {
 
         <Divider />
 
-        <TestLoginButton onClick={handleTestLogin} disabled={loading}>
-          {loading ? '로그인 중...' : '테스트 계정으로 로그인'}
-        </TestLoginButton>
-        <TestInfo>
-          test@vce.com / test1234 (KRW 1,000만원)
-        </TestInfo>
         {error && <ErrorMsg>{error}</ErrorMsg>}
 
-        <FooterLink style={{ marginTop: '16px' }}>
-          <Link to="/admin/login">관리자 로그인</Link>
-        </FooterLink>
       </LoginBox>
     </Container>
   );

@@ -32,6 +32,7 @@ public class SecurityConfig {
         private final OAuth2SuccessHandler oAuth2SuccessHandler;
         private final JwtTokenProvider jwtTokenProvider;
         private final MemberRepository memberRepository;
+        private final com.rookies.sk.security.HttpCookieOAuth2AuthorizationRequestRepository cookieAuthorizationRequestRepository;
 
         @org.springframework.beans.factory.annotation.Value("${app.cors.allowed-origins}")
         private List<String> allowedOrigins;
@@ -80,6 +81,9 @@ public class SecurityConfig {
                                                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                                                 .anyRequest().authenticated())
                                 .oauth2Login(oauth2 -> oauth2
+                                                .authorizationEndpoint(auth -> auth
+                                                                .authorizationRequestRepository(
+                                                                                cookieAuthorizationRequestRepository))
                                                 .userInfoEndpoint(userInfo -> userInfo
                                                                 .userService(customOAuth2UserService))
                                                 .successHandler(oAuth2SuccessHandler))

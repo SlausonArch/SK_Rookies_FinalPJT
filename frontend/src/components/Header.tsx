@@ -1,6 +1,6 @@
 import React from 'react';
 import styled from 'styled-components';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 
 // Header.tsx (스타일만 교체/추가)
 
@@ -44,7 +44,7 @@ const Nav = styled.nav`
   gap: 24px;
 `;
 
-const NavItem = styled(Link)`
+const NavItem = styled(NavLink)`
   color: rgba(255,255,255,0.78);
   text-decoration: none;
   font-weight: 600;
@@ -55,7 +55,7 @@ const NavItem = styled(Link)`
 
   transition: color 0.15s ease;
 
-  &:hover {
+  &:hover, &.active {
     color: #fff;
   }
 
@@ -75,7 +75,7 @@ const NavItem = styled(Link)`
     opacity: 0.9;
   }
 
-  &:hover::after {
+  &:hover::after, &.active::after {
     transform: scaleX(1);
   }
 `;

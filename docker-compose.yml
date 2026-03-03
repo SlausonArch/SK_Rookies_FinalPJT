@@ -1,4 +1,3 @@
-
 services:
   # 1. Oracle Database (v23.4 Free - Mac M1/M2/M3 호환성 우수)
   oracle-db:
@@ -21,7 +20,7 @@ services:
       timeout: 10s
       retries: 5
 
-  # 2. Backend (Spring Boot)
+  # 2. Backend (Spring Boot Monolith)
   backend:
     build: .
     container_name: sk-backend
@@ -49,14 +48,27 @@ services:
       - NAVER_CLIENT_SECRET=${NAVER_CLIENT_SECRET}
       - SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_NAVER_REDIRECT_URI=${NAVER_REDIRECT_URI}
 
-  # 3. Frontend (React)
-  frontend:
+  # 3. Frontend - Exchange & Admin
+  exchange-front:
     build: ./frontend
-    container_name: sk-frontend
+    container_name: sk-exchange-front
     ports:
-      - "${APP_BIND_IP:-0.0.0.0}:${HOST_FRONTEND_PORT:-15173}:3000"
+      - "${APP_BIND_IP:-0.0.0.0}:${HOST_EXCHANGE_FRONT_PORT:-15173}:3000"
     environment:
       - VITE_API_BASE_URL=${VITE_API_BASE_URL}
+      - VITE_APP_MODE=exchange
+    stdin_open: true
+    tty: true
+
+  # 4. Frontend - Bank
+  bank-front:
+    build: ./frontend
+    container_name: sk-bank-front
+    ports:
+      - "${APP_BIND_IP:-0.0.0.0}:${HOST_BANK_FRONT_PORT:-15174}:3000"
+    environment:
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL}
+      - VITE_APP_MODE=bank
     stdin_open: true
     tty: true
 

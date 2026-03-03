@@ -6,6 +6,7 @@ import com.rookies.sk.repository.MemberRepository;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.Cookie;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
@@ -23,6 +24,7 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
 
     private final JwtTokenProvider tokenProvider;
     private final MemberRepository memberRepository;
+    private final HttpCookieOAuth2AuthorizationRequestRepository httpCookieOAuth2AuthorizationRequestRepository;
 
     @org.springframework.beans.factory.annotation.Value("${app.frontend-url}")
     private String frontendUrl;
@@ -37,8 +39,28 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
         Member member = memberRepository.findByEmail(internalEmail)
                 .orElseThrow(() -> new RuntimeException("Member not found"));
 
+        String targetFrontendUrl = this.frontendUrl;
+        if (request.getCookies() != null) {
+            for (jakarta.servlet.http.Cookie cookie : request.getCookies()) {
+                if (HttpCookieOAuth2AuthorizationRequestRepository.REDIRECT_URI_PARAM_COOKIE_NAME
+                        .equals(cookie.getName())) {
+                    try {
+                        targetFrontendUrl = java.net.URLDecoder.decode(cookie.getValue(), "UTF-8");
+                    } catch (Exception e) {
+                        targetFrontendUrl = cookie.getValue();
+                    }
+                    break;
+                }
+            }
+        }
+        if (targetFrontendUrl != null && targetFrontendUrl.contains(",")) {
+            targetFrontendUrl = targetFrontendUrl.split(",")[0];
+        }
+
+        httpCookieOAuth2AuthorizationRequestRepository.removeAuthorizationRequestCookies(request, response);
+
         if (member.getStatus() == Member.Status.WITHDRAWN) {
-            String targetUrl = UriComponentsBuilder.fromUriString(frontendUrl + "/login")
+            String targetUrl = UriComponentsBuilder.fromUriString(targetFrontendUrl + "/login")
                     .queryParam("error", "WITHDRAWN_ACCOUNT")
                     .build().toUriString();
             getRedirectStrategy().sendRedirect(request, response, targetUrl);
@@ -63,12 +85,12 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
 
         String targetUrl;
         if (member.getRole() == Member.Role.GUEST) {
-            targetUrl = UriComponentsBuilder.fromUriString(frontendUrl + "/signup/complete")
+            targetUrl = UriComponentsBuilder.fromUriString(targetFrontendUrl + "/signup/complete")
                     .queryParam("token", accessToken)
                     .queryParam("email", socialEmail != null ? socialEmail : "")
                     .build().toUriString();
         } else {
-            targetUrl = UriComponentsBuilder.fromUriString(frontendUrl + "/oauth/callback")
+            targetUrl = UriComponentsBuilder.fromUriString(targetFrontendUrl + "/oauth/callback")
                     .queryParam("accessToken", accessToken)
                     .queryParam("refreshToken", refreshToken)
                     .build().toUriString();
