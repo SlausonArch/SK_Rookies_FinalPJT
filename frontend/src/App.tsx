@@ -20,6 +20,7 @@ import WithdrawalComplete from './pages/WithdrawalComplete';
 import Events from './pages/Events';
 import Support from './pages/Support';
 import PrivacyPolicy from './pages/PrivacyPolicy';
+import ApiDocs from './pages/ApiDocs';
 
 function App() {
   return (
@@ -42,6 +43,7 @@ function App() {
         <Route path="/mypage" element={<MyPage />} />
         <Route path="/withdrawal-complete" element={<WithdrawalComplete />} />
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+        <Route path="/api-docs" element={<ApiDocs />} />
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
         <Route path="/" element={<Landing />} />

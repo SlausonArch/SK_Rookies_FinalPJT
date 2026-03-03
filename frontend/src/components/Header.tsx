@@ -144,6 +144,7 @@ const Header: React.FC = () => {
           <NavItem to="/investments">투자내역</NavItem>
           <NavItem to="/trends">코인동향</NavItem>
           <NavItem to="/community">커뮤니티</NavItem>
+          <NavItem to="/api-docs">API문서</NavItem>
           <NavItem to="/events">이벤트</NavItem>
           <NavItem to="/support">고객센터</NavItem>
         </Nav>
