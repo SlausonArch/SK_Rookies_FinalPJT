@@ -265,6 +265,15 @@ const API_GROUPS: ApiGroup[] = [
         ],
         responseExample: '{ "attachmentUrl": "/uploads/..." }',
       },
+      {
+        method: 'PATCH', path: '/api/community/admin/members/{memberId}/status', summary: '커뮤니티 관리자 회원 상태 변경',
+        auth: 'admin',
+        params: [
+          { name: 'memberId', in: 'path', required: true, type: 'number', description: '회원 ID' },
+          { name: 'status', in: 'body', required: true, type: 'string', description: 'ACTIVE | LOCKED | WITHDRAWN' },
+        ],
+        responseExample: '{ "status": "ACTIVE" }',
+      },
     ],
   },
   {
