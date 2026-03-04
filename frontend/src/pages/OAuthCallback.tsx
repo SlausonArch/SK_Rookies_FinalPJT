@@ -20,6 +20,7 @@ const OAuthCallback: React.FC = () => {
         if (accessToken && refreshToken) {
             localStorage.setItem('accessToken', accessToken);
             localStorage.setItem('refreshToken', refreshToken);
+            document.cookie = `vce_token=${accessToken}; path=/; max-age=86400`;
             const target = sanitizeRedirectTarget(localStorage.getItem('postLoginRedirect'));
             localStorage.removeItem('postLoginRedirect');
             window.location.href = target;

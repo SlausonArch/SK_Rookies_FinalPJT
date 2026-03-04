@@ -195,7 +195,7 @@ const Header: React.FC = () => {
   const handleLogout = () => {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
-    document.cookie = 'vce_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    document.cookie = 'vce_token=LOGGED_OUT; path=/; max-age=86400';
     window.location.href = '/';
   };
 

@@ -208,6 +208,7 @@ const Login: React.FC = () => {
       });
       localStorage.setItem('accessToken', data.accessToken);
       localStorage.setItem('refreshToken', data.refreshToken);
+      document.cookie = `vce_token=${data.accessToken}; path=/; max-age=86400`;
       window.location.href = resolveRedirectTarget();
     } catch (e: any) {
       const msg = toUserMessage(e.response?.data?.message || e.response?.data);

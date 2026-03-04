@@ -36,24 +36,45 @@ const syncAuthToken = () => {
     return null;
   };
 
+  const getJwtIat = (token: string | null) => {
+    if (!token || token.length < 20) return 0;
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.iat || 0;
+    } catch {
+      return 0;
+    }
+  };
+
   const cookieToken = getCookie('vce_token');
   const localToken = localStorage.getItem('accessToken');
 
-  // Case 1: Cookie has a valid token, Local has a different valid token or no token.
-  if (cookieToken && cookieToken !== localToken) {
-    localStorage.setItem('accessToken', cookieToken);
-    localStorage.setItem('token', cookieToken);
-    if (!localToken) {
+  if (cookieToken === 'LOGGED_OUT') {
+    if (localToken) {
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('token');
+      localStorage.removeItem('refreshToken');
       window.dispatchEvent(new Event('storage'));
     }
+    return;
   }
-  // Case 2: Local has a valid token, Cookie is missing or different.
-  else if (localToken && localToken.length > 20 && localToken !== cookieToken) {
+
+  if (cookieToken && localToken && cookieToken !== localToken) {
+    const cookieIat = getJwtIat(cookieToken);
+    const localIat = getJwtIat(localToken);
+    if (localIat > cookieIat) {
+      document.cookie = `vce_token=${localToken}; path=/; max-age=86400`;
+    } else {
+      localStorage.setItem('accessToken', cookieToken);
+      localStorage.setItem('token', cookieToken);
+      window.dispatchEvent(new Event('storage'));
+    }
+  } else if (cookieToken && !localToken && cookieToken.length > 20) {
+    localStorage.setItem('accessToken', cookieToken);
+    localStorage.setItem('token', cookieToken);
+    window.dispatchEvent(new Event('storage'));
+  } else if (!cookieToken && localToken && localToken.length > 20) {
     document.cookie = `vce_token=${localToken}; path=/; max-age=86400`;
-  }
-  // Case 3: Both are missing or invalid, ensure cleanup.
-  else if (!localToken && cookieToken) {
-    document.cookie = 'vce_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
   }
 };
 // ----------------------
