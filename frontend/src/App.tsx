@@ -29,27 +29,29 @@ const syncAuthToken = () => {
   const getCookie = (name: string) => {
     const value = `; ${document.cookie}`;
     const parts = value.split(`; ${name}=`);
-    if (parts.length === 2) return parts.pop()?.split(';').shift();
+    if (parts.length === 2) {
+      const val = parts.pop()?.split(';').shift();
+      return val === "null" || val === "undefined" || !val ? null : val;
+    }
     return null;
   };
 
   const cookieToken = getCookie('vce_token');
-  const localToken = localStorage.getItem('accessToken') || localStorage.getItem('token');
+  const localToken = localStorage.getItem('accessToken');
 
-  // If cookie exists and is different from local, overwrite local
+  // Case 1: Cookie has a valid token, Local has a different valid token or no token.
   if (cookieToken && cookieToken !== localToken) {
     localStorage.setItem('accessToken', cookieToken);
     localStorage.setItem('token', cookieToken);
-    // If local was empty but cookie existed, we might want to refresh the page to apply auth state immediately
     if (!localToken) {
       window.dispatchEvent(new Event('storage'));
     }
   }
-  // If local exists but cookie doesn't (e.g. initial login login/oauth callback), write to cookie
-  else if (localToken && localToken !== cookieToken) {
+  // Case 2: Local has a valid token, Cookie is missing or different.
+  else if (localToken && localToken.length > 20 && localToken !== cookieToken) {
     document.cookie = `vce_token=${localToken}; path=/; max-age=86400`;
   }
-  // If both are removed, ensure cookie is cleared 
+  // Case 3: Both are missing or invalid, ensure cleanup.
   else if (!localToken && cookieToken) {
     document.cookie = 'vce_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
   }
