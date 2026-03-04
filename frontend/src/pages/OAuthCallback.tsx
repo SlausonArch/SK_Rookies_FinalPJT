@@ -20,6 +20,7 @@ const OAuthCallback: React.FC = () => {
         if (accessToken && refreshToken) {
             localStorage.setItem('accessToken', accessToken);
             localStorage.setItem('refreshToken', refreshToken);
+            // SSO 쿠키도 즉시 갱신 — syncAuthToken()이 구버전 쿠키로 새 토큰을 덮어쓰는 것을 방지
             document.cookie = `vce_token=${accessToken}; path=/; max-age=86400`;
             const target = sanitizeRedirectTarget(localStorage.getItem('postLoginRedirect'));
             localStorage.removeItem('postLoginRedirect');
