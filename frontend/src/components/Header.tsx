@@ -1,20 +1,22 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { Link, NavLink, useLocation } from 'react-router-dom';
+
+const mode = import.meta.env.VITE_APP_MODE || 'exchange';
+const exchangeUrl = import.meta.env.VITE_EXCHANGE_FRONTEND_URL || `${window.location.protocol}//${window.location.hostname}:15173`;
 
 // Header.tsx (스타일만 교체/추가)
 
 const HeaderBar = styled.header`
-  width: 100%;
-  background: linear-gradient(180deg, #093687 0%, #082f77 100%);
-  color: white;
-  position: sticky;
-  top: 0;
-  z-index: 50;
+width: 100%;
+background: linear-gradient(180deg, #093687 0%, #082f77 100%);
+color: white;
+position: sticky;
+top: 0;
+z-index: 50;
 
-  /* 헤더 분리감 */
   box-shadow: 0 8px 24px rgba(10, 24, 52, 0.18);
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 `;
 
 const HeaderInner = styled.div`
@@ -40,12 +42,12 @@ const Logo = styled.div`
 `;
 
 const Nav = styled.nav`
-  display: flex;
-  gap: 24px;
+display: flex;
+gap: 24px;
 `;
 
 const NavItem = styled(NavLink)`
-  color: rgba(255,255,255,0.78);
+  color: rgba(255, 255, 255, 0.78);
   text-decoration: none;
   font-weight: 600;
   font-size: 14px;
@@ -67,7 +69,7 @@ const NavItem = styled(NavLink)`
     bottom: 6px;
     width: 100%;
     height: 2px;
-    background: rgba(255,255,255,0.9);
+    background: rgba(255, 255, 255, 0.9);
     transform: scaleX(0);
     transform-origin: left;
     transition: transform 0.2s ease;
@@ -80,29 +82,79 @@ const NavItem = styled(NavLink)`
   }
 `;
 
+const ExternalNavItem = styled.a`
+  color: rgba(255, 255, 255, 0.78);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: -0.2px;
+  position: relative;
+  padding: 10px 0;
+
+  transition: color 0.15s ease;
+
+  &:hover {
+    color: #fff;
+  }
+
+  &::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: 6px;
+    width: 100%;
+    height: 2px;
+    background: rgba(255, 255, 255, 0.9);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.2s ease;
+    border-radius: 999px;
+    opacity: 0.9;
+  }
+
+  &:hover::after {
+    transform: scaleX(1);
+  }
+`;
+
 const AuthButtons = styled.div`
   display: flex;
   gap: 14px;
   align-items: center;
 `;
 
-const AuthLink = styled(Link)`
-  color: rgba(255,255,255,0.9);
+const ExternalAuthLink = styled.a`
+  color: rgba(255, 255, 255, 0.9);
   text-decoration: none;
   font-size: 13px;
   font-weight: 600;
   padding: 8px 10px;
   border-radius: 8px;
-
-  transition: background 0.15s ease;
+  background: rgba(255, 255, 255, 0.1);
+  transition: background 0.15s ease, color 0.15s ease;
 
   &:hover {
-    background: rgba(255,255,255,0.08);
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
   }
 `;
 
+const AuthLink = styled(Link)`
+  color: rgba(255, 255, 255, 0.9);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 10px;
+  border-radius: 8px;
+  transition: background 0.15s ease;
+
+  &:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+`;
+
 const LogoutButton = styled.button`
-  color: rgba(255,255,255,0.9);
+  color: rgba(255, 255, 255, 0.9);
   font-size: 13px;
   font-weight: 600;
   background: none;
@@ -114,20 +166,36 @@ const LogoutButton = styled.button`
   transition: background 0.15s ease;
 
   &:hover {
-    background: rgba(255,255,255,0.08);
-  }
+  background: rgba(255, 255, 255, 0.08);
+}
 `;
 
 
 const Header: React.FC = () => {
   const location = useLocation();
-  const isLoggedIn = !!localStorage.getItem('accessToken');
+  const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('accessToken'));
+
+  useEffect(() => {
+    const checkAuth = () => {
+      setIsLoggedIn(!!localStorage.getItem('accessToken'));
+    };
+
+    window.addEventListener('storage', checkAuth);
+    const interval = setInterval(checkAuth, 1000);
+
+    return () => {
+      window.removeEventListener('storage', checkAuth);
+      clearInterval(interval);
+    };
+  }, []);
+
   const redirectTarget = `${location.pathname}${location.search || ''}`;
   const loginUrl = `/login?redirect=${encodeURIComponent(redirectTarget)}`;
 
   const handleLogout = () => {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    document.cookie = 'vce_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
     window.location.href = '/';
   };
 
@@ -135,24 +203,47 @@ const Header: React.FC = () => {
     <HeaderBar>
       <HeaderInner>
         <Logo>
-          <Link to="/crypto">VCE</Link>
+          {mode === 'bank' ? (
+            <a href={`${exchangeUrl}/crypto`} style={{ color: '#fff', textDecoration: 'none' }}>VCE</a>
+          ) : (
+            <Link to="/crypto">VCE</Link>
+          )}
         </Logo>
 
         <Nav>
-          <NavItem to="/exchange">거래소</NavItem>
-          <NavItem to="/balances">입출금</NavItem>
-          <NavItem to="/investments">투자내역</NavItem>
-          <NavItem to="/trends">코인동향</NavItem>
-          <NavItem to="/community">커뮤니티</NavItem>
-          <NavItem to="/api-docs">API문서</NavItem>
-          <NavItem to="/events">이벤트</NavItem>
-          <NavItem to="/support">고객센터</NavItem>
+          {mode === 'bank' ? (
+            <>
+              <ExternalNavItem href={`${exchangeUrl}/exchange`}>거래소</ExternalNavItem>
+              <ExternalNavItem href={`${exchangeUrl}/balances`}>입출금</ExternalNavItem>
+              <ExternalNavItem href={`${exchangeUrl}/investments`}>투자내역</ExternalNavItem>
+              <ExternalNavItem href={`${exchangeUrl}/trends`}>코인동향</ExternalNavItem>
+              <ExternalNavItem href={`${exchangeUrl}/community`}>커뮤니티</ExternalNavItem>
+              <ExternalNavItem href={`${exchangeUrl}/api-docs`}>API문서</ExternalNavItem>
+              <ExternalNavItem href={`${exchangeUrl}/events`}>이벤트</ExternalNavItem>
+              <ExternalNavItem href={`${exchangeUrl}/support`}>고객센터</ExternalNavItem>
+            </>
+          ) : (
+            <>
+              <NavItem to="/exchange">거래소</NavItem>
+              <NavItem to="/balances">입출금</NavItem>
+              <NavItem to="/investments">투자내역</NavItem>
+              <NavItem to="/trends">코인동향</NavItem>
+              <NavItem to="/community">커뮤니티</NavItem>
+              <NavItem to="/api-docs">API문서</NavItem>
+              <NavItem to="/events">이벤트</NavItem>
+              <NavItem to="/support">고객센터</NavItem>
+            </>
+          )}
         </Nav>
 
         <AuthButtons>
           {isLoggedIn ? (
             <>
-              <AuthLink to="/mypage">마이페이지</AuthLink>
+              {mode === 'bank' ? (
+                <ExternalAuthLink href={`${exchangeUrl}/mypage`}>마이페이지</ExternalAuthLink>
+              ) : (
+                <AuthLink to="/mypage">마이페이지</AuthLink>
+              )}
               <LogoutButton onClick={handleLogout}>로그아웃</LogoutButton>
             </>
           ) : (
@@ -162,8 +253,8 @@ const Header: React.FC = () => {
             </>
           )}
         </AuthButtons>
-      </HeaderInner>
-    </HeaderBar>
+      </HeaderInner >
+    </HeaderBar >
   );
 };
 

@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+const exchangeUrl = import.meta.env.VITE_EXCHANGE_FRONTEND_URL || `${window.location.protocol}//${window.location.hostname}:15173`;
 
 const PageContainer = styled.div`
   min-height: 100vh;
@@ -20,7 +21,7 @@ const HeaderNav = styled.nav`
   width: 100%;
   padding: 20px 40px;
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end; /* Align the single button to the right */
   background: white;
   box-shadow: 0 2px 10px rgba(0,0,0,0.05);
 `;
@@ -32,6 +33,20 @@ const NavLink = styled.button`
   font-weight: 700;
   font-size: 16px;
   cursor: pointer;
+  
+  &:hover {
+    text-decoration: underline;
+  }
+`;
+
+const NavExternalLink = styled.a`
+  background: none;
+  border: none;
+  color: #1a5bc4;
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+  text-decoration: none;
   
   &:hover {
     text-decoration: underline;
@@ -329,8 +344,7 @@ const BankDashboard: React.FC = () => {
   return (
     <PageContainer>
       <HeaderNav>
-        <NavLink onClick={() => navigate('/')}>&larr; 랜딩 페이지</NavLink>
-        <NavLink onClick={() => navigate('/crypto')}>암호화폐 거래소 &rarr;</NavLink>
+        <NavExternalLink href={`${exchangeUrl}/crypto`}>암호화폐 거래소 &rarr;</NavExternalLink>
       </HeaderNav>
       <DashboardCard>
         <BankLogo>🏦 VCE 가상은행</BankLogo>

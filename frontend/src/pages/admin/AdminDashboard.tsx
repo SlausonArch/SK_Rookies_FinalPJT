@@ -1142,6 +1142,7 @@ const AdminDashboard = () => {
 
   const handleLogout = () => {
     localStorage.clear();
+    document.cookie = 'vce_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
     navigate('/admin/login', { replace: true });
   };
 

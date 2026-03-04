@@ -11,6 +11,7 @@ import { useUpbitTicker } from '../hooks/useUpbitWebSocket';
 import axios from 'axios';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+const bankUrl = import.meta.env.VITE_BANK_FRONTEND_URL || `${window.location.protocol}//${window.location.hostname}:15174`;
 
 const MainContainer = styled.div`
   min-height: 100vh;
@@ -117,13 +118,24 @@ const LoginButton = styled(Link)`
   }
 `;
 
-const BankButton = styled(LoginButton)`
+const BankButton = styled.a`
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 32px;
   background: #ffffff;
   color: #093687;
+  font-size: 15px;
+  font-weight: 700;
+  border-radius: 10px;
+  text-decoration: none;
   border: 1px solid rgba(255,255,255,0.9);
+  transition: transform 0.15s ease, background 0.15s ease;
 
   &:hover {
     background: #f3f6ff;
+    transform: translateY(-1px);
   }
 `;
 
@@ -438,7 +450,7 @@ const Home: React.FC = () => {
 
           <HeroActions>
             <CTAButton to="/exchange">거래소 둘러보기</CTAButton>
-            {isLoggedIn && <BankButton to="/bank">은행 바로가기</BankButton>}
+            {isLoggedIn && <BankButton href={`${bankUrl}/bank`}>은행 바로가기</BankButton>}
             {!isLoggedIn && <LoginButton to={`/login?redirect=${encodeURIComponent('/crypto')}`}>로그인</LoginButton>}
           </HeroActions>
         </HeroSection>

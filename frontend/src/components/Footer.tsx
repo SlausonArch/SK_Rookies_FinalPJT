@@ -2,6 +2,9 @@ import React from 'react';
 import styled from 'styled-components';
 import { Link } from 'react-router-dom';
 
+const mode = import.meta.env.VITE_APP_MODE || 'exchange';
+const exchangeUrl = import.meta.env.VITE_EXCHANGE_FRONTEND_URL || `${window.location.protocol}//${window.location.hostname}:15173`;
+
 const FooterContainer = styled.footer`
   background-color: white;
   padding: 40px 20px;
@@ -45,26 +48,30 @@ const PolicyLinks = styled.div`
 `;
 
 const Footer: React.FC = () => {
-    return (
-        <FooterContainer>
-            <FooterContent>
-                <Info>
-                    <strong>VCE (Vulnerability Crypto Exchange)</strong>
-                    <span>SK Rookies Final Project</span>
-                    <span>Designed for Security Research & Education</span>
-                    <PolicyLinks>
-                      <Link to="/privacy-policy">개인정보처리방침</Link>
-                    </PolicyLinks>
-                    <Copy>Copyright © 2026 VCE. All rights reserved.</Copy>
-                </Info>
-                <Info>
-                    <strong>고객센터</strong>
-                    <span>1588-XXXX</span>
-                    <span>평일 09:00 - 18:00</span>
-                </Info>
-            </FooterContent>
-        </FooterContainer>
-    );
+  return (
+    <FooterContainer>
+      <FooterContent>
+        <Info>
+          <strong>VCE (Vulnerability Crypto Exchange)</strong>
+          <span>SK Rookies Final Project</span>
+          <span>Designed for Security Research & Education</span>
+          <PolicyLinks>
+            {mode === 'bank' ? (
+              <a href={`${exchangeUrl}/privacy-policy`}>개인정보처리방침</a>
+            ) : (
+              <Link to="/privacy-policy">개인정보처리방침</Link>
+            )}
+          </PolicyLinks>
+          <Copy>Copyright © 2026 VCE. All rights reserved.</Copy>
+        </Info>
+        <Info>
+          <strong>고객센터</strong>
+          <span>1588-XXXX</span>
+          <span>평일 09:00 - 18:00</span>
+        </Info>
+      </FooterContent>
+    </FooterContainer>
+  );
 };
 
 export default Footer;

@@ -1,3 +1,4 @@
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -23,7 +24,47 @@ import ApiDocs from './pages/ApiDocs';
 
 const mode = import.meta.env.VITE_APP_MODE || 'exchange'; // 'bank' or 'exchange'
 
+// --- SSO Sync Logic ---
+const syncAuthToken = () => {
+  const getCookie = (name: string) => {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop()?.split(';').shift();
+    return null;
+  };
+
+  const cookieToken = getCookie('vce_token');
+  const localToken = localStorage.getItem('accessToken') || localStorage.getItem('token');
+
+  // If cookie exists and is different from local, overwrite local
+  if (cookieToken && cookieToken !== localToken) {
+    localStorage.setItem('accessToken', cookieToken);
+    localStorage.setItem('token', cookieToken);
+    // If local was empty but cookie existed, we might want to refresh the page to apply auth state immediately
+    if (!localToken) {
+      window.dispatchEvent(new Event('storage'));
+    }
+  }
+  // If local exists but cookie doesn't (e.g. initial login login/oauth callback), write to cookie
+  else if (localToken && localToken !== cookieToken) {
+    document.cookie = `vce_token=${localToken}; path=/; max-age=86400`;
+  }
+  // If both are removed, ensure cookie is cleared 
+  else if (!localToken && cookieToken) {
+    document.cookie = 'vce_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+  }
+};
+// ----------------------
+syncAuthToken();
+
 function App() {
+  useEffect(() => {
+    syncAuthToken();
+    // Keep checking periodically to share state across open tabs (ports) instantly
+    const interval = setInterval(syncAuthToken, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   if (mode === 'bank') {
     return (
       <Router>
