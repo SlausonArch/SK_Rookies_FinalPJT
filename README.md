@@ -17,6 +17,7 @@
 2. Docker Desktop이 실행 중인지 확인합니다.
 3. 다음 명령어를 순서대로 실행합니다:
    ```powershell
+   
    # 1. DB 컨테이너 실행
    docker-compose up -d
    
