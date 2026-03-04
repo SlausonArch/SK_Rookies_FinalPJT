@@ -314,6 +314,10 @@ const BankDashboard: React.FC = () => {
       setError('가상은행 통장 잔고가 부족합니다.');
       return;
     }
+    if (mode === 'withdraw' && numAmount > exchangeBalance) {
+      setError('거래소 보유 원화가 부족합니다.');
+      return;
+    }
 
     setError('');
     setSuccess('');

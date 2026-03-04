@@ -15,4 +15,9 @@ public class GlobalExceptionHandler {
         String message = ex.getReason() != null ? ex.getReason() : "REQUEST_FAILED";
         return ResponseEntity.status(ex.getStatusCode()).body(Map.of("message", message));
     }
+
+    @ExceptionHandler(RuntimeException.class)
+    public ResponseEntity<Map<String, String>> handleRuntimeException(RuntimeException ex) {
+        return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage() != null ? ex.getMessage() : "처리 중 오류가 발생했습니다."));
+    }
 }
