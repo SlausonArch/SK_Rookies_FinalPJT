@@ -218,8 +218,26 @@ const BankDashboard: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const token = localStorage.getItem('accessToken');
+  const [token, setToken] = useState<string | null>(localStorage.getItem('accessToken'));
+
   const loginRedirectUrl = `/login?redirect=${encodeURIComponent(`${location.pathname}${location.search || ''}`)}`;
+
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setToken(localStorage.getItem('accessToken'));
+    };
+
+    // Listen for storage events from App.tsx sync logic
+    window.addEventListener('storage', handleStorageChange);
+
+    // Quick polling for the first few seconds after load, in case of race conditions with OAuth redirect
+    const interval = setInterval(handleStorageChange, 500);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+    };
+  }, []);
 
   const [exchangeBalance, setExchangeBalance] = useState<number>(0);
 
@@ -263,8 +281,15 @@ const BankDashboard: React.FC = () => {
       .catch((e: any) => {
         console.error("거래소 잔고 조회 실패", e);
         if (e.response && e.response.status === 401) {
-          localStorage.removeItem('accessToken');
-          navigate(loginRedirectUrl, { replace: true });
+          console.warn("Unauthorized API call in BankDashboard. Token may be expired.");
+          // Only clear and redirect if we actually had a token that we tried to use and it failed, 
+          // preventing a redirect loop if the token was just momentarily missing during sync.
+          if (token) {
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
+            setToken(null);
+            navigate(loginRedirectUrl, { replace: true });
+          }
         }
       });
   };
@@ -321,8 +346,12 @@ const BankDashboard: React.FC = () => {
     } catch (err: any) {
       setError(err.response?.data?.message || '거래 처리 중 오류가 발생했습니다.');
       if (err.response && err.response.status === 401) {
-        localStorage.removeItem('accessToken');
-        navigate(loginRedirectUrl, { replace: true });
+        if (token) {
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+          setToken(null);
+          navigate(loginRedirectUrl, { replace: true });
+        }
       }
     } finally {
       setLoading(false);
