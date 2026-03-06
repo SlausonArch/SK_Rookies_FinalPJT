@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import styled from 'styled-components';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { setUserSession } from '../utils/auth';
 
@@ -76,59 +76,10 @@ const Divider = styled.div`
   }
 `;
 
-const TestLoginButton = styled.button`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 50px;
-  margin-bottom: 12px;
-  border-radius: 6px;
-  font-size: 15px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: opacity 0.2s;
-  border: 2px solid #093687;
-  background: white;
-  color: #093687;
-
-  &:hover {
-    background: #f0f4ff;
-  }
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-`;
-
-const TestInfo = styled.div`
-  margin-top: 8px;
-  font-size: 12px;
-  color: #999;
-  line-height: 1.5;
-`;
-
 const ErrorMsg = styled.div`
   margin-top: 8px;
   font-size: 13px;
   color: #d60000;
-`;
-
-const FooterLink = styled.div`
-  margin-top: 20px;
-  font-size: 14px;
-  color: #666;
-
-  a {
-    color: #093687;
-    text-decoration: none;
-    font-weight: 600;
-    margin-left: 5px;
-
-    &:hover {
-      text-decoration: underline;
-    }
-  }
 `;
 
 function sanitizeRedirectTarget(target: string | null | undefined): string {
@@ -141,7 +92,6 @@ function sanitizeRedirectTarget(target: string | null | undefined): string {
 
 const Login: React.FC = () => {
   const [searchParams] = useSearchParams();
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [clickCount, setClickCount] = useState(0);
   const redirectFromQuery = sanitizeRedirectTarget(searchParams.get('redirect'));
@@ -200,7 +150,6 @@ const Login: React.FC = () => {
   };
 
   const handleTestLogin = async () => {
-    setLoading(true);
     setError('');
     try {
       const { data } = await axios.post(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/auth/test/login`, {
@@ -215,8 +164,6 @@ const Login: React.FC = () => {
       if (msg.includes('제한') || msg.includes('탈퇴')) {
         window.alert(msg);
       }
-    } finally {
-      setLoading(false);
     }
   };
 

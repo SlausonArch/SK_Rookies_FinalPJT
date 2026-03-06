@@ -1,6 +1,8 @@
 services:
   exchange-front:
-    build: ./frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     ports:
       - "15173:3000"
     env_file:
