@@ -6,6 +6,7 @@ import { fetchTickers } from '../services/upbitApi';
 import type { UpbitTicker } from '../services/upbitApi';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import { clearUserSession, getUserAccessToken } from '../utils/auth';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 
@@ -232,9 +233,10 @@ const Balances = () => {
 
   // 로그인 체크, 자산 및 투자원금 조회
   const fetchData = async () => {
-    const token = localStorage.getItem('accessToken');
+    const token = getUserAccessToken();
     if (!token) {
-      if (!loading) navigate(loginRedirectUrl, { replace: true });
+      if (loading) setLoading(false);
+      navigate(loginRedirectUrl, { replace: true });
       return;
     }
 
@@ -245,7 +247,7 @@ const Balances = () => {
       const assetsResponse = await axios.get(`${API_BASE}/api/assets`, { headers });
 
       if (typeof assetsResponse.data === 'string' && assetsResponse.data.includes('<!DOCTYPE html>')) {
-        localStorage.removeItem('accessToken');
+        clearUserSession(true);
         navigate(loginRedirectUrl);
         return;
       }
@@ -268,7 +270,7 @@ const Balances = () => {
     } catch (error: any) {
       console.error('자산 조회 실패:', error);
       if (error.response && error.response.status === 401) {
-        localStorage.removeItem('accessToken');
+        clearUserSession(true);
         navigate(loginRedirectUrl, { replace: true });
       }
     } finally {
@@ -318,7 +320,7 @@ const Balances = () => {
 
   // 지갑 주소 조회 (입금)
   useEffect(() => {
-    const token = localStorage.getItem('accessToken');
+    const token = getUserAccessToken();
     if (!token) return;
 
     axios.get(`${API_BASE}/api/wallets/${selectedDepositCoin}/address`, {
@@ -333,7 +335,7 @@ const Balances = () => {
       });
   }, [selectedDepositCoin]);
 
-  const holdingAssets = assets.filter((a: any) => a.assetType !== 'KRW');
+  const holdingAssets = assets.filter((a: any) => a.assetType !== 'KRW' && Number(a.balance) > 0);
 
   const totalCoinValue = holdingAssets.reduce((sum, asset) => {
     const price = coinPrices[asset.assetType as keyof typeof coinPrices] || 0;
@@ -399,7 +401,7 @@ const Balances = () => {
   const availableWithdrawAmount = assets.find((a: any) => a.assetType === selectedWithdrawCoin)?.balance || 0;
 
   const handleCoinTransfer = async () => {
-    const token = localStorage.getItem('accessToken');
+    const token = getUserAccessToken();
     if (!token || !withdrawAddress || !transferAmount) return;
 
     setTransferring(true);
@@ -551,7 +553,7 @@ const Balances = () => {
               </Tr>
             </Thead>
             <Tbody>
-              {assets.filter((a: any) => a.assetType !== 'KRW').map((asset: any) => {
+              {holdingAssets.map((asset: any) => {
                 const symbol = asset.assetType;
                 const balance = asset.balance;
                 const price = coinPrices[symbol as keyof typeof coinPrices] || 0;
@@ -572,7 +574,7 @@ const Balances = () => {
                   </Tr>
                 );
               })}
-              {assets.filter((a: any) => a.assetType !== 'KRW').length === 0 && (
+              {holdingAssets.length === 0 && (
                 <Tr>
                   <Td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
                     보유 중인 코인이 없습니다.

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { getAdminAccessToken, getAdminRole, setAdminSession } from '../../utils/auth';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 
@@ -146,8 +147,8 @@ const AdminLogin = () => {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const role = localStorage.getItem('role');
+    const token = getAdminAccessToken();
+    const role = getAdminRole();
     if (token && role === 'ADMIN') {
       navigate('/admin/dashboard', { replace: true });
     }
@@ -165,11 +166,7 @@ const AdminLogin = () => {
       });
 
       const { accessToken, role, email: userEmail, name } = response.data;
-
-      localStorage.setItem('token', accessToken);
-      localStorage.setItem('role', role);
-      localStorage.setItem('email', userEmail);
-      localStorage.setItem('name', name);
+      setAdminSession(accessToken, role, userEmail, name);
 
       navigate('/admin/dashboard', { replace: true });
     } catch (err: any) {

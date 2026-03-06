@@ -3,6 +3,7 @@ import styled, { keyframes } from 'styled-components';
 import axios from 'axios';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { CheckCircle2, AlertCircle, TrendingUp, TrendingDown, Clock, Info } from 'lucide-react';
+import { getUserAccessToken } from '../../utils/auth';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 
@@ -161,22 +162,8 @@ const Toast = styled.div<{ $success: boolean }>`
   animation: ${slideIn} 0.3s ease-out forwards;
 `;
 
-const DepositBtn = styled.button`
-  width: 100%;
-  padding: 8px;
-  margin-top: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #093687;
-  background: #f0f4ff;
-  border: 1px solid #093687;
-  border-radius: 4px;
-  cursor: pointer;
-  &:hover { background: #e0e8ff; }
-`;
-
 function getToken(): string | null {
-  return localStorage.getItem('accessToken');
+  return getUserAccessToken();
 }
 
 function toUserMessage(raw: unknown): string {
@@ -242,6 +229,7 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
   const location = useLocation();
   // const [tab, setTab] = useState<'buy' | 'sell'>('buy'); // 제거됨
   const [price, setPrice] = useState('');
+  const [priceTouched, setPriceTouched] = useState(false);
   const [amount, setAmount] = useState('');
   const [krwBalance, setKrwBalance] = useState(0);
   const [coinBalance, setCoinBalance] = useState(0);
@@ -259,20 +247,22 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
   useEffect(() => {
     // When market changes, clear the price so it will auto-update to the new market's price
     setPrice('');
+    setPriceTouched(false);
     setAmount('');
   }, [market]);
 
   useEffect(() => {
     // Only update price automatically if it hasn't been set manually
     // Allow users to keep their static limit price unless they change market
-    if (currentPrice > 0 && !price) {
+    if (currentPrice > 0 && !price && !priceTouched) {
       setPrice(String(currentPrice));
     }
-  }, [currentPrice, price]);
+  }, [currentPrice, price, priceTouched]);
 
   useEffect(() => {
     if (selectedPrice && selectedPrice > 0) {
       setPrice(String(selectedPrice));
+      setPriceTouched(true);
     }
   }, [selectedPrice]);
 
@@ -324,22 +314,6 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
       return () => clearTimeout(timer);
     }
   }, [message]);
-
-  const handleDeposit = async () => {
-    if (!token) return;
-    try {
-      await axios.post(`${API_BASE}/api/assets/deposit`,
-        { assetType: 'KRW', amount: 10000000 },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setMessage({ text: '테스트 1,000만원이 충전되었습니다!', success: true });
-    } catch (err: any) {
-      const raw = err.response?.data?.message || err.response?.data || '충전에 실패했습니다.';
-      const userMessage = toUserMessage(raw);
-      showRestrictionPopupIfNeeded(userMessage);
-      setMessage({ text: userMessage, success: false });
-    }
-  };
 
   const handleSubmit = async (isMarket: boolean) => {
     if (!token || loading) return;
@@ -430,19 +404,16 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
           )}
         </BalanceInfo>
 
-        {tradeType === 'buy' && krwBalance === 0 && (
-          <DepositBtn onClick={handleDeposit}>테스트 1,000만원 충전</DepositBtn>
-        )}
-
         <FormRow>
           <Label>가격 (KRW)</Label>
           <Input
             type="text"
             inputMode="decimal"
             value={price}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-              setPrice(sanitizeDecimalInput(e.target.value, PRICE_SCALE))
-            }
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+              setPriceTouched(true);
+              setPrice(sanitizeDecimalInput(e.target.value, PRICE_SCALE));
+            }}
             placeholder="주문 가격"
           />
         </FormRow>

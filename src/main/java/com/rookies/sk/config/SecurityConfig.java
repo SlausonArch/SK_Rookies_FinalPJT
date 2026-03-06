@@ -5,6 +5,7 @@ import com.rookies.sk.security.JwtAuthenticationFilter;
 import com.rookies.sk.security.JwtTokenProvider;
 import com.rookies.sk.security.OAuth2SuccessHandler;
 import com.rookies.sk.service.CustomOAuth2UserService;
+import com.rookies.sk.service.TokenBlacklistService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -32,6 +33,7 @@ public class SecurityConfig {
         private final OAuth2SuccessHandler oAuth2SuccessHandler;
         private final JwtTokenProvider jwtTokenProvider;
         private final MemberRepository memberRepository;
+        private final TokenBlacklistService tokenBlacklistService;
         private final com.rookies.sk.security.HttpCookieOAuth2AuthorizationRequestRepository cookieAuthorizationRequestRepository;
 
         @org.springframework.beans.factory.annotation.Value("${app.cors.allowed-origins}")
@@ -66,7 +68,7 @@ public class SecurityConfig {
                                                                                                          // necessarily
                                                                                                          // here.
                                 .authorizeHttpRequests(auth -> auth
-                                                .requestMatchers("/api/auth/me/**", "/api/auth/withdraw")
+                                                .requestMatchers("/api/auth/me/**", "/api/auth/withdraw", "/api/auth/logout")
                                                 .authenticated()
                                                 .requestMatchers("/", "/login/**", "/oauth2/**", "/api/auth/**",
                                                                 "/error", "/uploads/**")
@@ -87,7 +89,7 @@ public class SecurityConfig {
                                                 .userInfoEndpoint(userInfo -> userInfo
                                                                 .userService(customOAuth2UserService))
                                                 .successHandler(oAuth2SuccessHandler))
-                                .addFilterBefore(new JwtAuthenticationFilter(jwtTokenProvider, memberRepository),
+                                .addFilterBefore(new JwtAuthenticationFilter(jwtTokenProvider, memberRepository, tokenBlacklistService),
                                                 UsernamePasswordAuthenticationFilter.class)
                                 .exceptionHandling(exception -> exception
                                                 .defaultAuthenticationEntryPointFor(

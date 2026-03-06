@@ -2,7 +2,6 @@ services:
   # 1. Oracle Database (v23.4 Free - Mac M1/M2/M3 호환성 우수)
   oracle-db:
     image: gvenzl/oracle-free:23.4
-    container_name: sk-oracle-db
     environment:
       - ORACLE_PASSWORD=${DB_PASSWORD}
       - APP_USER=${DB_USERNAME}
@@ -23,7 +22,6 @@ services:
   # 2. Backend (Spring Boot Monolith)
   backend:
     build: .
-    container_name: sk-backend
     ports:
       - "${APP_BIND_IP:-0.0.0.0}:${HOST_BACKEND_PORT:-18080}:8080"
     depends_on:
@@ -51,7 +49,6 @@ services:
   # 3. Frontend - Exchange & Admin
   exchange-front:
     build: ./frontend
-    container_name: sk-exchange-front
     ports:
       - "${APP_BIND_IP:-0.0.0.0}:${HOST_EXCHANGE_FRONT_PORT:-15173}:3000"
     environment:
@@ -65,7 +62,6 @@ services:
   # 4. Frontend - Bank
   bank-front:
     build: ./frontend
-    container_name: sk-bank-front
     ports:
       - "${APP_BIND_IP:-0.0.0.0}:${HOST_BANK_FRONT_PORT:-15174}:3000"
     environment:

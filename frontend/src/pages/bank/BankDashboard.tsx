@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { clearUserSession, getUserAccessToken } from '../../utils/auth';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 const exchangeUrl = import.meta.env.VITE_EXCHANGE_FRONTEND_URL || `${window.location.protocol}//${window.location.hostname}:15173`;
@@ -218,13 +219,13 @@ const BankDashboard: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [token, setToken] = useState<string | null>(localStorage.getItem('accessToken'));
+  const [token, setToken] = useState<string | null>(getUserAccessToken());
 
   const loginRedirectUrl = `/login?redirect=${encodeURIComponent(`${location.pathname}${location.search || ''}`)}`;
 
   useEffect(() => {
     const handleStorageChange = () => {
-      setToken(localStorage.getItem('accessToken'));
+      setToken(getUserAccessToken());
     };
 
     // Listen for storage events from App.tsx sync logic
@@ -285,8 +286,7 @@ const BankDashboard: React.FC = () => {
           // Only clear and redirect if we actually had a token that we tried to use and it failed, 
           // preventing a redirect loop if the token was just momentarily missing during sync.
           if (token) {
-            localStorage.removeItem('accessToken');
-            localStorage.removeItem('refreshToken');
+            clearUserSession(true);
             setToken(null);
             navigate(loginRedirectUrl, { replace: true });
           }
@@ -351,8 +351,7 @@ const BankDashboard: React.FC = () => {
       setError(err.response?.data?.message || '거래 처리 중 오류가 발생했습니다.');
       if (err.response && err.response.status === 401) {
         if (token) {
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
+          clearUserSession(true);
           setToken(null);
           navigate(loginRedirectUrl, { replace: true });
         }

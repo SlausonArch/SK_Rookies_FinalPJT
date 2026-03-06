@@ -5,6 +5,7 @@ import axios from 'axios';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import TierModal from '../components/TierModal';
+import { clearUserSession, getUserAccessToken, getUserRefreshToken } from '../utils/auth';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 
@@ -360,7 +361,7 @@ const MyPage: React.FC = () => {
     accountHolder: '',
   });
 
-  const getToken = () => localStorage.getItem('accessToken') || localStorage.getItem('token');
+  const getToken = () => getUserAccessToken();
   const loginRedirectUrl = `/login?redirect=${encodeURIComponent(`${location.pathname}${location.search || ''}`)}`;
 
   useEffect(() => {
@@ -392,8 +393,7 @@ const MyPage: React.FC = () => {
       })
       .catch(err => {
         if (err.response?.status === 401) {
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('token');
+          clearUserSession(true);
           navigate(loginRedirectUrl, { replace: true });
         }
       })
@@ -507,14 +507,12 @@ const MyPage: React.FC = () => {
     try {
       await axios.post(
         `${API_BASE}/api/auth/withdraw`,
-        {},
+        { refreshToken: getUserRefreshToken() },
         {
           headers: { Authorization: `Bearer ${token}` },
         },
       );
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('token');
-      localStorage.removeItem('refreshToken');
+      clearUserSession(true);
       navigate('/withdrawal-complete', { replace: true });
     } catch (err: any) {
       alert(

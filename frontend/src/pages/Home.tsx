@@ -410,31 +410,6 @@ const Home: React.FC = () => {
     }
   }, [mergedCoins, markets, activeTab]);
 
-  const handleSecretDeposit = async () => {
-    const token = localStorage.getItem('accessToken');
-    if (!token) {
-      alert('로그인이 필요합니다.');
-      return;
-    }
-
-    try {
-      const response = await axios.post(
-        `${API_BASE}/api/assets/deposit`,
-        { assetType: 'KRW', amount: 10000000 },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      if (response.status === 200) {
-        alert('💰 1천만원이 입금되었습니다!\n입출금 페이지에서 확인하세요.');
-        setTimeout(() => {
-          window.location.href = '/balances';
-        }, 1000);
-      }
-    } catch (error: any) {
-      alert(`입금에 실패했습니다.\n오류: ${error.response?.data?.message || error.message}`);
-    }
-  };
-
   return (
     <MainContainer>
       <Header />
@@ -466,7 +441,7 @@ const Home: React.FC = () => {
         />
 
         <SectionHeader>
-          <SectionTitle onClick={handleSecretDeposit}>
+          <SectionTitle>
             실시간 {activeTabLabel} 코인
           </SectionTitle>
           <MoreLink to="/exchange">전체 보기 &gt;</MoreLink>

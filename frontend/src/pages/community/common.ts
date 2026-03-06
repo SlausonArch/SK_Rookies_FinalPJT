@@ -1,3 +1,5 @@
+import { getUserAccessToken } from '../../utils/auth';
+
 export interface Post {
   postId: number;
   memberId: number | null;
@@ -30,7 +32,7 @@ export const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8
 const KST_TIME_ZONE = 'Asia/Seoul';
 
 export function getAccessToken(): string | null {
-  return localStorage.getItem('accessToken') || localStorage.getItem('token');
+  return getUserAccessToken();
 }
 
 export function getAuthHeaders(token: string | null): Record<string, string> {

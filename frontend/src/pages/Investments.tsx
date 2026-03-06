@@ -6,6 +6,7 @@ import { fetchTickers } from '../services/upbitApi';
 import type { UpbitTicker } from '../services/upbitApi';
 import { TrendingUp, TrendingDown, Download, Upload } from 'lucide-react';
 import Header from '../components/Header';
+import { clearUserSession, getUserAccessToken } from '../utils/auth';
 import Footer from '../components/Footer';
 
 const Container = styled.div`
@@ -594,7 +595,7 @@ const Investments = () => {
 
   // 로그인 체크 및 데이터 조회
   useEffect(() => {
-    const token = localStorage.getItem('accessToken');
+    const token = getUserAccessToken();
 
     if (!token) {
       navigate(loginRedirectUrl, { replace: true });
@@ -615,7 +616,7 @@ const Investments = () => {
         // HTML 응답 체크
         if (typeof balanceResponse.data === 'string' && balanceResponse.data.includes('<!DOCTYPE html>')) {
           console.warn('인증 세션 만료됨');
-          localStorage.removeItem('accessToken');
+          clearUserSession(true);
           navigate(loginRedirectUrl);
           return;
         }
@@ -667,7 +668,7 @@ const Investments = () => {
       } catch (error: any) {
         console.error('데이터 조회 실패:', error);
         if (error.response && error.response.status === 401) {
-          localStorage.removeItem('accessToken');
+          clearUserSession(true);
           navigate(loginRedirectUrl, { replace: true });
         }
       } finally {
@@ -679,7 +680,7 @@ const Investments = () => {
   }, [navigate, loginRedirectUrl]);
 
   const handleCancelOpenOrder = async (orderId: number) => {
-    const token = localStorage.getItem('accessToken');
+    const token = getUserAccessToken();
     if (!token) {
       navigate(loginRedirectUrl, { replace: true });
       return;

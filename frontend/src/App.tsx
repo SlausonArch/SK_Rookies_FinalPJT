@@ -20,71 +20,17 @@ import WithdrawalComplete from './pages/WithdrawalComplete';
 import Events from './pages/Events';
 import Support from './pages/Support';
 import PrivacyPolicy from './pages/PrivacyPolicy';
-import ApiDocs from './pages/ApiDocs';
+import { syncAuthState } from './utils/auth';
 
 const mode = import.meta.env.VITE_APP_MODE || 'exchange'; // 'bank' or 'exchange'
 
-// --- SSO Sync Logic ---
-const syncAuthToken = () => {
-  const getCookie = (name: string) => {
-    const value = `; ${document.cookie}`;
-    const parts = value.split(`; ${name}=`);
-    if (parts.length === 2) {
-      const val = parts.pop()?.split(';').shift();
-      return val === "null" || val === "undefined" || !val ? null : val;
-    }
-    return null;
-  };
-
-  const getJwtIat = (token: string | null) => {
-    if (!token || token.length < 20) return 0;
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      return payload.iat || 0;
-    } catch {
-      return 0;
-    }
-  };
-
-  const cookieToken = getCookie('vce_token');
-  const localToken = localStorage.getItem('accessToken');
-
-  if (cookieToken === 'LOGGED_OUT') {
-    if (localToken) {
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('token');
-      localStorage.removeItem('refreshToken');
-      window.dispatchEvent(new Event('storage'));
-    }
-    return;
-  }
-
-  if (cookieToken && localToken && cookieToken !== localToken) {
-    const cookieIat = getJwtIat(cookieToken);
-    const localIat = getJwtIat(localToken);
-    if (localIat > cookieIat) {
-      document.cookie = `vce_token=${localToken}; path=/; max-age=86400`;
-    } else {
-      localStorage.setItem('accessToken', cookieToken);
-      localStorage.setItem('token', cookieToken);
-      window.dispatchEvent(new Event('storage'));
-    }
-  } else if (cookieToken && !localToken && cookieToken.length > 20) {
-    localStorage.setItem('accessToken', cookieToken);
-    localStorage.setItem('token', cookieToken);
-    window.dispatchEvent(new Event('storage'));
-  } else if (!cookieToken && localToken && localToken.length > 20) {
-    document.cookie = `vce_token=${localToken}; path=/; max-age=86400`;
-  }
-};
-// ----------------------
-syncAuthToken();
+syncAuthState();
 
 function App() {
   useEffect(() => {
-    syncAuthToken();
+    syncAuthState();
     // Keep checking periodically to share state across open tabs (ports) instantly
-    const interval = setInterval(syncAuthToken, 1000);
+    const interval = setInterval(syncAuthState, 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -123,7 +69,6 @@ function App() {
         <Route path="/mypage" element={<MyPage />} />
         <Route path="/withdrawal-complete" element={<WithdrawalComplete />} />
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-        <Route path="/api-docs" element={<ApiDocs />} />
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
         <Route path="/" element={<Navigate to="/crypto" />} />

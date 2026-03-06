@@ -2,6 +2,7 @@ package com.rookies.sk.security;
 
 import com.rookies.sk.entity.Member;
 import com.rookies.sk.repository.MemberRepository;
+import com.rookies.sk.service.TokenBlacklistService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -28,6 +29,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider tokenProvider;
     private final MemberRepository memberRepository;
+    private final TokenBlacklistService tokenBlacklistService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -38,15 +40,26 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         // V-02: Weak check - just valid signature with weak key
         if (token != null && tokenProvider.validateToken(token)) {
+            if (tokenBlacklistService.isRevoked(token)) {
+                writeJsonError(response, HttpServletResponse.SC_UNAUTHORIZED, "TOKEN_REVOKED");
+                return;
+            }
+
             String email = tokenProvider.getEmail(token);
             String role = tokenProvider.getRole(token);
             log.info("Token Valid. Email: {}, Role: {}", email, role);
 
             Member member = memberRepository.findByEmail(email).orElse(null);
-            if (member != null && member.getStatus() == Member.Status.WITHDRAWN) {
-                response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                response.setContentType("application/json;charset=UTF-8");
-                response.getWriter().write("{\"message\":\"WITHDRAWN_ACCOUNT\"}");
+            if (member == null) {
+                writeJsonError(response, HttpServletResponse.SC_UNAUTHORIZED, "MEMBER_NOT_FOUND");
+                return;
+            }
+            if (member.getStatus() == Member.Status.WITHDRAWN) {
+                writeJsonError(response, HttpServletResponse.SC_FORBIDDEN, "WITHDRAWN_ACCOUNT");
+                return;
+            }
+            if (!StringUtils.hasText(role)) {
+                writeJsonError(response, HttpServletResponse.SC_UNAUTHORIZED, "INVALID_TOKEN_ROLE");
                 return;
             }
 
@@ -70,5 +83,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return bearerToken.substring(7);
         }
         return null;
+    }
+
+    private void writeJsonError(HttpServletResponse response, int status, String message) throws IOException {
+        response.setStatus(status);
+        response.setContentType("application/json;charset=UTF-8");
+        response.getWriter().write("{\"message\":\"" + message + "\"}");
     }
 }

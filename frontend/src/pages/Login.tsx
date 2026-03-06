@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { Link, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
+import { setUserSession } from '../utils/auth';
 
 const Container = styled.div`
   display: flex;
@@ -206,9 +207,7 @@ const Login: React.FC = () => {
         email: 'test@vce.com',
         password: 'test1234',
       });
-      localStorage.setItem('accessToken', data.accessToken);
-      localStorage.setItem('refreshToken', data.refreshToken);
-      document.cookie = `vce_token=${data.accessToken}; path=/; max-age=86400`;
+      setUserSession(data.accessToken, data.refreshToken);
       window.location.href = resolveRedirectTarget();
     } catch (e: any) {
       const msg = toUserMessage(e.response?.data?.message || e.response?.data);

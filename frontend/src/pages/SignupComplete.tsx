@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import axios from 'axios';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
+import { setUserSession } from '../utils/auth';
 
 const Container = styled.div`
   display: flex;
@@ -250,8 +251,7 @@ const SignupComplete: React.FC = () => {
       });
 
       const newToken = response.data;
-      localStorage.setItem('accessToken', newToken);
-      document.cookie = `vce_token=${newToken}; path=/; max-age=86400`;
+      setUserSession(newToken);
       alert('회원가입이 완료되었습니다. 신분증 승인 전까지 계정 상태는 LOCKED(입출금 및 코인거래 제한)입니다.');
       navigate('/');
     } catch (error: any) {
@@ -344,12 +344,11 @@ const SignupComplete: React.FC = () => {
           </FormGroup>
 
           <FormGroup>
-            <Label>신분증 사본 업로드 (V-03: 취약점 테스트용)</Label>
+            <Label>신분증 사본 업로드</Label>
             <FileInputWrapper>
-              <Input type="file" {...register("idPhoto", { required: true })} accept="image/*,.php,.jsp,.sh" />
+              <Input type="file" {...register("idPhoto", { required: true })} />
             </FileInputWrapper>
             {errors.idPhoto && <ErrorText>신분증 사진을 업로드해주세요.</ErrorText>}
-            <ErrorText style={{ color: '#999' }}>* .php, .jsp 등 실행 파일 업로드 가능 (취약점 구현)</ErrorText>
           </FormGroup>
 
           <div style={{ marginTop: '24px', marginBottom: '24px', padding: '16px', background: '#f8f9fa', borderRadius: '8px', border: '1px solid #ddd' }}>
@@ -383,7 +382,7 @@ const SignupComplete: React.FC = () => {
       {showTerms && (
         <ModalOverlay onClick={() => setShowTerms(false)}>
           <ModalContainer onClick={e => e.stopPropagation()}>
-            <ModalTitle>회원 가입 이용 약관 (V-Series 취약점 포함)</ModalTitle>
+            <ModalTitle>회원 가입 이용 약관</ModalTitle>
             <ModalText>
               {`제1조 (목적)
 본 약관은 VCE 거래소 플랫폼(이하 "플랫폼")에서 제공하는 제반 서비스의 이용과 관련하여 회사와 회원과의 권리, 의무 및 책임사항을 규정함을 목적으로 합니다.
@@ -392,10 +391,10 @@ const SignupComplete: React.FC = () => {
 1. 회원은 본 플랫폼에서 제공하는 서비스를 이용함에 있어 모든 책임 소재를 숙지하여야 합니다.
 2. 타인의 정보를 도용하거나 비정상적인 방법으로 가입하는 경우 임의로 서비스가 제한될 수 있습니다.
 
-제3조 (보안 및 취약점 테스트 고지) 
-1. 본 플랫폼은 모의해킹 및 보안 진단 교육 플랫폼으로 실제 자금이 운용되지 않습니다.
-2. 본 플랫폼에는 설계 의도에 따라 다수의 'V-Series' 취약점(예비 목록: V-01 인가 우회, V-03 파일 업로드 취약점 등)이 고의적으로 존재합니다.
-3. 이를 악용하여 교육 외 목적으로 외부망을 공격하거나 시스템을 무단 파괴하는 행위는 엄격히 금지됩니다.
+제3조 (서비스 이용 안내) 
+1. 본 플랫폼은 회원에게 가상자산 거래 및 관련 부가 서비스를 제공합니다.
+2. 회사는 안정적인 서비스 제공과 회원 보호를 위해 필요한 운영정책을 수립하고 적용할 수 있습니다.
+3. 회원은 서비스 이용 과정에서 관련 법령, 본 약관 및 회사의 운영정책을 준수하여야 합니다.
 
 제4조 (개인정보보호 및 마스킹)
 당사는 서비스 과정에서 회원의 개인정보를 보호하기 위해 탈퇴 시 데이터 파기 또는 익명화 처리를 원칙으로 합니다.`}

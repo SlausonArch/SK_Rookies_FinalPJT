@@ -7,7 +7,10 @@ import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 import java.security.Key;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Date;
+import java.util.UUID;
 
 @Slf4j
 @Component
@@ -27,19 +30,21 @@ public class JwtTokenProvider {
     }
 
     public String createAccessToken(String email, String role, Long memberId) {
-        return createToken(email, role, memberId, ACCESS_TOKEN_EXPIRE_TIME);
+        return createToken(email, role, memberId, "ACCESS", ACCESS_TOKEN_EXPIRE_TIME);
     }
 
     public String createRefreshToken(String email) {
-        return createToken(email, null, null, REFRESH_TOKEN_EXPIRE_TIME);
+        return createToken(email, null, null, "REFRESH", REFRESH_TOKEN_EXPIRE_TIME);
     }
 
-    private String createToken(String email, String role, Long memberId, long expireTime) {
+    private String createToken(String email, String role, Long memberId, String tokenType, long expireTime) {
         Claims claims = Jwts.claims().setSubject(email);
         if (role != null)
             claims.put("role", role);
         if (memberId != null)
             claims.put("memberId", memberId);
+        claims.put("tokenType", tokenType);
+        claims.put("jti", UUID.randomUUID().toString());
 
         Date now = new Date();
         Date validity = new Date(now.getTime() + expireTime);
@@ -64,10 +69,56 @@ public class JwtTokenProvider {
     }
 
     public String getEmail(String token) {
-        return Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(token).getBody().getSubject();
+        return parseClaims(token).getSubject();
     }
 
     public String getRole(String token) {
-        return (String) Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(token).getBody().get("role");
+        return (String) parseClaims(token).get("role");
+    }
+
+    public String getTokenId(String token) {
+        Claims claims = parseClaims(token);
+        Object tokenId = claims.get("jti");
+        if (tokenId instanceof String value && !value.isBlank()) {
+            return value;
+        }
+        return sha256(token);
+    }
+
+    public Date getExpiration(String token) {
+        return parseClaims(token).getExpiration();
+    }
+
+    public String getTokenType(String token) {
+        Claims claims = parseClaims(token);
+        Object tokenType = claims.get("tokenType");
+        if (tokenType instanceof String value && !value.isBlank()) {
+            return value;
+        }
+
+        Object role = claims.get("role");
+        return role instanceof String && !((String) role).isBlank() ? "ACCESS" : "REFRESH";
+    }
+
+    private Claims parseClaims(String token) {
+        return Jwts.parserBuilder()
+                .setSigningKey(key)
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
+    }
+
+    private String sha256(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder builder = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                builder.append(String.format("%02x", b));
+            }
+            return builder.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 not available", e);
+        }
     }
 }

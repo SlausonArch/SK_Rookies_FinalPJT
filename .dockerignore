@@ -1,11 +1,17 @@
 .git
 .gitignore
 .gradle
+.gradle-user
 .vscode
 build
 logs
 uploads
 oracle-data
+frontend
+Dockerfile*
+docker-compose*.yml
+*.env
+.env*
 node_modules
 frontend/node_modules
 frontend/node_modules_old

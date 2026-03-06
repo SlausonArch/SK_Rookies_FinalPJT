@@ -3,10 +3,12 @@ package com.rookies.sk.controller;
 import com.rookies.sk.dto.AdminLoginRequest;
 import com.rookies.sk.dto.AdminLoginResponse;
 import com.rookies.sk.dto.SignupRequestDto;
+import com.rookies.sk.dto.TokenRevokeRequestDto;
 import com.rookies.sk.entity.Member;
 import com.rookies.sk.security.JwtTokenProvider;
 import com.rookies.sk.service.FileService;
 import com.rookies.sk.service.MemberService;
+import com.rookies.sk.service.TokenBlacklistService;
 import com.rookies.sk.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +33,7 @@ public class AuthController {
     private final JwtTokenProvider jwtTokenProvider;
     private final PasswordEncoder passwordEncoder;
     private final TransactionRepository transactionRepository;
+    private final TokenBlacklistService tokenBlacklistService;
 
     @PostMapping("/test/login")
     public ResponseEntity<?> testLogin(@RequestBody AdminLoginRequest request) {
@@ -243,14 +246,39 @@ public class AuthController {
         return ResponseEntity.ok(newAccessToken);
     }
 
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+            @RequestBody(required = false) TokenRevokeRequestDto request) {
+        tokenBlacklistService.revokeTokens(
+                resolveBearerToken(authorizationHeader),
+                request != null ? request.getRefreshToken() : null,
+                "LOGOUT");
+        return ResponseEntity.ok(java.util.Map.of("message", "로그아웃이 완료되었습니다."));
+    }
+
     @PostMapping("/withdraw")
-    public ResponseEntity<?> withdrawAccount(@AuthenticationPrincipal UserDetails userDetails) {
+    public ResponseEntity<?> withdrawAccount(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+            @RequestBody(required = false) TokenRevokeRequestDto request) {
         try {
             Member member = memberService.findByEmailForLogin(userDetails.getUsername());
             memberService.withdrawMember(member);
+            tokenBlacklistService.revokeTokens(
+                    resolveBearerToken(authorizationHeader),
+                    request != null ? request.getRefreshToken() : null,
+                    "WITHDRAW");
             return ResponseEntity.ok(java.util.Map.of("message", "회원 탈퇴가 완료되었습니다."));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(java.util.Map.of("message", "회원 탈퇴 실패: " + e.getMessage()));
         }
+    }
+
+    private String resolveBearerToken(String authorizationHeader) {
+        if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
+            return null;
+        }
+        return authorizationHeader.substring(7);
     }
 }

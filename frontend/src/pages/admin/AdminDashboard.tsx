@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, type ElementType } from 'rea
 import styled, { createGlobalStyle } from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import type { Post } from '../community/common';
 import {
   LayoutDashboard,
   Users,
@@ -13,6 +14,12 @@ import {
   Headset,
   Settings,
 } from 'lucide-react';
+import {
+  clearAdminSession,
+  getAdminAccessToken,
+  getAdminName,
+  getAdminRole,
+} from '../../utils/auth';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 
@@ -794,6 +801,35 @@ const Textarea = styled.textarea`
   }
 `;
 
+const FormGrid = styled.div`
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+`;
+
+const FieldLabel = styled.label`
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: ${COLORS.text2};
+  font-size: 12px;
+  font-weight: 900;
+`;
+
+const InlineActions = styled.div`
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+`;
+
+const UploadMeta = styled.div`
+  color: ${COLORS.muted};
+  font-size: 12px;
+  font-weight: 800;
+`;
+
 interface MemberRow {
   memberId: number;
   email: string;
@@ -905,8 +941,8 @@ const AdminDashboard = () => {
   >('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  const userName = localStorage.getItem('name') || '관리자';
-  const token = localStorage.getItem('token');
+  const userName = getAdminName() || '관리자';
+  const token = getAdminAccessToken();
 
   const [stats, setStats] = useState<Stats | null>(null);
   const [members, setMembers] = useState<MemberRow[]>([]);
@@ -915,10 +951,14 @@ const AdminDashboard = () => {
   const [assets, setAssets] = useState<AssetRow[]>([]);
   const [transactions, setTransactions] = useState<TxRow[]>([]);
   const [inquiries, setInquiries] = useState<InquiryRow[]>([]);
-  const [posts, setPosts] = useState<any[]>([]);
+  const [posts, setPosts] = useState<Post[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [noticeForm, setNoticeForm] = useState({ title: '', content: '', attachmentUrl: '' });
+  const [noticeMsg, setNoticeMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [savingNotice, setSavingNotice] = useState(false);
+  const [uploadingNoticeAttachment, setUploadingNoticeAttachment] = useState(false);
 
-  const [selectedPost, setSelectedPost] = useState<any>(null);
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [selectedInquiry, setSelectedInquiry] = useState<InquiryRow | null>(null);
   const [replyContent, setReplyContent] = useState('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -947,8 +987,8 @@ const AdminDashboard = () => {
   const [txTotalPages, setTxTotalPages] = useState(0);
 
   useEffect(() => {
-    const t = localStorage.getItem('token');
-    const r = localStorage.getItem('role');
+    const t = getAdminAccessToken();
+    const r = getAdminRole();
     if (!t || r !== 'ADMIN') navigate('/admin/login', { replace: true });
   }, [navigate]);
 
@@ -1119,6 +1159,62 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleNoticeUpload = async (file: File | null) => {
+    if (!file || !token) return;
+
+    setUploadingNoticeAttachment(true);
+    setNoticeMsg(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await axios.post<{ attachmentUrl: string }>(`${API_BASE}/api/community/uploads`, formData, {
+        headers: { ...headers, 'Content-Type': 'multipart/form-data' },
+      });
+
+      setNoticeForm(prev => ({ ...prev, attachmentUrl: response.data.attachmentUrl }));
+      setNoticeMsg({ text: '첨부 파일 업로드가 완료되었습니다.', ok: true });
+    } catch (err: any) {
+      setNoticeMsg({ text: err.response?.data?.message || '첨부 파일 업로드에 실패했습니다.', ok: false });
+    } finally {
+      setUploadingNoticeAttachment(false);
+    }
+  };
+
+  const handleCreateNotice = async () => {
+    if (!token) return;
+
+    const title = noticeForm.title.trim();
+    const content = noticeForm.content.trim();
+
+    if (!title || !content) {
+      setNoticeMsg({ text: '제목과 내용을 입력하세요.', ok: false });
+      return;
+    }
+
+    try {
+      setSavingNotice(true);
+      setNoticeMsg(null);
+      const response = await axios.post<Post>(
+        `${API_BASE}/api/community/posts`,
+        {
+          title,
+          content,
+          attachmentUrl: noticeForm.attachmentUrl.trim() || null,
+          notice: true,
+        },
+        { headers },
+      );
+
+      setNoticeForm({ title: '', content: '', attachmentUrl: '' });
+      setNoticeMsg({ text: '공지사항이 등록되었습니다.', ok: true });
+      setPosts(prev => [response.data, ...prev.filter(post => post.postId !== response.data.postId)]);
+    } catch (err: any) {
+      setNoticeMsg({ text: err.response?.data?.message || '공지사항 등록에 실패했습니다.', ok: false });
+    } finally {
+      setSavingNotice(false);
+    }
+  };
+
   const handleReplyInquiry = async () => {
     if (!selectedInquiry || !replyContent.trim()) return;
     try {
@@ -1140,9 +1236,16 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.clear();
-    document.cookie = 'vce_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+  const handleLogout = async () => {
+    if (token) {
+      try {
+        await axios.post(`${API_BASE}/api/auth/logout`, {}, { headers });
+      } catch {
+        // Clear the local admin session even if the API call fails.
+      }
+    }
+
+    clearAdminSession(true);
     navigate('/admin/login', { replace: true });
   };
 
@@ -1558,13 +1661,78 @@ const AdminDashboard = () => {
           return (
             (p.title?.toLowerCase() || '').includes(term) ||
             (p.content?.toLowerCase() || '').includes(term) ||
-            (p.authorName?.toLowerCase() || p.author?.toLowerCase() || '').includes(term)
+            (p.authorName?.toLowerCase() || '').includes(term)
           );
         });
 
         return (
           <Card>
             <CardTitle>게시글 관리 ({posts.length}건)</CardTitle>
+
+            {noticeMsg && <Msg $ok={noticeMsg.ok}>{noticeMsg.text}</Msg>}
+
+            <FormGrid>
+              <FieldLabel>
+                공지 제목
+                <Input
+                  value={noticeForm.title}
+                  onChange={e => {
+                    setNoticeMsg(null);
+                    setNoticeForm(prev => ({ ...prev, title: e.target.value }));
+                  }}
+                  placeholder="공지사항 제목을 입력하세요"
+                />
+              </FieldLabel>
+              <FieldLabel>
+                공지 내용
+                <Textarea
+                  value={noticeForm.content}
+                  onChange={e => {
+                    setNoticeMsg(null);
+                    setNoticeForm(prev => ({ ...prev, content: e.target.value }));
+                  }}
+                  placeholder="공지사항 내용을 입력하세요"
+                  style={{ minHeight: 140 }}
+                />
+              </FieldLabel>
+              <FieldLabel>
+                첨부 링크
+                <Input
+                  value={noticeForm.attachmentUrl}
+                  onChange={e => {
+                    setNoticeMsg(null);
+                    setNoticeForm(prev => ({ ...prev, attachmentUrl: e.target.value }));
+                  }}
+                  placeholder="/uploads/... 또는 외부 URL"
+                />
+              </FieldLabel>
+              <FieldLabel>
+                첨부 파일 업로드
+                <Input type="file" onChange={e => void handleNoticeUpload(e.target.files?.[0] ?? null)} />
+                <UploadMeta>
+                  {uploadingNoticeAttachment
+                    ? '파일 업로드 중입니다...'
+                    : noticeForm.attachmentUrl
+                      ? `현재 첨부: ${noticeForm.attachmentUrl}`
+                      : '이미지 또는 첨부 파일을 업로드할 수 있습니다.'}
+                </UploadMeta>
+              </FieldLabel>
+            </FormGrid>
+
+            <InlineActions style={{ marginBottom: 12 }}>
+              <PrimaryButton onClick={() => void handleCreateNotice()} disabled={savingNotice || uploadingNoticeAttachment}>
+                {savingNotice ? '등록 중...' : '공지사항 등록'}
+              </PrimaryButton>
+              <GhostButton
+                onClick={() => {
+                  setNoticeMsg(null);
+                  setNoticeForm({ title: '', content: '', attachmentUrl: '' });
+                }}
+                disabled={savingNotice || uploadingNoticeAttachment}
+              >
+                입력 초기화
+              </GhostButton>
+            </InlineActions>
 
             <FilterRow>
               <Input
@@ -1590,7 +1758,7 @@ const AdminDashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredPosts.map((p: any) => (
+                  {filteredPosts.map(p => (
                     <tr key={p.postId}>
                       <td>{p.postId}</td>
                       <td>
@@ -1598,7 +1766,7 @@ const AdminDashboard = () => {
                           {p.title}
                         </LinkCell>
                       </td>
-                      <td>{p.authorName || p.author}</td>
+                      <td>{p.authorName}</td>
                       <td>{p.notice ? <Badge $tone="warn">공지</Badge> : '-'}</td>
                       <td>{fmtDate(p.createdAt)}</td>
                       <td>
@@ -1897,7 +2065,7 @@ const AdminDashboard = () => {
               <ModalContainer onClick={e => e.stopPropagation()}>
                 <ModalTitle>{selectedPost.title}</ModalTitle>
                 <ModalMeta>
-                  작성자: {selectedPost.authorName || selectedPost.author} | 작성일: {fmtDate(selectedPost.createdAt)}
+                  작성자: {selectedPost.authorName} | 작성일: {fmtDate(selectedPost.createdAt)}
                 </ModalMeta>
                 <ModalText>{selectedPost.content}</ModalText>
                 <ModalButtonGroup>

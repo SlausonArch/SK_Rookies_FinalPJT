@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { Link, NavLink, useLocation } from 'react-router-dom';
+import axios from 'axios';
+import { clearUserSession, getUserAccessToken, getUserRefreshToken } from '../utils/auth';
 
 const mode = import.meta.env.VITE_APP_MODE || 'exchange';
 const exchangeUrl = import.meta.env.VITE_EXCHANGE_FRONTEND_URL || `${window.location.protocol}//${window.location.hostname}:15173`;
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 
 // Header.tsx (스타일만 교체/추가)
 
@@ -173,11 +176,11 @@ const LogoutButton = styled.button`
 
 const Header: React.FC = () => {
   const location = useLocation();
-  const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('accessToken'));
+  const [isLoggedIn, setIsLoggedIn] = useState(!!getUserAccessToken());
 
   useEffect(() => {
     const checkAuth = () => {
-      setIsLoggedIn(!!localStorage.getItem('accessToken'));
+      setIsLoggedIn(!!getUserAccessToken());
     };
 
     window.addEventListener('storage', checkAuth);
@@ -192,10 +195,23 @@ const Header: React.FC = () => {
   const redirectTarget = `${location.pathname}${location.search || ''}`;
   const loginUrl = `/login?redirect=${encodeURIComponent(redirectTarget)}`;
 
-  const handleLogout = () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    document.cookie = 'vce_token=LOGGED_OUT; path=/; max-age=86400';
+  const handleLogout = async () => {
+    const token = getUserAccessToken();
+    const refreshToken = getUserRefreshToken();
+
+    if (token) {
+      try {
+        await axios.post(
+          `${API_BASE}/api/auth/logout`,
+          { refreshToken },
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+      } catch {
+        // Clear the client session even if server-side logout fails.
+      }
+    }
+
+    clearUserSession(true);
     window.location.href = '/';
   };
 
@@ -218,7 +234,6 @@ const Header: React.FC = () => {
               <ExternalNavItem href={`${exchangeUrl}/investments`}>투자내역</ExternalNavItem>
               <ExternalNavItem href={`${exchangeUrl}/trends`}>코인동향</ExternalNavItem>
               <ExternalNavItem href={`${exchangeUrl}/community`}>커뮤니티</ExternalNavItem>
-              <ExternalNavItem href={`${exchangeUrl}/api-docs`}>API문서</ExternalNavItem>
               <ExternalNavItem href={`${exchangeUrl}/events`}>이벤트</ExternalNavItem>
               <ExternalNavItem href={`${exchangeUrl}/support`}>고객센터</ExternalNavItem>
             </>
@@ -229,7 +244,6 @@ const Header: React.FC = () => {
               <NavItem to="/investments">투자내역</NavItem>
               <NavItem to="/trends">코인동향</NavItem>
               <NavItem to="/community">커뮤니티</NavItem>
-              <NavItem to="/api-docs">API문서</NavItem>
               <NavItem to="/events">이벤트</NavItem>
               <NavItem to="/support">고객센터</NavItem>
             </>
