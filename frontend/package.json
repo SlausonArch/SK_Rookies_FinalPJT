@@ -5,7 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:exchange": "vite --mode exchange",
+    "dev:bank": "vite --mode bank",
     "build": "tsc -b && vite build",
+    "build:exchange": "tsc -b && vite build --mode exchange",
+    "build:bank": "tsc -b && vite build --mode bank",
     "lint": "eslint .",
     "preview": "vite preview"
   },

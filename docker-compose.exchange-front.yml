@@ -1,0 +1,10 @@
+services:
+  exchange-front:
+    build: ./frontend
+    ports:
+      - "15173:3000"
+    env_file:
+      - ./frontend/.env.exchange
+    stdin_open: true
+    tty: true
+    restart: unless-stopped

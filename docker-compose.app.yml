@@ -4,10 +4,8 @@ services:
     ports:
       - "8080:8080"
     env_file:
-      - .env.app
+      - .env.backend
     environment:
-      - SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KAKAO_REDIRECT_URI=${KAKAO_REDIRECT_URI}
-      - SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_NAVER_REDIRECT_URI=${NAVER_REDIRECT_URI}
       - SERVER_FORWARD_HEADERS_STRATEGY=${SERVER_FORWARD_HEADERS_STRATEGY:-framework}
       - UPLOAD_DIR=/app/uploads
     volumes:
