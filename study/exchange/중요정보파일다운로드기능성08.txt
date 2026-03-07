@@ -1,0 +1,106 @@
+================================================================================
+[VCE-EX-08] 중요 정보 파일 다운로드 기능성
+도메인: exchange
+================================================================================
+
+1. 진단 항목 개요
+   - 항목명: 인증 없이 민감 파일 다운로드 가능 (/uploads/** permitAll)
+   - 번호: EX-08
+   - 위험도: High
+   - OWASP: A01:2021 – Broken Access Control
+
+2. 대상 기능 & 엔드포인트
+   - 로컬:  GET http://localhost:8080/uploads/{uuid}_{filename}
+   - 운영:  GET https://vceapp.com/uploads/{uuid}_{filename}
+   - HTTP 메서드: GET
+   - 인증 요건: 없음 (취약 — permitAll)
+
+3. 취약점 원리 (Why this works)
+   SecurityConfig.java:72 에서 /uploads/** 경로를 인증 없이 접근 허용:
+     .requestMatchers("/uploads/**").permitAll()
+
+   사용자가 업로드하는 신분증 사진(주민등록증, 운전면허증 등 민감 개인정보)이
+   이 경로에 저장되어 누구나 URL만 알면 다운로드할 수 있다.
+
+   파일명은 UUID_원본파일명 형식이므로:
+   - 관리자 화면이나 API 응답에서 URL이 노출되면 즉시 접근 가능
+   - 오류 메시지, 로그, Referer 헤더 등으로 경로 유출 시 접근 가능
+   - 원본 파일명이 예측 가능하면(id.jpg 등) 짧은 UUID 공간 무작위 탐색 가능
+
+   또한 디렉토리 인덱싱(Directory Listing)이 활성화된 경우
+   GET /uploads/ 로 전체 파일 목록 조회가 가능하다.
+
+4. 테스트 절차 (Step-by-step)
+
+   [사전 준비]
+   - test@vce.com 로그인 후 신분증 사진 업로드
+   - 업로드 응답에서 파일 URL 확인
+
+   Step 1. 업로드 후 URL 확인
+   응답 예시:
+   {"idPhotoUrl": "/uploads/550e8400-e29b-41d4-a716-446655440000_myid.jpg"}
+
+   Step 2. 비인증 상태로 직접 접근
+   --- HTTP 요청 예시 ---
+   GET /uploads/550e8400-e29b-41d4-a716-446655440000_myid.jpg HTTP/1.1
+   Host: localhost:8080
+   (Authorization 헤더 없음)
+   ---
+
+   Step 3. 디렉토리 리스팅 시도
+   --- HTTP 요청 예시 ---
+   GET /uploads/ HTTP/1.1
+   Host: localhost:8080
+   ---
+   HTTP 200 + 파일 목록 반환 시 취약
+
+   Step 4. Path Traversal 시도
+   --- HTTP 요청 예시 ---
+   GET /uploads/../application.properties HTTP/1.1
+   Host: localhost:8080
+
+   GET /uploads/..%2F..%2Fetc%2Fpasswd HTTP/1.1
+   Host: localhost:8080
+
+   GET /uploads/%2e%2e%2f%2e%2e%2fetc%2fpasswd HTTP/1.1
+   Host: localhost:8080
+   ---
+
+   Step 5. 파일명 패턴 무작위 탐색 (Burp Intruder)
+   UUID 형식: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+   원본 파일명 추측 목록:
+   - id.jpg
+   - id.jpeg
+   - identity.jpg
+   - passport.jpg
+   - license.jpg
+   - 신분증.jpg
+
+   --- HTTP 요청 예시 (Intruder Payload) ---
+   GET /uploads/§uuid§_id.jpg HTTP/1.1
+   Host: localhost:8080
+   ---
+
+   Step 6. Wayback Machine / 캐시에서 URL 수집
+   site:vceapp.com/uploads inurl:uploads (Google Dork)
+
+5. 취약 여부 판단 기준
+   ✅ 취약 (Vulnerable):
+      - 비인증 GET 요청으로 신분증 이미지 HTTP 200 + 파일 내용 반환
+      - GET /uploads/ → HTML 파일 목록 반환 (디렉토리 리스팅)
+      - Path Traversal로 상위 디렉토리 파일 접근 성공
+   ✗ 안전 (Not Vulnerable):
+      - HTTP 401 / 403 반환 (인증 필요)
+      - 디렉토리 리스팅 비활성화 (403 반환)
+
+6. 예상 취약 포인트 (코드 위치)
+   - SecurityConfig.java:72 — .requestMatchers("/uploads/**").permitAll()
+   - Nginx/Spring 정적 파일 서빙 설정 — /uploads 디렉토리 직접 노출
+   - FileService.java:42 — 파일명에 UUID만 추가하고 저장 경로 제한 없음
+
+7. 권고 조치
+   - /uploads/** 를 permitAll에서 제거하고 인증 필요로 변경
+   - 파일 다운로드 전용 API 생성: GET /api/files/{id} → 소유자 확인 후 스트리밍 반환
+   - 파일 저장 위치를 웹 루트 외부로 이동 (예: /var/data/uploads/)
+   - Nginx: autoindex off; 설정
+   - X-Content-Type-Options: nosniff 헤더 추가

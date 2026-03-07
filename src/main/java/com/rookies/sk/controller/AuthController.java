@@ -37,6 +37,7 @@ public class AuthController {
 
     @PostMapping("/test/login")
     public ResponseEntity<?> testLogin(@RequestBody AdminLoginRequest request) {
+        log.info("Test login request received for email: {}", request.getEmail());
         try {
             Member member = memberService.findByEmailForLogin(request.getEmail());
 
@@ -70,6 +71,7 @@ public class AuthController {
 
     @PostMapping("/admin/login")
     public ResponseEntity<?> adminLogin(@RequestBody AdminLoginRequest request) {
+        log.info("Admin login request received for email: {}", request.getEmail());
         try {
             // 이메일로 회원 조회
             Member member = memberService.findByEmailForLogin(request.getEmail());

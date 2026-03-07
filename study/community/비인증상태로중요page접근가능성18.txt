@@ -1,0 +1,89 @@
+================================================================================
+[VCE-CM-18] 비인증 상태로 중요 페이지 접근 가능성 (커뮤니티)
+도메인: community
+================================================================================
+
+1. 진단 항목 개요
+   - 항목명: 인증 없이 커뮤니티 쓰기/좋아요/댓글 기능 접근
+   - 번호: CM-18
+   - 위험도: High
+   - OWASP: A01:2021 – Broken Access Control
+
+2. 대상 기능 & 엔드포인트
+   - 로컬:  http://localhost:8080/api/community/**
+   - HTTP 메서드: POST, PUT, DELETE
+   - 인증 요건: Bearer JWT 필요 (우회 시도)
+
+3. 취약점 원리 (Why this works)
+   커뮤니티 게시글 작성, 댓글 작성, 좋아요 등은 인증된 사용자만 가능해야 한다.
+   그러나 SecurityConfig에서 GET /api/community/posts/** 는 공개이므로
+   다른 쓰기 메서드가 누락되었거나 와일드카드 설정 오류로 인증 없이 접근 가능할 수 있다.
+
+4. 테스트 절차 (Step-by-step)
+
+   Step 1. 비인증 게시글 작성 시도
+   --- HTTP 요청 예시 ---
+   POST /api/community/posts HTTP/1.1
+   Host: localhost:8080
+   Content-Type: application/json
+   (Authorization 없음)
+
+   {"title": "비인증 게시글", "content": "인증 없이 작성"}
+   ---
+
+   Step 2. 비인증 댓글 작성 시도
+   --- HTTP 요청 예시 ---
+   POST /api/community/posts/1/comments HTTP/1.1
+   Host: localhost:8080
+   Content-Type: application/json
+   (Authorization 없음)
+
+   {"content": "비인증 댓글"}
+   ---
+
+   Step 3. 비인증 좋아요 시도
+   --- HTTP 요청 예시 ---
+   POST /api/community/posts/1/like HTTP/1.1
+   Host: localhost:8080
+   (Authorization 없음)
+   ---
+
+   Step 4. 비인증 파일 업로드
+   --- HTTP 요청 예시 ---
+   POST /api/community/uploads HTTP/1.1
+   Host: localhost:8080
+   Content-Type: multipart/form-data; boundary=----B
+
+   ------B
+   Content-Disposition: form-data; name="file"; filename="t.jpg"
+   Content-Type: image/jpeg
+
+   JFIF
+   ------B--
+   ---
+
+   Step 5. 만료 토큰으로 쓰기 시도
+   --- HTTP 요청 예시 ---
+   POST /api/community/posts HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer <만료된_JWT>
+   Content-Type: application/json
+
+   {"title": "만료 토큰 테스트", "content": "내용"}
+   ---
+
+5. 취약 여부 판단 기준
+   ✅ 취약 (Vulnerable):
+      - 비인증 POST /api/community/posts → HTTP 200 + 게시글 생성
+      - 비인증 좋아요 → 좋아요 카운터 증가
+      - 만료 토큰으로 쓰기 성공
+   ✗ 안전 (Not Vulnerable):
+      - 쓰기 요청에 HTTP 401 반환
+
+6. 예상 취약 포인트 (코드 위치)
+   - SecurityConfig.java — GET /api/community/posts/** 공개이나 POST 방어 설정 확인
+   - CommunityController.java — @AuthenticationPrincipal 누락 가능 엔드포인트
+
+7. 권고 조치
+   - 게시글/댓글/좋아요 쓰기는 명시적으로 authenticated() 설정
+   - @AuthenticationPrincipal이 null인 경우 401 반환 로직 추가

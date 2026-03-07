@@ -1,0 +1,333 @@
+================================================================================
+[VCE-EX-25] 서버 헤더 정보 노출
+도메인: exchange
+위험도: Low
+================================================================================
+
+1. 진단 항목 개요
+--------------------------------------------------------------------------------
+HTTP 응답 헤더에 웹 서버(Nginx), WAS(Tomcat/Spring Boot), 프레임워크 버전 정보가
+포함되는지, 그리고 보안 헤더(X-Frame-Options, Content-Security-Policy, HSTS 등)가
+적절히 설정되어 있는지 검증한다.
+
+서버 버전 정보가 노출되면 해당 버전의 알려진 취약점(CVE)을 검색하여
+표적 공격에 활용할 수 있다. 보안 헤더 부재는 클릭재킹, XSS, MITM 공격에
+대한 방어 수단이 없음을 의미한다.
+
+위험도가 Low인 이유:
+- 버전 정보 노출 자체는 직접적인 침해가 아닌 정보 수집 단계
+- 보안 헤더 부재는 다른 취약점과 결합 시 위험도 상승
+- 단독으로는 낮지만 취약한 버전 + 알려진 CVE 조합 시 Critical
+
+
+2. 대상 기능 & 엔드포인트
+--------------------------------------------------------------------------------
+모든 HTTP 응답 헤더 대상:
+  - GET /api/auth/login          (백엔드 API 응답)
+  - GET /api/members/me          (인증 필요 API 응답)
+  - GET /                        (프론트엔드 루트)
+  - GET /uploads/test.jpg        (정적 파일 응답)
+  - GET /api/nonexistent         (에러 응답 헤더)
+
+확인 대상 헤더:
+  서버 정보 헤더:
+    - Server
+    - X-Powered-By
+    - X-AspNet-Version
+    - X-AspNetMvc-Version
+    - X-Generator
+
+  보안 헤더 (부재 여부 확인):
+    - Strict-Transport-Security (HSTS)
+    - X-Frame-Options
+    - X-Content-Type-Options
+    - Content-Security-Policy
+    - X-XSS-Protection
+    - Referrer-Policy
+    - Permissions-Policy
+    - Cache-Control
+
+
+3. 취약점 원리 (Why this works)
+--------------------------------------------------------------------------------
+[서버 버전 노출]
+Nginx 기본 설정은 Server: nginx/1.24.0 형식으로 버전을 응답에 포함.
+Tomcat/Spring Boot도 X-Powered-By: Tomcat/10.1.0 또는
+X-Application-Version: 1.0.0 등을 반환할 수 있음.
+
+공격자는 노출된 버전으로 CVE Database 검색:
+  - https://nvd.nist.gov/vuln/search
+  - searchsploit nginx 1.24.0
+  - searchsploit spring 3.1.0
+
+[보안 헤더 부재]
+- HSTS 미설정: HTTPS 강제 없이 HTTP 다운그레이드 공격 가능 (MITM)
+- X-Frame-Options 미설정: iframe 내 삽입으로 클릭재킹 공격 가능
+- CSP 미설정: XSS 공격이 성공했을 때 추가 스크립트 로드 가능
+- X-Content-Type-Options 미설정: MIME 타입 스니핑 공격 가능
+- X-XSS-Protection 미설정: 구형 브라우저에서 XSS 보호 미작동
+
+
+4. 테스트 절차 (Step-by-step)
+--------------------------------------------------------------------------------
+
+[STEP 1] 기본 요청으로 응답 헤더 수집
+
+1-1. 백엔드 API 헤더 확인:
+----------
+GET /api/coins HTTP/1.1
+Host: localhost:8080
+----------
+
+응답 헤더 전체 기록 (예시):
+  HTTP/1.1 200 OK
+  Server: nginx/1.24.0          ← 버전 노출
+  X-Powered-By: Spring Boot     ← 프레임워크 노출
+  Content-Type: application/json
+  (X-Frame-Options 없음)        ← 보안 헤더 부재
+  (Strict-Transport-Security 없음)
+
+1-2. 프론트엔드 서버 헤더 확인:
+----------
+GET / HTTP/1.1
+Host: localhost:5173
+----------
+
+1-3. 에러 응답 헤더 확인:
+----------
+GET /api/nonexistent-test-path HTTP/1.1
+Host: localhost:8080
+----------
+
+
+[STEP 2] Burp Suite로 체계적 헤더 수집
+
+2-1. Proxy → HTTP history에서 모든 응답 헤더 확인
+2-2. 응답 헤더 목록 기록:
+
+확인 체크리스트:
+  [ ] Server: nginx/버전번호         → 버전 노출 여부
+  [ ] Server: Apache/버전번호        → 버전 노출 여부
+  [ ] X-Powered-By: 값               → 프레임워크 노출 여부
+  [ ] X-AspNet-Version               → .NET 버전 노출 여부
+  [ ] X-Generator                    → CMS/프레임워크 노출
+  [ ] Via: 1.1 proxy-server          → 프록시 정보 노출
+  [ ] X-Application-Version         → 앱 버전 노출
+
+  [ ] Strict-Transport-Security      → 설정 여부 및 max-age 값
+  [ ] X-Frame-Options                → DENY 또는 SAMEORIGIN 설정 여부
+  [ ] X-Content-Type-Options         → nosniff 설정 여부
+  [ ] Content-Security-Policy        → 설정 여부 및 내용
+  [ ] X-XSS-Protection               → 1; mode=block 설정 여부
+  [ ] Referrer-Policy                → 설정 여부
+  [ ] Permissions-Policy             → 설정 여부
+
+
+[STEP 3] 서버 정보 헤더 상세 분석
+
+3-1. Server 헤더 버전으로 CVE 검색:
+  노출된 버전: nginx/1.24.0
+  검색: site:nvd.nist.gov/vuln "nginx" "1.24"
+
+3-2. Tomcat 버전 식별:
+----------
+GET /api/undefined-path-test HTTP/1.1
+Host: localhost:8080
+----------
+
+응답에서 확인:
+  - Server: Apache-Coyote/1.1     (Tomcat 버전 노출)
+  - 에러 페이지에 Tomcat 버전 정보
+
+3-3. Spring Boot 버전 식별:
+----------
+GET /api/actuator/info HTTP/1.1
+Host: localhost:8080
+----------
+
+----------
+GET /api/actuator/env HTTP/1.1
+Host: localhost:8080
+----------
+
+응답에서:
+  "spring-boot.version": "3.1.5"
+  "java.version": "17.0.8"
+
+
+[STEP 4] 보안 헤더 부재 확인 및 공격 가능성 검증
+
+4-1. X-Frame-Options 부재 → 클릭재킹 테스트:
+로컬에 HTML 파일 생성 후 브라우저 오픈:
+  <html>
+  <body>
+    <iframe src="https://exchange.vceapp.com/login" width="600" height="400"></iframe>
+    <p>이 버튼을 클릭하세요!</p>
+  </body>
+  </html>
+
+iframe이 로드되면 → X-Frame-Options 미설정 (클릭재킹 가능)
+
+4-2. HSTS 미설정 확인:
+운영 서버(https://vceapp.com)에 HTTP로 접근:
+----------
+GET / HTTP/1.1
+Host: vceapp.com
+----------
+(HTTP → HTTPS 리다이렉트 여부, HSTS 헤더 포함 여부 확인)
+
+응답 헤더에 Strict-Transport-Security 없으면 → HSTS 미설정
+
+4-3. X-Content-Type-Options 미설정 확인:
+파일 업로드 후 응답에서 확인:
+----------
+GET /uploads/profile/test.jpg HTTP/1.1
+Host: localhost:8080
+----------
+
+X-Content-Type-Options: nosniff 없으면 → MIME 스니핑 공격 가능
+
+
+[STEP 5] 쿠키 보안 속성 확인
+
+----------
+POST /api/auth/login HTTP/1.1
+Host: localhost:8080
+Content-Type: application/json
+
+{
+  "email": "test@vce.com",
+  "password": "test1234"
+}
+----------
+
+응답의 Set-Cookie 헤더 분석:
+  Set-Cookie: SESSION=abc123; Path=/; HttpOnly; Secure; SameSite=Strict
+
+확인 항목:
+  [ ] HttpOnly 속성: JavaScript로 쿠키 접근 방지
+  [ ] Secure 속성: HTTPS에서만 전송
+  [ ] SameSite=Strict 또는 Lax: CSRF 방지
+  [ ] 도메인 범위 적절성
+
+취약한 예시:
+  Set-Cookie: SESSION=abc123; Path=/
+  (HttpOnly, Secure, SameSite 모두 없음)
+
+
+[STEP 6] 운영 환경 헤더 분석
+
+----------
+GET / HTTP/1.1
+Host: exchange.vceapp.com
+----------
+
+----------
+GET /api/coins HTTP/1.1
+Host: vceapp.com
+----------
+
+curl을 이용한 헤더만 확인:
+  curl -I https://vceapp.com/api/coins
+  curl -I https://exchange.vceapp.com/
+
+
+[STEP 7] Burp Suite Active Scan으로 보안 헤더 자동 진단
+
+Burp Suite Professional → Scanner → New Scan
+Target: http://localhost:8080
+Scan type: Passive only (보안 헤더 누락 탐지)
+
+또는 무료 도구 활용:
+  securityheaders.com에서 운영 도메인 분석
+  → https://securityheaders.com/?q=https://exchange.vceapp.com
+
+
+5. 취약 여부 판단 기준
+--------------------------------------------------------------------------------
+
+취약 (Vulnerable):
+  - Server 헤더에 버전 정보 포함 (Server: nginx/1.24.0)
+  - X-Powered-By 헤더 존재 (X-Powered-By: Spring Boot)
+  - Strict-Transport-Security 헤더 미설정 (운영 환경)
+  - X-Frame-Options 헤더 미설정 (클릭재킹 가능)
+  - X-Content-Type-Options: nosniff 미설정
+  - Content-Security-Policy 헤더 미설정
+  - Set-Cookie에 HttpOnly 및 Secure 속성 미설정
+  - 쿠키에 SameSite 속성 미설정
+
+안전 (Safe):
+  - Server: nginx (버전 번호 제거)
+  - X-Powered-By 헤더 제거
+  - Strict-Transport-Security: max-age=31536000; includeSubDomains
+  - X-Frame-Options: DENY
+  - X-Content-Type-Options: nosniff
+  - Content-Security-Policy: default-src 'self' ...
+  - Set-Cookie: ...HttpOnly; Secure; SameSite=Strict
+
+
+6. 예상 취약 포인트 (코드 위치)
+--------------------------------------------------------------------------------
+
+[Nginx 설정 (nginx.conf)]
+  # 취약한 설정:
+  # server_tokens on; (기본값 - 버전 포함)
+
+  # 보안 헤더 미설정:
+  # add_header X-Frame-Options "SAMEORIGIN"; 없음
+  # add_header Strict-Transport-Security "max-age=31536000" always; 없음
+
+[SecurityConfig.java 또는 WebSecurityConfig.java]
+  // 보안 헤더 설정 미흡
+  http.headers().disable();  // 모든 보안 헤더 비활성화
+  // 또는 개별 헤더 미설정
+
+[application.properties]
+  # X-Powered-By 제거 설정 없음
+  server.error.include-binding-errors=always  # 추가 정보 노출
+
+[SpringBoot embedded Tomcat]
+  // Server 헤더에 Tomcat 버전 포함
+  // 별도 TomcatServletWebServerFactory 설정 없이 기본값 사용
+
+
+7. 권고 조치
+--------------------------------------------------------------------------------
+
+[Nginx 설정]
+1. 서버 버전 정보 제거:
+   server_tokens off;
+
+2. 보안 헤더 추가:
+   add_header X-Frame-Options "SAMEORIGIN" always;
+   add_header X-Content-Type-Options "nosniff" always;
+   add_header X-XSS-Protection "1; mode=block" always;
+   add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+   add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+   add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+   add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.vceapp.com" always;
+
+3. X-Powered-By 헤더 제거 (Nginx proxy_hide_header):
+   proxy_hide_header X-Powered-By;
+   proxy_hide_header X-Generator;
+
+[Spring Boot 설정]
+4. SecurityConfig.java에 보안 헤더 설정:
+   http.headers()
+       .frameOptions().deny()
+       .xssProtection().block(true).and()
+       .contentTypeOptions().and()
+       .httpStrictTransportSecurity()
+           .maxAgeInSeconds(31536000)
+           .includeSubDomains(true).and()
+       .contentSecurityPolicy("default-src 'self'");
+
+5. X-Powered-By 제거:
+   server.server-header=  # 빈 값으로 Server 헤더 제거
+   // TomcatServletWebServerFactory 커스터마이징
+
+[쿠키 보안]
+6. 쿠키 속성 설정:
+   server.servlet.session.cookie.http-only=true
+   server.servlet.session.cookie.secure=true
+   server.servlet.session.cookie.same-site=strict

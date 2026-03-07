@@ -68,7 +68,8 @@ public class SecurityConfig {
                                                                                                          // necessarily
                                                                                                          // here.
                                 .authorizeHttpRequests(auth -> auth
-                                                .requestMatchers("/api/auth/me/**", "/api/auth/withdraw", "/api/auth/logout")
+                                                .requestMatchers("/api/auth/me/**", "/api/auth/withdraw",
+                                                                "/api/auth/logout")
                                                 .authenticated()
                                                 .requestMatchers("/", "/login/**", "/oauth2/**", "/api/auth/**",
                                                                 "/error", "/uploads/**")
@@ -80,7 +81,8 @@ public class SecurityConfig {
                                                 .requestMatchers("/api/auth/signup/complete").hasRole("GUEST") // Need
                                                                                                                // Guest
                                                                                                                // role
-                                                .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                                                .requestMatchers("/api/admin/**")
+                                                .hasAnyRole("ADMIN", "MANAGER", "STAFF")
                                                 .anyRequest().authenticated())
                                 .oauth2Login(oauth2 -> oauth2
                                                 .authorizationEndpoint(auth -> auth
@@ -89,7 +91,9 @@ public class SecurityConfig {
                                                 .userInfoEndpoint(userInfo -> userInfo
                                                                 .userService(customOAuth2UserService))
                                                 .successHandler(oAuth2SuccessHandler))
-                                .addFilterBefore(new JwtAuthenticationFilter(jwtTokenProvider, memberRepository, tokenBlacklistService),
+                                .addFilterBefore(
+                                                new JwtAuthenticationFilter(jwtTokenProvider, memberRepository,
+                                                                tokenBlacklistService),
                                                 UsernamePasswordAuthenticationFilter.class)
                                 .exceptionHandling(exception -> exception
                                                 .defaultAuthenticationEntryPointFor(

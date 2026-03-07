@@ -1,0 +1,328 @@
+================================================================================
+[VCE-EX-20] 소스코드 내 주요 정보 노출 여부
+도메인: exchange
+위험도: High
+================================================================================
+
+1. 진단 항목 개요
+--------------------------------------------------------------------------------
+프론트엔드 JavaScript 번들 파일, Spring Boot Actuator 엔드포인트, 소스 맵(Source Map),
+환경설정 파일 등을 통해 API 키, DB 연결 문자열, JWT 시크릿, 외부 서비스 자격증명 등
+민감 정보가 외부에 노출되는지 검증한다.
+
+클라이언트 측에서 번들된 JS 파일은 난독화되더라도 문자열 검색으로 민감 값을
+추출할 수 있으며, Spring Boot Actuator가 활성화된 경우 런타임 환경 변수 전체가
+노출될 수 있다.
+
+위험도가 High인 이유:
+- JWT 시크릿 노출 시 → 토큰 위조 공격(VCE-EX-19)과 연계
+- DB 자격증명 노출 시 → 직접 DB 접근 가능
+- 외부 API 키 노출 시 → 무단 API 호출로 금전적 피해
+
+
+2. 대상 기능 & 엔드포인트
+--------------------------------------------------------------------------------
+프론트엔드:
+  - http://localhost:5173 (또는 https://exchange.vceapp.com)
+  - /assets/index-[hash].js       (Vite 번들 메인 파일)
+  - /assets/vendor-[hash].js      (외부 라이브러리 번들)
+  - *.js.map                      (소스 맵 파일)
+
+백엔드 Actuator:
+  - GET /api/actuator             (Actuator 루트)
+  - GET /api/actuator/env         (환경 변수 전체)
+  - GET /api/actuator/configprops (설정 프로퍼티)
+  - GET /api/actuator/beans       (빈 목록)
+  - GET /api/actuator/mappings    (URL 매핑 목록)
+  - GET /api/actuator/health      (헬스 체크)
+  - GET /api/actuator/info        (앱 정보)
+  - GET /api/actuator/loggers     (로거 설정)
+  - GET /api/actuator/httptrace   (최근 HTTP 요청 기록)
+  - GET /actuator/**              (컨텍스트 경로 없는 경우)
+
+
+3. 취약점 원리 (Why this works)
+--------------------------------------------------------------------------------
+[JS 번들 정보 노출]
+Vite/Webpack으로 빌드된 SPA는 모든 환경 변수(VITE_* 접두사)와 하드코딩된
+상수값이 번들에 포함된다. VITE_API_KEY, VITE_JWT_SECRET 등이 빌드 시
+번들 파일에 평문 삽입된다.
+
+[소스 맵 노출]
+개발/스테이징 환경에서 *.js.map 파일이 배포된 경우, 브라우저 개발자 도구에서
+원본 TypeScript/JavaScript 소스를 그대로 확인 가능.
+
+[Spring Boot Actuator 미설정 노출]
+management.endpoints.web.exposure.include=* 설정 시, 인증 없이
+런타임 환경 변수, 설정 값, 빈 정보 등이 노출된다.
+특히 /actuator/env는 spring.datasource.password, jwt.secret 등 민감 값을
+마스킹("****") 없이 반환할 수 있다.
+
+
+4. 테스트 절차 (Step-by-step)
+--------------------------------------------------------------------------------
+
+[STEP 1] 프론트엔드 번들 파일 식별 및 다운로드
+
+1-1. 브라우저에서 http://localhost:5173 접속
+     개발자 도구 → Network 탭 → JS 파일 확인
+     또는 Sources 탭 → 번들 파일명 확인
+
+1-2. 번들 URL 직접 접근:
+----------
+GET /assets/index-Cv8n3Xk1.js HTTP/1.1
+Host: localhost:5173
+----------
+
+1-3. 디렉토리 내 파일 목록 시도:
+----------
+GET /assets/ HTTP/1.1
+Host: localhost:5173
+----------
+
+
+[STEP 2] 번들 파일 내 민감 정보 검색
+
+브라우저 개발자 도구 → Sources → 번들 파일 선택 → Ctrl+F:
+
+검색 키워드 목록:
+  - "secret"
+  - "SECRET"
+  - "password"
+  - "apiKey"
+  - "api_key"
+  - "API_KEY"
+  - "token"
+  - "private"
+  - "jdbc"
+  - "mysql"
+  - "postgres"
+  - "mongodb"
+  - "ACCESS_KEY"
+  - "VITE_"
+  - "import.meta.env"
+  - "process.env"
+  - "eyJ"         (JWT 토큰 prefix: base64 encoded '{"')
+  - "HS256"
+  - "RS256"
+
+Burp Suite로 번들 파일 다운로드 후 로컬 검색:
+----------
+GET /assets/index-Cv8n3Xk1.js HTTP/1.1
+Host: localhost:5173
+----------
+응답 바디를 파일로 저장 후:
+  grep -oE '"[A-Za-z0-9_-]{20,}"' bundle.js
+  grep -iE "(secret|password|token|key)" bundle.js
+
+
+[STEP 3] 소스 맵 파일 접근 시도
+
+----------
+GET /assets/index-Cv8n3Xk1.js.map HTTP/1.1
+Host: localhost:5173
+----------
+
+----------
+GET /assets/index-Cv8n3Xk1.js.map HTTP/1.1
+Host: exchange.vceapp.com
+----------
+
+응답이 200 OK이고 JSON 형식이면 → 소스 맵 노출.
+브라우저 Sources 탭에서 자동으로 원본 소스 표시됨.
+
+소스 맵 내 확인 항목:
+  - "sources" 배열: 원본 파일 경로 구조 노출 (내부 디렉토리 구조)
+  - "sourcesContent" 배열: 원본 TypeScript 코드 평문 포함 여부
+  - 하드코딩된 API URL, 키 값 등
+
+
+[STEP 4] Spring Boot Actuator 접근
+
+4-1. Actuator 루트 확인:
+----------
+GET /api/actuator HTTP/1.1
+Host: localhost:8080
+----------
+
+----------
+GET /actuator HTTP/1.1
+Host: localhost:8080
+----------
+
+4-2. 환경 변수 조회:
+----------
+GET /api/actuator/env HTTP/1.1
+Host: localhost:8080
+----------
+
+응답 예시 (취약):
+{
+  "activeProfiles": ["prod"],
+  "propertySources": [
+    {
+      "name": "applicationConfig: [classpath:/application.properties]",
+      "properties": {
+        "jwt.secret": {"value": "vce-secret-key-hardcoded"},
+        "spring.datasource.password": {"value": "db_password_123"},
+        "spring.datasource.url": {"value": "jdbc:mysql://localhost:3306/vcedb"},
+        "coinmarketcap.api.key": {"value": "a1b2c3d4-e5f6-..."}
+      }
+    }
+  ]
+}
+
+4-3. 설정 프로퍼티 조회:
+----------
+GET /api/actuator/configprops HTTP/1.1
+Host: localhost:8080
+----------
+
+4-4. URL 매핑 조회 (공격 표면 확인):
+----------
+GET /api/actuator/mappings HTTP/1.1
+Host: localhost:8080
+----------
+
+4-5. 최근 HTTP 요청 기록 조회:
+----------
+GET /api/actuator/httptrace HTTP/1.1
+Host: localhost:8080
+----------
+→ 다른 사용자의 Authorization 헤더(JWT 토큰) 노출 가능성
+
+
+[STEP 5] process.env 변수 클라이언트 노출 확인
+
+브라우저 콘솔에서 직접 실행:
+  window.__ENV__
+  window.__NEXT_DATA__
+  window.ENV
+  import.meta.env
+
+또는 번들 파일에서 검색:
+  "import.meta.env.VITE_"
+  "process.env.REACT_APP_"
+
+
+[STEP 6] 숨겨진 설정 파일 접근 시도
+
+----------
+GET /.env HTTP/1.1
+Host: localhost:8080
+----------
+
+----------
+GET /application.properties HTTP/1.1
+Host: localhost:8080
+----------
+
+----------
+GET /application.yml HTTP/1.1
+Host: localhost:8080
+----------
+
+----------
+GET /WEB-INF/web.xml HTTP/1.1
+Host: localhost:8080
+----------
+
+----------
+GET /.git/config HTTP/1.1
+Host: vceapp.com
+----------
+
+----------
+GET /.git/HEAD HTTP/1.1
+Host: vceapp.com
+----------
+
+
+[STEP 7] 에러 응답에서 경로 및 클래스 정보 추출
+
+----------
+GET /api/undefined-endpoint-test HTTP/1.1
+Host: localhost:8080
+X-Forwarded-For: 127.0.0.1
+----------
+
+응답에서 확인:
+  - 내부 패키지 경로 (com.vce.exchange.*)
+  - 데이터베이스 연결 문자열
+  - 서버 파일 시스템 경로
+
+
+5. 취약 여부 판단 기준
+--------------------------------------------------------------------------------
+
+취약 (Vulnerable):
+  - JS 번들 파일에서 API 키, JWT 시크릿, DB 자격증명 문자열 발견
+  - *.js.map 파일이 운영 환경에서 200 OK로 접근 가능
+  - /api/actuator/env가 인증 없이 200 OK 반환하며 민감 값 포함
+  - /api/actuator/httptrace에서 타 사용자 Authorization 헤더 노출
+  - /.env, /application.properties 파일이 웹으로 접근 가능
+  - .git/ 디렉토리가 운영 서버에서 접근 가능
+
+안전 (Safe):
+  - JS 번들에 민감 정보 없음 (환경 변수는 서버 사이드에서만 사용)
+  - 운영 환경에서 소스 맵 파일 제거 또는 접근 불가
+  - /api/actuator/** 엔드포인트가 인증 요구 또는 비활성화
+  - /actuator/env 응답에서 민감 값이 "****"로 마스킹
+  - 설정 파일이 웹 접근 경로에서 완전히 차단
+
+
+6. 예상 취약 포인트 (코드 위치)
+--------------------------------------------------------------------------------
+
+[JwtTokenProvider.java:18]
+  private static final String SECRET_KEY = "vce-jwt-secret-2024";
+
+[application.properties 또는 application.yml]
+  jwt.secret=hardcoded-secret-value
+  spring.datasource.password=plaintext-password
+  coinmarketcap.api.key=actual-api-key
+
+[vite.config.ts 또는 .env 파일]
+  VITE_API_KEY=actual-api-key-value
+  VITE_JWT_SECRET=secret-value
+
+[pom.xml 또는 build.gradle]
+  management.endpoints.web.exposure.include=*
+  management.endpoint.env.enabled=true
+
+[DataInitializer.java:41]
+  // 관리자 계정 하드코딩
+  Member admin = new Member("admin@vce.com", "admin1234", Role.ADMIN);
+
+
+7. 권고 조치
+--------------------------------------------------------------------------------
+
+[프론트엔드]
+1. 민감 정보를 클라이언트 번들에 포함하지 않음
+   - API 키는 백엔드 프록시를 통해 사용
+   - VITE_* 변수에 민감 정보 저장 금지
+
+2. 운영 환경 빌드 시 소스 맵 생성 비활성화:
+   vite.config.ts:
+     build: { sourcemap: false }
+
+3. .env 파일 .gitignore 등록 및 배포 서버 웹 경로 외 위치에 저장
+
+[백엔드]
+4. Actuator 노출 최소화:
+   management.endpoints.web.exposure.include=health,info
+   management.endpoint.health.show-details=never
+
+5. Actuator에 Spring Security 인증 적용:
+   SecurityConfig에서 /api/actuator/** → ADMIN 롤만 허용
+
+6. 민감 값 마스킹 설정:
+   management.endpoint.env.keys-to-sanitize=.*secret.*,.*password.*,.*key.*
+
+7. 환경 변수 또는 Vault(HashiCorp Vault, AWS Secrets Manager) 사용:
+   spring.datasource.password=${DB_PASSWORD}
+   jwt.secret=${JWT_SECRET_KEY}
+
+8. .git 디렉토리가 웹 서버 루트에 포함되지 않도록 Nginx 설정:
+   location ~ /\.git { deny all; }

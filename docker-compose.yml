@@ -23,7 +23,7 @@ services:
   backend:
     build: .
     ports:
-      - "${APP_BIND_IP:-0.0.0.0}:${HOST_BACKEND_PORT:-18080}:8080"
+      - "${APP_BIND_IP:-0.0.0.0}:${HOST_BACKEND_PORT:-18080}:18080"
     depends_on:
       oracle-db:
         condition: service_healthy

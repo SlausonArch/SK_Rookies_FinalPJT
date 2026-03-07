@@ -1,0 +1,389 @@
+================================================================================
+[VCE-EX-14] 백업 파일 및 테스트 파일 존재 여부
+도메인: exchange
+위험도: Medium
+================================================================================
+
+1. 진단 항목 개요
+--------------------------------------------------------------------------------
+백업 파일 및 테스트 파일 존재 여부 진단은 개발 또는 운영 과정에서 생성된
+백업 파일, 테스트 전용 엔드포인트, 임시 파일 등이 운영 환경에 노출되어 있는지
+확인하는 테스트이다.
+
+VCE의 경우 DataInitializer.java를 기반으로 생성된 /api/auth/test/login 엔드포인트
+가 운영 환경에 노출되어 있을 가능성이 높다. 이 엔드포인트는 테스트 목적으로
+JWT 인증 없이 특정 역할(ADMIN, USER)의 토큰을 직접 발급하거나, 하드코딩된
+테스트 계정으로 즉시 로그인할 수 있는 편의 기능일 가능성이 있다.
+
+또한 .git 디렉토리, application.properties 백업, .bak 확장자 파일 등이
+웹에서 접근 가능할 경우 소스 코드 전체 또는 민감한 설정 정보가 노출된다.
+
+진단 목표:
+  - /api/auth/test/login 등 테스트 전용 엔드포인트 운영 노출 확인
+  - /.git/ 디렉토리 공개 접근 가능 여부 확인
+  - 백업 파일 (.bak, .old, .backup, ~) 접근 가능 여부 확인
+  - /api/actuator/env 등 환경 설정 노출 엔드포인트 확인
+  - application.properties, .env 파일 직접 접근 가능 여부 확인
+
+위험 시나리오:
+  1. /api/auth/test/login으로 인증 없이 ADMIN 토큰 발급
+  2. /.git/config 또는 /.git/COMMIT_EDITMSG에서 소스 코드 정보 획득
+  3. application.properties.bak에서 DB 연결 정보, JWT 시크릿 노출
+  4. .env 파일에서 API 키, 클라우드 크리덴셜 노출
+
+
+2. 대상 기능 & 엔드포인트
+--------------------------------------------------------------------------------
+테스트 전용 엔드포인트 (예상):
+  - POST /api/auth/test/login         → 테스트용 즉시 로그인 (DataInitializer 기반)
+  - GET  /api/auth/test/token         → 테스트용 토큰 직접 발급
+  - POST /api/test/reset              → 테스트 데이터 초기화
+  - GET  /api/test/status             → 서버 상태 확인 (개발용)
+  - POST /api/auth/dev/login          → 개발용 로그인 (별칭)
+
+Git 관련 파일:
+  - /.git/config
+  - /.git/HEAD
+  - /.git/COMMIT_EDITMSG
+  - /.git/refs/heads/main
+  - /.git/logs/HEAD
+
+백업 파일 경로:
+  - /application.properties.bak
+  - /application.yml.bak
+  - /application.properties.old
+  - /.env.bak
+  - /.env.backup
+  - /config.bak
+  - /web.config.bak
+  - /index.html.bak
+  - /index.html~
+
+민감 설정 파일:
+  - /.env
+  - /application.properties
+  - /application.yml
+  - /application-prod.properties
+  - /application-prod.yml
+
+테스트 대상 도메인:
+  - 로컬: http://localhost:8080
+  - 운영: https://vceapp.com
+
+
+3. 취약점 원리 (Why this works)
+--------------------------------------------------------------------------------
+[테스트 엔드포인트 운영 노출]
+  개발팀은 개발 편의를 위해 /api/auth/test/login과 같은 엔드포인트를 생성한다.
+  이 엔드포인트는:
+  - 인증 없이 특정 역할의 JWT 발급
+  - 하드코딩된 테스트 계정으로 즉시 로그인
+  - 특정 사용자 ID의 세션 탈취
+  등의 기능을 제공할 수 있으며, 운영 환경 배포 시 제거되지 않으면 Critical 취약점이 된다.
+
+  예상 동작 코드 (DataInitializer.java 기반):
+    DataInitializer에서 생성한 test@vce.com 계정으로
+    패스워드 없이 즉시 JWT를 발급하는 편의 엔드포인트
+
+[.git 디렉토리 노출]
+  웹 서버가 .git 디렉토리를 정적 파일로 서빙할 경우:
+  - /.git/config: 원격 저장소 URL (GitHub/GitLab 주소)
+  - /.git/HEAD: 현재 브랜치 정보
+  - /.git/COMMIT_EDITMSG: 마지막 커밋 메시지 (민감 정보 포함 가능)
+  - git-dumper 도구로 전체 소스 코드 복원 가능
+
+[백업 파일 직접 접근]
+  편집기(vim, emacs)나 배포 스크립트가 생성한 .bak, ~, .old 파일이
+  웹 루트에 남아 있을 경우 소스 코드 또는 설정 파일이 직접 노출된다.
+
+
+4. 테스트 절차 (Step-by-step)
+--------------------------------------------------------------------------------
+
+[Step 1] 테스트 전용 로그인 엔드포인트 확인
+
+  1-1. /api/auth/test/login 직접 접근
+  --- HTTP Request (역할 파라미터 방식) ---
+  POST /api/auth/test/login HTTP/1.1
+  Host: localhost:8080
+  Content-Type: application/json
+  Content-Length: 20
+
+  {"role": "ADMIN"}
+  ------------------------------------------
+
+  --- HTTP Request (이메일 직접 지정 방식) ---
+  POST /api/auth/test/login HTTP/1.1
+  Host: localhost:8080
+  Content-Type: application/json
+  Content-Length: 28
+
+  {"email": "admin@vce.com"}
+  ------------------------------------------
+
+  --- HTTP Request (사용자 ID 방식) ---
+  POST /api/auth/test/login HTTP/1.1
+  Host: localhost:8080
+  Content-Type: application/json
+  Content-Length: 12
+
+  {"userId": 1}
+  ------------------------------------------
+
+  취약 응답 예시:
+  HTTP/1.1 200 OK
+  {
+    "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
+    "message": "테스트 토큰 발급 완료"
+  }
+
+  1-2. 유사 경로 추가 탐색
+  --- HTTP Request ---
+  POST /api/auth/test/token HTTP/1.1
+  Host: localhost:8080
+  Content-Length: 0
+
+  (빈 바디)
+  --------------------
+
+  --- HTTP Request ---
+  POST /api/auth/dev/login HTTP/1.1
+  Host: localhost:8080
+  Content-Type: application/json
+
+  {"role": "USER"}
+  --------------------
+
+[Step 2] .git 디렉토리 접근 시도
+
+  2-1. HEAD 파일 접근
+  --- HTTP Request ---
+  GET /.git/HEAD HTTP/1.1
+  Host: vceapp.com
+  --------------------
+  취약 응답 예시:
+  HTTP/1.1 200 OK
+  ref: refs/heads/main
+
+  2-2. config 파일 접근 (원격 저장소 URL 노출)
+  --- HTTP Request ---
+  GET /.git/config HTTP/1.1
+  Host: vceapp.com
+  --------------------
+  취약 응답 예시:
+  [core]
+      repositoryformatversion = 0
+      filemode = true
+  [remote "origin"]
+      url = https://github.com/vce-team/vce-backend.git
+      fetch = +refs/heads/*:refs/remotes/origin/*
+
+  2-3. 마지막 커밋 메시지 확인
+  --- HTTP Request ---
+  GET /.git/COMMIT_EDITMSG HTTP/1.1
+  Host: vceapp.com
+  --------------------
+
+  2-4. 전체 소스 복원 시도 (git-dumper 도구 사용)
+  git-dumper https://vceapp.com/.git/ ./dumped-repo
+  → 소스 코드 전체 복원 가능 여부 확인
+
+[Step 3] 백업 파일 접근 시도
+
+  일반 백업 파일 목록을 순서대로 요청한다:
+
+  --- HTTP Request ---
+  GET /application.properties.bak HTTP/1.1
+  Host: vceapp.com
+  --------------------
+
+  --- HTTP Request ---
+  GET /application.yml.bak HTTP/1.1
+  Host: vceapp.com
+  --------------------
+
+  --- HTTP Request ---
+  GET /.env HTTP/1.1
+  Host: vceapp.com
+  --------------------
+
+  --- HTTP Request ---
+  GET /.env.bak HTTP/1.1
+  Host: vceapp.com
+  --------------------
+
+  --- HTTP Request ---
+  GET /application-prod.properties HTTP/1.1
+  Host: vceapp.com
+  --------------------
+
+  취약 응답 예시 (application.properties 노출):
+  spring.datasource.url=jdbc:mysql://localhost:3306/vcedb
+  spring.datasource.username=vceuser
+  spring.datasource.password=SuperSecret123!
+  jwt.secret=vce-super-secret-jwt-key-hardcoded
+  cloud.aws.credentials.access-key=AKIAIOSFODNN7EXAMPLE
+
+[Step 4] Actuator 환경 변수 엔드포인트 확인
+
+  --- HTTP Request ---
+  GET /api/actuator/env HTTP/1.1
+  Host: localhost:8080
+  --------------------
+
+  --- HTTP Request ---
+  GET /actuator/env HTTP/1.1
+  Host: localhost:8080
+  --------------------
+
+  --- HTTP Request ---
+  GET /actuator/configprops HTTP/1.1
+  Host: localhost:8080
+  --------------------
+
+[Step 5] 기타 취약 파일 탐색
+
+  Burp Suite Intruder를 이용한 파일 목록 자동 탐색:
+  5-1. GET /§FILENAME§ 형태로 Sniper 공격 설정
+  5-2. Payload 목록:
+    .env
+    .env.local
+    .env.production
+    .git/HEAD
+    .git/config
+    application.properties
+    application.yml
+    application.properties.bak
+    application.yml.bak
+    web.config
+    web.config.bak
+    config.php.bak
+    database.yml
+    secrets.yml
+    credentials.json
+    service-account.json
+    id_rsa
+    id_rsa.pub
+    .ssh/id_rsa
+    backup.sql
+    dump.sql
+    db.sql
+
+  --- HTTP Request (Intruder) ---
+  GET /§FILENAME§ HTTP/1.1
+  Host: vceapp.com
+  --------------------------------
+
+[Step 6] URL 경로 변형 탐색
+
+  --- HTTP Request ---
+  GET /api/v1/test/login HTTP/1.1
+  Host: localhost:8080
+  --------------------
+
+  --- HTTP Request ---
+  GET /api/v2/auth/test HTTP/1.1
+  Host: localhost:8080
+  --------------------
+
+  --- HTTP Request ---
+  GET /h2-console HTTP/1.1
+  Host: localhost:8080
+  (Spring Boot H2 인메모리 DB 콘솔 - 개발 환경 비활성화 여부 확인)
+  --------------------
+
+  --- HTTP Request ---
+  GET /api/swagger-ui.html HTTP/1.1
+  Host: localhost:8080
+  --------------------
+
+
+5. 취약 여부 판단 기준
+--------------------------------------------------------------------------------
+
+✅ 취약 (다음 중 하나라도 해당되면 취약)
+  - /api/auth/test/login 또는 유사 경로에서 HTTP 200 또는 JWT 토큰 반환
+  - /.git/HEAD, /.git/config에 HTTP 200 응답 (소스 코드 복원 가능)
+  - application.properties.bak, .env 등 설정 파일에서 HTTP 200 응답
+  - /actuator/env에서 민감 환경 변수(JWT 시크릿, DB 비밀번호) 반환
+  - /h2-console에서 DB 관리 콘솔 접근 가능
+  - 백업 파일에서 DB 접속 정보, API 키, 시크릿 키 노출
+
+✗ 안전 (다음 조건이 모두 충족되어야 안전)
+  - /api/auth/test/login: HTTP 404 Not Found
+  - /.git/**: HTTP 403 Forbidden 또는 404 Not Found
+  - 백업 파일 경로: HTTP 404
+  - /actuator/env: HTTP 404 또는 401 (인증 필요)
+  - /h2-console: HTTP 404 (운영 환경 비활성화)
+
+
+6. 예상 취약 포인트 (코드 위치)
+--------------------------------------------------------------------------------
+  핵심 취약 파일: DataInitializer.java 및 테스트 컨트롤러
+
+  예상 취약 코드 패턴 (TestAuthController.java 또는 AuthController.java):
+    @RestController
+    @RequestMapping("/api/auth")
+    public class AuthController {
+
+        // ↓ 테스트 목적으로 추가된 엔드포인트 — 운영에서 제거 안 됨
+        @PostMapping("/test/login")
+        public ResponseEntity<?> testLogin(@RequestBody TestLoginRequest req) {
+            String role = req.getRole() != null ? req.getRole() : "USER";
+            String token = jwtTokenProvider.createToken("test@vce.com", role);
+            return ResponseEntity.ok(Map.of("accessToken", token));
+        }
+    }
+
+  SecurityConfig.java 취약 패턴:
+    .requestMatchers("/api/auth/**").permitAll()
+    // ↑ /api/auth/test/login도 인증 없이 허용됨
+
+  application.properties 취약 설정:
+    spring.h2.console.enabled=true
+    spring.h2.console.path=/h2-console
+    # ↑ 운영 환경에서 H2 콘솔 활성화 (취약)
+
+
+7. 권고 조치
+--------------------------------------------------------------------------------
+[즉각 조치]
+  1. 테스트 전용 엔드포인트 즉시 제거 또는 비활성화
+     - /api/auth/test/login 등 테스트 컨트롤러 전체 삭제
+     - @Profile("!prod") 어노테이션으로 운영 환경에서만 제외:
+       @RestController
+       @Profile({"dev", "local", "test"})
+       public class TestAuthController { ... }
+
+  2. .git 디렉토리 웹 서버 접근 차단
+     - Nginx 설정:
+       location ~ /\.git {
+           deny all;
+           return 404;
+       }
+     - Apache .htaccess:
+       RedirectMatch 404 /\.git
+
+[단기 조치]
+  3. 백업 파일 서버에서 제거 및 접근 차단
+     - 웹 루트에서 .bak, .old, ~, .backup 파일 모두 제거
+     - 웹 서버에서 해당 확장자 접근 차단
+
+  4. H2 콘솔 운영 환경 비활성화
+     application-prod.properties:
+       spring.h2.console.enabled=false
+
+  5. Actuator 엔드포인트 최소화 (EX-13 참조)
+
+[중장기 조치]
+  6. 배포 파이프라인에 보안 검사 추가
+     - CI/CD에서 테스트 파일, 백업 파일 존재 여부 자동 검사
+     - .git 디렉토리가 웹 루트에 포함되지 않도록 빌드 스크립트 수정
+
+  7. 민감 파일 gitignore 등록
+     .gitignore:
+       *.bak
+       *.old
+       .env
+       application-prod.properties
+       application-prod.yml

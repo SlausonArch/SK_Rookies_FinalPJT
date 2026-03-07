@@ -723,19 +723,6 @@ const ModalMeta = styled.div`
   font-weight: 900;
 `;
 
-const ModalText = styled.div`
-  font-size: 13px;
-  color: ${COLORS.text2};
-  line-height: 1.7;
-  margin-bottom: 12px;
-  background: ${COLORS.surface2};
-  padding: 14px;
-  border: 1px solid ${COLORS.border2};
-  border-radius: 14px;
-  white-space: pre-wrap;
-  max-height: 360px;
-  overflow-y: auto;
-`;
 
 const ModalButtonGroup = styled.div`
   display: flex;
@@ -967,6 +954,10 @@ const AdminDashboard = () => {
   const [reclaimReason, setReclaimReason] = useState('');
   const [isReclaiming, setIsReclaiming] = useState(false);
 
+  const [selectedMemberDetails, setSelectedMemberDetails] = useState<any | null>(null);
+  // V-05: 게시글 댓글 상태 (Stored XSS 실습용)
+  const [postComments, setPostComments] = useState<any[]>([]);
+
   const [settingsMsg, setSettingsMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [newPw, setNewPw] = useState('');
 
@@ -987,10 +978,13 @@ const AdminDashboard = () => {
   const [txTotalPages, setTxTotalPages] = useState(0);
 
   useEffect(() => {
-    const t = getAdminAccessToken();
     const r = getAdminRole();
-    if (!t || r !== 'ADMIN') navigate('/admin/login', { replace: true });
-  }, [navigate]);
+    if (!token || !r) navigate('/admin/login', { replace: true });
+    // 초기 접속 시 권한에 따라 기본 활성화 탭 보정
+    if (r === 'STAFF' && !['community', 'inquiries'].includes(activeMenu)) {
+      setActiveMenu('community');
+    }
+  }, [navigate, activeMenu]);
 
   const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
 
@@ -1085,6 +1079,50 @@ const AdminDashboard = () => {
       setMembers(prev => prev.map(m => (m.memberId === memberId ? { ...m, status: newStatus } : m)));
     } catch {
       alert('상태 변경 실패');
+    }
+  };
+
+  const handleViewMemberDetails = async (memberId: number) => {
+    try {
+      const res = await axios.get(`${API_BASE}/api/admin/members/${memberId}`, { headers });
+      setSelectedMemberDetails(res.data);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || '회원 상세 정보 조회 실패');
+    }
+  };
+
+  const handleUnmask = async (memberId: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const role = getAdminRole();
+    if (role === 'STAFF') {
+      alert('접근 권한이 없습니다.');
+      return;
+    }
+    try {
+      const res = await axios.get(`${API_BASE}/api/admin/members/${memberId}/unmask`, { headers });
+      const data = res.data;
+
+      const updateData = (prev: any[]) => prev.map(item => item.memberId === memberId ? { ...item, email: data.email, memberEmail: data.email, name: data.name, memberName: data.name, _unmasked: true } : item);
+
+      setMembers(updateData);
+      setIdApprovalMembers(updateData);
+      setOrders(updateData);
+      setAssets(updateData);
+      setTransactions(updateData);
+      setInquiries(updateData);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || '마스킹 해제 실패');
+    }
+  };
+
+  // V-05: 어드민이 게시글을 열 때 댓글을 조회합니다.
+  // 취약점: 댓글 내용이 dangerouslySetInnerHTML로 화면에 출력되므로 Stored XSS 가능
+  const fetchPostComments = async (postId: number) => {
+    try {
+      const res = await axios.get(`${API_BASE}/api/community/posts/${postId}/comments`, { headers });
+      setPostComments(res.data || []);
+    } catch {
+      setPostComments([]);
     }
   };
 
@@ -1353,6 +1391,7 @@ const AdminDashboard = () => {
                       <th>ID</th>
                       <th>이메일</th>
                       <th>이름</th>
+                      <th>신분증</th>
                       <th>역할</th>
                       <th>상태</th>
                       <th>가입일</th>
@@ -1363,8 +1402,21 @@ const AdminDashboard = () => {
                     {members.map(m => (
                       <tr key={m.memberId}>
                         <td>{m.memberId}</td>
-                        <td>{m.email}</td>
+                        <td>
+                          <span onClick={(e) => handleUnmask(m.memberId, e)} style={{ cursor: 'pointer', color: (m as any)._unmasked ? COLORS.primary : 'inherit' }} title="클릭하여 마스킹 해제">
+                            {m.email}
+                          </span>
+                        </td>
                         <td>{m.name}</td>
+                        <td>
+                          {m.hasIdPhoto ? (
+                            <GhostButton style={{ height: '28px', fontSize: '11px', padding: '0 8px' }} onClick={() => setSelectedImage(m.idPhotoUrl!.startsWith('http') ? m.idPhotoUrl! : `${API_BASE}${m.idPhotoUrl!}`)}>
+                              보기
+                            </GhostButton>
+                          ) : (
+                            '-'
+                          )}
+                        </td>
                         <td>
                           <Badge $tone={toneFromRole(m.role)}>{m.role}</Badge>
                         </td>
@@ -1372,12 +1424,15 @@ const AdminDashboard = () => {
                           <Badge $tone={toneFromStatus(m.status)}>{m.status}</Badge>
                         </td>
                         <td>{fmtDate(m.createdAt)}</td>
-                        <td>
-                          <Select value={m.status} onChange={e => handleStatusChange(m.memberId, e.target.value)}>
+                        <td style={{ display: 'flex', gap: '4px', alignItems: 'center', height: '100%', minHeight: '44px' }}>
+                          <Select value={m.status} onChange={e => handleStatusChange(m.memberId, e.target.value)} style={{ width: '100px' }}>
                             <option value="ACTIVE">ACTIVE</option>
                             <option value="LOCKED">LOCKED</option>
                             <option value="WITHDRAWN">WITHDRAWN</option>
                           </Select>
+                          <PrimaryButton style={{ height: '32px', fontSize: '11px', padding: '0 8px' }} onClick={() => handleViewMemberDetails(m.memberId)}>
+                            상세 보기
+                          </PrimaryButton>
                         </td>
                       </tr>
                     ))}
@@ -1433,7 +1488,11 @@ const AdminDashboard = () => {
                   {pendingIdApprovals.map(m => (
                     <tr key={m.memberId}>
                       <td>{m.memberId}</td>
-                      <td>{m.email}</td>
+                      <td>
+                        <span onClick={(e) => handleUnmask(m.memberId, e)} style={{ cursor: 'pointer', color: (m as any)._unmasked ? COLORS.primary : 'inherit' }} title="클릭하여 마스킹 해제">
+                          {m.email}
+                        </span>
+                      </td>
                       <td>{m.name}</td>
                       <td>
                         <Badge $tone={toneFromStatus(m.status)}>{m.status}</Badge>
@@ -1488,7 +1547,11 @@ const AdminDashboard = () => {
                   {orders.map(o => (
                     <tr key={o.orderId}>
                       <td>{o.orderId}</td>
-                      <td>{o.memberName}</td>
+                      <td>
+                        <span onClick={(e) => handleUnmask((o as any).memberId, e)} style={{ cursor: 'pointer', color: (o as any)._unmasked ? COLORS.primary : 'inherit' }} title="클릭하여 마스킹 해제">
+                          {o.memberName} ({o.memberEmail})
+                        </span>
+                      </td>
                       <td>
                         <Badge $tone={toneFromOrderType(o.orderType)}>{o.orderType}</Badge>
                       </td>
@@ -1532,7 +1595,11 @@ const AdminDashboard = () => {
                     return (
                       <tr key={a.assetId}>
                         <td>{a.memberName}</td>
-                        <td>{a.memberEmail}</td>
+                        <td>
+                          <span onClick={(e) => handleUnmask(a.memberId, e)} style={{ cursor: 'pointer', color: (a as any)._unmasked ? COLORS.primary : 'inherit' }} title="클릭하여 마스킹 해제">
+                            {a.memberEmail}
+                          </span>
+                        </td>
                         <td>{a.assetType}</td>
                         <td>{a.assetType === 'KRW' ? fmt(a.balance) : a.balance}</td>
                         <td>{a.lockedBalance > 0 ? a.lockedBalance : '-'}</td>
@@ -1617,7 +1684,11 @@ const AdminDashboard = () => {
                     {transactions.map(tx => (
                       <tr key={tx.txId}>
                         <td>{tx.txId}</td>
-                        <td>{tx.memberName}</td>
+                        <td>
+                          <span onClick={(e) => handleUnmask((tx as any).memberId, e)} style={{ cursor: 'pointer', color: (tx as any)._unmasked ? COLORS.primary : 'inherit' }} title="클릭하여 마스킹 해제">
+                            {tx.memberName} ({tx.memberEmail})
+                          </span>
+                        </td>
                         <td>
                           <Badge $tone={toneFromTxType(tx.txType)}>{tx.txType}</Badge>
                         </td>
@@ -1762,7 +1833,8 @@ const AdminDashboard = () => {
                     <tr key={p.postId}>
                       <td>{p.postId}</td>
                       <td>
-                        <LinkCell onClick={() => setSelectedPost(p)} title={p.title}>
+                        {/* V-05: 모달 오픈 시 댓글 데이터 fetch (dangerouslySetInnerHTML 취약점 유발 목적) */}
+                        <LinkCell onClick={() => { setSelectedPost(p); setPostComments([]); fetchPostComments(p.postId); }} title={p.title}>
                           {p.title}
                         </LinkCell>
                       </td>
@@ -1804,7 +1876,11 @@ const AdminDashboard = () => {
                   {inquiries.map(inq => (
                     <tr key={inq.inquiryId}>
                       <td>{inq.inquiryId}</td>
-                      <td>{inq.memberEmail}</td>
+                      <td>
+                        <span onClick={(e) => handleUnmask((inq as any).memberId, e)} style={{ cursor: 'pointer', color: (inq as any)._unmasked ? COLORS.primary : 'inherit' }} title="클릭하여 마스킹 해제">
+                          {inq.memberEmail}
+                        </span>
+                      </td>
                       <td>{inq.memberName}</td>
                       <td>
                         <LinkCell
@@ -1878,7 +1954,26 @@ const AdminDashboard = () => {
     }
   };
 
-  const page = menuTitles[activeMenu];
+  const page = menuTitles[activeMenu] || menuTitles.dashboard;
+  const role = getAdminRole() || 'GUEST';
+
+  const menuSections = {
+    main: ['dashboard'] as const,
+    exchange: ['members', 'idApprovals', 'orders', 'assets', 'deposits'] as const,
+    contents: ['community', 'inquiries'] as const,
+    system: ['settings'] as const,
+  };
+
+  const allowedMenus = useMemo(() => {
+    if (role === 'ADMIN') {
+      return [...menuSections.main, ...menuSections.exchange, ...menuSections.contents, ...menuSections.system];
+    } else if (role === 'MANAGER') {
+      return [...menuSections.main, ...menuSections.exchange, ...menuSections.contents];
+    } else if (role === 'STAFF') {
+      return [...menuSections.contents];
+    }
+    return [];
+  }, [role]);
 
   return (
     <>
@@ -1904,149 +1999,159 @@ const AdminDashboard = () => {
         <Body $collapsed={sidebarCollapsed}>
           <Sidebar $collapsed={sidebarCollapsed}>
             <SideNav>
-              <SideSection>
-                <SideSectionTitle $collapsed={sidebarCollapsed}>메인</SideSectionTitle>
-                <SideItem
-                  $active={activeMenu === 'dashboard'}
-                  $collapsed={sidebarCollapsed}
-                  onClick={() => setActiveMenu('dashboard')}
-                  title={sidebarCollapsed ? menuTitles.dashboard.title : undefined}
-                >
-                  <SideLeft $collapsed={sidebarCollapsed}>
-                    {(() => {
-                      const Icon = menuTitles.dashboard.icon;
-                      return (
-                        <SideIcon $active={activeMenu === 'dashboard'}>
-                          <Icon size={16} />
-                        </SideIcon>
-                      );
-                    })()}
-                    <SideText $collapsed={sidebarCollapsed}>
-                      <SideLabel>{menuTitles.dashboard.title}</SideLabel>
-                      <SideDesc>{menuTitles.dashboard.desc}</SideDesc>
-                    </SideText>
-                  </SideLeft>
-                </SideItem>
-              </SideSection>
-
-              <SideSection>
-                <SideSectionTitle $collapsed={sidebarCollapsed}>거래소 관리</SideSectionTitle>
-                {(['members', 'idApprovals', 'orders', 'assets', 'deposits'] as const).map(key => (
+              {allowedMenus.includes('dashboard') && (
+                <SideSection>
+                  <SideSectionTitle $collapsed={sidebarCollapsed}>메인</SideSectionTitle>
                   <SideItem
-                    key={key}
-                    $active={activeMenu === key}
+                    $active={activeMenu === 'dashboard'}
                     $collapsed={sidebarCollapsed}
-                    onClick={() => setActiveMenu(key)}
-                    title={sidebarCollapsed ? menuTitles[key].title : undefined}
+                    onClick={() => setActiveMenu('dashboard')}
+                    title={sidebarCollapsed ? menuTitles.dashboard.title : undefined}
                   >
                     <SideLeft $collapsed={sidebarCollapsed}>
                       {(() => {
-                        const Icon = menuTitles[key].icon;
+                        const Icon = menuTitles.dashboard.icon;
                         return (
-                          <SideIcon $active={activeMenu === key}>
+                          <SideIcon $active={activeMenu === 'dashboard'}>
                             <Icon size={16} />
                           </SideIcon>
                         );
                       })()}
                       <SideText $collapsed={sidebarCollapsed}>
-                        <SideLabel>{menuTitles[key].title}</SideLabel>
-                        <SideDesc>{menuTitles[key].desc}</SideDesc>
+                        <SideLabel>{menuTitles.dashboard.title}</SideLabel>
+                        <SideDesc>{menuTitles.dashboard.desc}</SideDesc>
                       </SideText>
                     </SideLeft>
                   </SideItem>
-                ))}
-              </SideSection>
+                </SideSection>
+              )}
 
-              <SideSection>
-                <SideSectionTitle $collapsed={sidebarCollapsed}>콘텐츠</SideSectionTitle>
+              {allowedMenus.some(menu => menuSections.exchange.includes(menu as any)) && (
+                <SideSection>
+                  <SideSectionTitle $collapsed={sidebarCollapsed}>거래소 관리</SideSectionTitle>
+                  {menuSections.exchange.filter(key => allowedMenus.includes(key as any)).map(key => (
+                    <SideItem
+                      key={key}
+                      $active={activeMenu === key}
+                      $collapsed={sidebarCollapsed}
+                      onClick={() => setActiveMenu(key)}
+                      title={sidebarCollapsed ? menuTitles[key].title : undefined}
+                    >
+                      <SideLeft $collapsed={sidebarCollapsed}>
+                        {(() => {
+                          const Icon = menuTitles[key].icon;
+                          return (
+                            <SideIcon $active={activeMenu === key}>
+                              <Icon size={16} />
+                            </SideIcon>
+                          );
+                        })()}
+                        <SideText $collapsed={sidebarCollapsed}>
+                          <SideLabel>{menuTitles[key].title}</SideLabel>
+                          <SideDesc>{menuTitles[key].desc}</SideDesc>
+                        </SideText>
+                      </SideLeft>
+                    </SideItem>
+                  ))}
+                </SideSection>
+              )}
 
-                <SideItem
-                  $active={activeMenu === 'community'}
-                  $collapsed={sidebarCollapsed}
-                  onClick={() => setActiveMenu('community')}
-                  title={sidebarCollapsed ? menuTitles.community.title : undefined}
-                >
-                  <SideLeft $collapsed={sidebarCollapsed}>
-                    {(() => {
-                      const Icon = menuTitles.community.icon;
-                      return (
-                        <SideIcon $active={activeMenu === 'community'}>
-                          <Icon size={16} />
-                        </SideIcon>
-                      );
-                    })()}
-                    <SideText $collapsed={sidebarCollapsed}>
-                      <SideLabel>{menuTitles.community.title}</SideLabel>
-                      <SideDesc>{menuTitles.community.desc}</SideDesc>
-                    </SideText>
-                  </SideLeft>
-                </SideItem>
+              {allowedMenus.some(menu => menuSections.contents.includes(menu as any)) && (
+                <SideSection>
+                  <SideSectionTitle $collapsed={sidebarCollapsed}>콘텐츠</SideSectionTitle>
 
-                <div style={{ position: 'relative' }}>
-                  <SideItem
-                    $active={activeMenu === 'inquiries'}
-                    $collapsed={sidebarCollapsed}
-                    onClick={() => setActiveMenu('inquiries')}
-                    title={sidebarCollapsed ? menuTitles.inquiries.title : undefined}
-                  >
-                    <SideLeft $collapsed={sidebarCollapsed}>
-                      {(() => {
-                        const Icon = menuTitles.inquiries.icon;
-                        return (
-                          <SideIcon $active={activeMenu === 'inquiries'}>
-                            <Icon size={16} />
-                          </SideIcon>
-                        );
-                      })()}
-                      <SideText $collapsed={sidebarCollapsed}>
-                        <SideLabel>{menuTitles.inquiries.title}</SideLabel>
-                        <SideDesc>{menuTitles.inquiries.desc}</SideDesc>
-                      </SideText>
-                    </SideLeft>
-
-                    {/* ✅ (옵션 적용) badgeText 출력 */}
-                    {!sidebarCollapsed && <SideBadge $show={pendingInquiryCount > 0}>{badgeText}</SideBadge>}
-                  </SideItem>
-
-                  {/* ✅ (옵션 적용) badgeText 출력 */}
-                  {sidebarCollapsed && (
-                    <SideBadge $show={pendingInquiryCount > 0} $collapsed>
-                      {badgeText}
-                    </SideBadge>
+                  {allowedMenus.includes('community') && (
+                    <SideItem
+                      $active={activeMenu === 'community'}
+                      $collapsed={sidebarCollapsed}
+                      onClick={() => setActiveMenu('community')}
+                      title={sidebarCollapsed ? menuTitles.community.title : undefined}
+                    >
+                      <SideLeft $collapsed={sidebarCollapsed}>
+                        {(() => {
+                          const Icon = menuTitles.community.icon;
+                          return (
+                            <SideIcon $active={activeMenu === 'community'}>
+                              <Icon size={16} />
+                            </SideIcon>
+                          );
+                        })()}
+                        <SideText $collapsed={sidebarCollapsed}>
+                          <SideLabel>{menuTitles.community.title}</SideLabel>
+                          <SideDesc>{menuTitles.community.desc}</SideDesc>
+                        </SideText>
+                      </SideLeft>
+                    </SideItem>
                   )}
-                </div>
-              </SideSection>
 
-              <SideSection>
-                <SideSectionTitle $collapsed={sidebarCollapsed}>시스템</SideSectionTitle>
-                <SideItem
-                  $active={activeMenu === 'settings'}
-                  $collapsed={sidebarCollapsed}
-                  onClick={() => setActiveMenu('settings')}
-                  title={sidebarCollapsed ? menuTitles.settings.title : undefined}
-                >
-                  <SideLeft $collapsed={sidebarCollapsed}>
-                    {(() => {
-                      const Icon = menuTitles.settings.icon;
-                      return (
-                        <SideIcon $active={activeMenu === 'settings'}>
-                          <Icon size={16} />
-                        </SideIcon>
-                      );
-                    })()}
-                    <SideText $collapsed={sidebarCollapsed}>
-                      <SideLabel>{menuTitles.settings.title}</SideLabel>
-                      <SideDesc>{menuTitles.settings.desc}</SideDesc>
-                    </SideText>
-                  </SideLeft>
-                </SideItem>
-              </SideSection>
+                  {allowedMenus.includes('inquiries') && (
+                    <div style={{ position: 'relative' }}>
+                      <SideItem
+                        $active={activeMenu === 'inquiries'}
+                        $collapsed={sidebarCollapsed}
+                        onClick={() => setActiveMenu('inquiries')}
+                        title={sidebarCollapsed ? menuTitles.inquiries.title : undefined}
+                      >
+                        <SideLeft $collapsed={sidebarCollapsed}>
+                          {(() => {
+                            const Icon = menuTitles.inquiries.icon;
+                            return (
+                              <SideIcon $active={activeMenu === 'inquiries'}>
+                                <Icon size={16} />
+                              </SideIcon>
+                            );
+                          })()}
+                          <SideText $collapsed={sidebarCollapsed}>
+                            <SideLabel>{menuTitles.inquiries.title}</SideLabel>
+                            <SideDesc>{menuTitles.inquiries.desc}</SideDesc>
+                          </SideText>
+                        </SideLeft>
+
+                        {!sidebarCollapsed && <SideBadge $show={pendingInquiryCount > 0}>{badgeText}</SideBadge>}
+                      </SideItem>
+
+                      {sidebarCollapsed && (
+                        <SideBadge $show={pendingInquiryCount > 0} $collapsed>
+                          {badgeText}
+                        </SideBadge>
+                      )}
+                    </div>
+                  )}
+                </SideSection>
+              )}
+
+              {allowedMenus.includes('settings') && (
+                <SideSection>
+                  <SideSectionTitle $collapsed={sidebarCollapsed}>시스템</SideSectionTitle>
+                  <SideItem
+                    $active={activeMenu === 'settings'}
+                    $collapsed={sidebarCollapsed}
+                    onClick={() => setActiveMenu('settings')}
+                    title={sidebarCollapsed ? menuTitles.settings.title : undefined}
+                  >
+                    <SideLeft $collapsed={sidebarCollapsed}>
+                      {(() => {
+                        const Icon = menuTitles.settings.icon;
+                        return (
+                          <SideIcon $active={activeMenu === 'settings'}>
+                            <Icon size={16} />
+                          </SideIcon>
+                        );
+                      })()}
+                      <SideText $collapsed={sidebarCollapsed}>
+                        <SideLabel>{menuTitles.settings.title}</SideLabel>
+                        <SideDesc>{menuTitles.settings.desc}</SideDesc>
+                      </SideText>
+                    </SideLeft>
+                  </SideItem>
+                </SideSection>
+              )}
             </SideNav>
 
             <SideFooter $collapsed={sidebarCollapsed}>
               <SideFooterUser $collapsed={sidebarCollapsed}>
                 <SideFooterName>{userName}</SideFooterName>
-                <SideFooterRole>ADMIN</SideFooterRole>
+                <SideFooterRole>{role}</SideFooterRole>
               </SideFooterUser>
 
               <SideLogout $collapsed={sidebarCollapsed} onClick={handleLogout} title={sidebarCollapsed ? '로그아웃' : undefined}>
@@ -2061,15 +2166,54 @@ const AdminDashboard = () => {
           </Content>
 
           {selectedPost && (
-            <ModalOverlay onClick={() => setSelectedPost(null)}>
-              <ModalContainer onClick={e => e.stopPropagation()}>
+            <ModalOverlay onClick={() => { setSelectedPost(null); setPostComments([]); }}>
+              <ModalContainer onClick={e => e.stopPropagation()} style={{ maxHeight: '80vh', overflowY: 'auto' }}>
                 <ModalTitle>{selectedPost.title}</ModalTitle>
                 <ModalMeta>
                   작성자: {selectedPost.authorName} | 작성일: {fmtDate(selectedPost.createdAt)}
                 </ModalMeta>
-                <ModalText>{selectedPost.content}</ModalText>
+
+                {/* 첨부파일 링크 */}
+                {selectedPost.attachmentUrl && (
+                  <div style={{ marginBottom: 10 }}>
+                    <a
+                      href={selectedPost.attachmentUrl.startsWith('http') ? selectedPost.attachmentUrl : `${API_BASE}${selectedPost.attachmentUrl}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: COLORS.primary, textDecoration: 'underline' }}
+                    >
+                      📎 첨부파일 열기 (클릭)
+                    </a>
+                  </div>
+                )}
+
+                {/* V-05: dangerouslySetInnerHTML — Stored XSS 취약점. HTML이 그대로 렌더링됩니다.
+                    악성 사용자가 <script>, <img onerror=...> 등을 본문에 삽입하면 어드민 브라우저에서 실행됩니다. */}
+                <div
+                  style={{ padding: '10px 0', borderBottom: `1px solid ${COLORS.border}`, minHeight: 60 }}
+                  dangerouslySetInnerHTML={{ __html: selectedPost.content }}
+                />
+
+                {/* 댓글 목록 – V-05: 댓글 내용도 dangerouslySetInnerHTML로 출력 */}
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: COLORS.muted }}>
+                    댓글 ({postComments.length})
+                  </div>
+                  {postComments.length === 0 ? (
+                    <div style={{ fontSize: 12, color: COLORS.muted }}>댓글이 없습니다.</div>
+                  ) : (
+                    postComments.map((c: any) => (
+                      <div key={c.commentId} style={{ padding: '6px 0', borderBottom: `1px solid ${COLORS.border}` }}>
+                        <span style={{ fontSize: 11, color: COLORS.muted, marginRight: 8 }}>{c.authorName}</span>
+                        {/* V-05: 댓글 내용도 dangerouslySetInnerHTML → Stored XSS 가능 */}
+                        <span dangerouslySetInnerHTML={{ __html: c.content }} />
+                      </div>
+                    ))
+                  )}
+                </div>
+
                 <ModalButtonGroup>
-                  <ModalButton $variant="ghost" onClick={() => setSelectedPost(null)}>
+                  <ModalButton $variant="ghost" onClick={() => { setSelectedPost(null); setPostComments([]); }}>
                     닫기
                   </ModalButton>
                   <ModalButton
@@ -2099,7 +2243,11 @@ const AdminDashboard = () => {
                   요청자: {selectedInquiry.memberName} ({selectedInquiry.memberEmail}) | 작성일: {fmtDate(selectedInquiry.createdAt)}
                 </ModalMeta>
 
-                <ModalText style={{ maxHeight: '160px' }}>{selectedInquiry.content}</ModalText>
+                {/* V-05: 문의 본문도 dangerouslySetInnerHTML로 출력 → Stored XSS 가능 */}
+                <div
+                  style={{ maxHeight: '160px', overflowY: 'auto', padding: '8px 0', borderBottom: `1px solid ${COLORS.border}` }}
+                  dangerouslySetInnerHTML={{ __html: selectedInquiry.content }}
+                />
 
                 {selectedInquiry.attachmentUrl && (
                   <div style={{ marginBottom: 12, fontSize: 12, fontWeight: 900 }}>
@@ -2188,8 +2336,118 @@ const AdminDashboard = () => {
               X
             </CloseButton>
             <img src={selectedImage} alt="ID Card Original" />
+            <div style={{ marginTop: '16px', textAlign: 'center' }}>
+              <PrimaryButton
+                onClick={() => {
+                  const url = new URL(selectedImage);
+                  const path = url.pathname;
+                  const downloadUrl = `${API_BASE}/api/admin/files/download?filePath=${encodeURIComponent(path)}`;
+
+                  const link = document.createElement('a');
+                  link.href = downloadUrl;
+                  link.setAttribute('download', 'id_photo');
+
+                  fetch(downloadUrl, { headers })
+                    .then(r => {
+                      if (!r.ok) throw new Error('Download Failed');
+                      return r.blob();
+                    })
+                    .then(blob => {
+                      const blobUrl = window.URL.createObjectURL(blob);
+                      link.href = blobUrl;
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      window.URL.revokeObjectURL(blobUrl);
+                    })
+                    .catch(() => {
+                      alert('파일 다운로드에 실패했습니다. (Server Error)');
+                    });
+                }}
+              >
+                신분증 다운로드
+              </PrimaryButton>
+            </div>
           </ImageModalContent>
         </ImageModalOverlay>
+      )}
+
+      {selectedMemberDetails && (
+        <ModalOverlay onClick={() => setSelectedMemberDetails(null)}>
+          <ModalContainer onClick={e => e.stopPropagation()} style={{ width: '600px', maxHeight: '80vh', overflowY: 'auto' }}>
+            <ModalTitle>회원 상세 정보</ModalTitle>
+            <div style={{ padding: '12px 0', borderBottom: `1px solid ${COLORS.border}`, marginBottom: '12px' }}>
+              <p style={{ margin: '4px 0', fontSize: '13px' }}>
+                <strong style={{ display: 'inline-block', width: '80px', color: COLORS.muted }}>ID</strong>
+                {selectedMemberDetails.memberId}
+              </p>
+              <p style={{ margin: '4px 0', fontSize: '13px' }}>
+                <strong style={{ display: 'inline-block', width: '80px', color: COLORS.muted }}>이메일</strong>
+                <span
+                  onClick={(e) => {
+                    handleUnmask(selectedMemberDetails.memberId, e).then(() => {
+                      setTimeout(() => handleViewMemberDetails(selectedMemberDetails.memberId), 500);
+                    });
+                  }}
+                  style={{ cursor: 'pointer', color: selectedMemberDetails._unmasked ? COLORS.primary : 'inherit' }}
+                  title="클릭하여 마스킹 해제"
+                >
+                  {selectedMemberDetails.email}
+                </span>
+              </p>
+              <p style={{ margin: '4px 0', fontSize: '13px' }}>
+                <strong style={{ display: 'inline-block', width: '80px', color: COLORS.muted }}>이름</strong>
+                {selectedMemberDetails.name}
+              </p>
+              <p style={{ margin: '4px 0', fontSize: '13px' }}>
+                <strong style={{ display: 'inline-block', width: '80px', color: COLORS.muted }}>전화번호</strong>
+                {selectedMemberDetails.phoneNumber}
+              </p>
+              <p style={{ margin: '4px 0', fontSize: '13px' }}>
+                <strong style={{ display: 'inline-block', width: '80px', color: COLORS.muted }}>역할</strong>
+                <Badge $tone={toneFromRole(selectedMemberDetails.role)}>{selectedMemberDetails.role}</Badge>
+              </p>
+              <p style={{ margin: '4px 0', fontSize: '13px' }}>
+                <strong style={{ display: 'inline-block', width: '80px', color: COLORS.muted }}>상태</strong>
+                <Badge $tone={toneFromStatus(selectedMemberDetails.status)}>{selectedMemberDetails.status}</Badge>
+              </p>
+              <p style={{ margin: '4px 0', fontSize: '13px' }}>
+                <strong style={{ display: 'inline-block', width: '80px', color: COLORS.muted }}>가입일</strong>
+                {fmtDate(selectedMemberDetails.createdAt)}
+              </p>
+            </div>
+
+            <h4 style={{ fontSize: '14px', marginBottom: '8px' }}>보유 자산 내역</h4>
+            {(!selectedMemberDetails.assets || selectedMemberDetails.assets.length === 0) ? (
+              <EmptyState style={{ padding: '20px' }}>보유 자산이 없습니다.</EmptyState>
+            ) : (
+              <Table style={{ fontSize: '12px' }}>
+                <thead>
+                  <tr>
+                    <th>자산 종류</th>
+                    <th>비율/수량</th>
+                    <th>대기(Locked)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedMemberDetails.assets.map((a: any) => (
+                    <tr key={a.assetId}>
+                      <td>{a.assetType}</td>
+                      <td>{a.assetType === 'KRW' ? fmt(a.balance) : a.balance}</td>
+                      <td>{a.lockedBalance > 0 ? a.lockedBalance : '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            )}
+
+            <ModalButtonGroup style={{ marginTop: 24 }}>
+              <ModalButton $variant="primary" onClick={() => setSelectedMemberDetails(null)}>
+                확인 (닫기)
+              </ModalButton>
+            </ModalButtonGroup>
+          </ModalContainer>
+        </ModalOverlay>
       )}
     </>
   );

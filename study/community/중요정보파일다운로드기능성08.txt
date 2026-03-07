@@ -1,0 +1,85 @@
+================================================================================
+[VCE-CM-08] 중요 정보 파일 다운로드 기능성 (커뮤니티)
+도메인: community
+================================================================================
+
+1. 진단 항목 개요
+   - 항목명: 커뮤니티 업로드 파일 인증 없이 접근 가능
+   - 번호: CM-08
+   - 위험도: High
+   - OWASP: A01:2021 – Broken Access Control
+
+2. 대상 기능 & 엔드포인트
+   - 로컬:  GET http://localhost:8080/uploads/{filename}
+   - 운영:  GET https://vceapp.com/uploads/{filename}
+   - HTTP 메서드: GET
+   - 인증 요건: 없음 (SecurityConfig.java:72 — permitAll)
+
+3. 취약점 원리 (Why this works)
+   커뮤니티 게시글에 첨부된 이미지 파일이 /uploads/ 디렉토리에 저장되고,
+   SecurityConfig.java:72에 의해 인증 없이 접근 가능하다.
+
+   게시글이 비공개(숨김)로 처리되거나 삭제되어도
+   업로드된 파일 URL이 노출되어 있으면 계속 접근 가능하다.
+
+   또한 관리자만 볼 수 있어야 하는 운영 문서나
+   고객 지원 관련 첨부파일도 동일 경로에 저장되면 모두 공개된다.
+
+4. 테스트 절차 (Step-by-step)
+
+   Step 1. 파일 업로드 후 URL 확인
+   POST /api/community/uploads 응답:
+   {"url": "/uploads/abc123_document.png"}
+
+   Step 2. 비인증 상태로 파일 접근
+   --- HTTP 요청 예시 ---
+   GET /uploads/abc123_document.png HTTP/1.1
+   Host: localhost:8080
+   (Authorization 헤더 없음)
+   ---
+
+   Step 3. 삭제된 게시글 파일 지속 접근
+   1. 게시글 작성 + 이미지 업로드 → URL 저장
+   2. 게시글 삭제 (DELETE /api/community/posts/{id})
+   3. 저장해둔 파일 URL로 직접 접근
+
+   --- HTTP 요청 예시 ---
+   GET /uploads/abc123_image.jpg HTTP/1.1
+   Host: localhost:8080
+   ---
+   삭제 후에도 200 반환 시 취약 (파일 물리적 삭제 없음)
+
+   Step 4. 숨김 처리된 게시글 파일 접근
+   1. 관리자가 게시글 숨김 처리
+   2. 해당 게시글의 첨부파일 URL로 직접 접근
+   → 게시글은 비공개이나 파일은 공개인지 확인
+
+   Step 5. 디렉토리 리스팅
+   --- HTTP 요청 예시 ---
+   GET /uploads/ HTTP/1.1
+   Host: localhost:8080
+   ---
+
+   Step 6. Path Traversal
+   --- HTTP 요청 예시 ---
+   GET /uploads/../application.yml HTTP/1.1
+   GET /uploads/%2e%2e%2f%2e%2e%2fapplication.yml HTTP/1.1
+   ---
+
+5. 취약 여부 판단 기준
+   ✅ 취약 (Vulnerable):
+      - 비인증으로 파일 HTTP 200 반환
+      - 삭제된 게시글 파일 계속 접근 가능
+      - 디렉토리 리스팅으로 파일 목록 노출
+   ✗ 안전 (Not Vulnerable):
+      - HTTP 401 / 403 반환
+      - 게시글 삭제 시 물리적 파일도 삭제
+
+6. 예상 취약 포인트 (코드 위치)
+   - SecurityConfig.java:72 — /uploads/** permitAll
+   - CommunityService.java — 게시글 삭제 시 파일 삭제 로직 없음
+
+7. 권고 조치
+   - /uploads/** 인증 필요로 변경
+   - 파일 다운로드 API: GET /api/community/files/{id} → 게시글 공개 여부 확인 후 반환
+   - 게시글 삭제/숨김 시 첨부파일도 함께 삭제 또는 접근 차단

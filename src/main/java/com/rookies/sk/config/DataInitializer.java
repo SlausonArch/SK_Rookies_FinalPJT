@@ -34,55 +34,49 @@ public class DataInitializer {
     @Bean
     public CommandLineRunner initAccounts() {
         return args -> {
-            // 관리자 계정
-            if (memberRepository.findByEmail("admin@vce.com").isEmpty()) {
-                Member admin = Member.builder()
-                        .email("admin@vce.com")
-                        .password(passwordEncoder.encode("admin1234"))
-                        .name("시스템 관리자")
-                        .role(Member.Role.ADMIN)
-                        .status(Member.Status.ACTIVE)
-                        .build();
-                memberRepository.save(admin);
-                log.info("관리자 계정 생성 완료: admin@vce.com / admin1234");
-            }
+            // 관리자 계정 (매번 비밀번호 갱신)
+            memberRepository.findByEmail("admin@vce.com").ifPresentOrElse(
+                admin -> {
+                    admin.setPassword(passwordEncoder.encode("admin1234"));
+                    memberRepository.save(admin);
+                    log.info("기존 관리자 계정 비밀번호 갱신 완료: admin@vce.com / admin1234");
+                },
+                () -> {
+                    Member admin = Member.builder()
+                            .email("admin@vce.com")
+                            .password(passwordEncoder.encode("admin1234"))
+                            .name("시스템 관리자")
+                            .role(Member.Role.ADMIN)
+                            .status(Member.Status.ACTIVE)
+                            .build();
+                    memberRepository.save(admin);
+                    log.info("신규 관리자 계정 생성 완료: admin@vce.com / admin1234");
+                }
+            );
 
-            // 테스트 유저 계정
-            if (memberRepository.findByEmail("test@vce.com").isEmpty()) {
-                Member testUser = Member.builder()
-                        .email("test@vce.com")
-                        .password(passwordEncoder.encode("test1234"))
-                        .name("테스트 사용자")
-                        .phoneNumber("010-1234-5678")
-                        .rrnPrefix("950101")
-                        .address("서울시 강남구")
-                        .accountNumber("123-456-789012")
-                        .role(Member.Role.USER)
-                        .status(Member.Status.ACTIVE)
-                        .build();
-                memberRepository.save(testUser);
-
-                // KRW 초기 잔고 1000만원
-                Asset krwAsset = Asset.builder()
-                        .member(testUser)
-                        .assetType("KRW")
-                        .balance(new BigDecimal("10000000"))
-                        .lockedBalance(BigDecimal.ZERO)
-                        .build();
-                assetRepository.save(krwAsset);
-
-                // 입금 거래 기록
-                Transaction depositTx = Transaction.builder()
-                        .member(testUser)
-                        .txType("DEPOSIT")
-                        .assetType("KRW")
-                        .amount(new BigDecimal("10000000"))
-                        .totalValue(new BigDecimal("10000000"))
-                        .build();
-                transactionRepository.save(depositTx);
-
-                log.info("테스트 계정 생성 완료: test@vce.com / test1234 (KRW 10,000,000)");
-            }
+            // 테스트 유저 계정 (매번 비밀번호 갱신)
+            memberRepository.findByEmail("test@vce.com").ifPresentOrElse(
+                testUser -> {
+                    testUser.setPassword(passwordEncoder.encode("test1234"));
+                    memberRepository.save(testUser);
+                    log.info("기존 테스트 계정 비밀번호 갱신 완료: test@vce.com / test1234");
+                },
+                () -> {
+                    Member testUser = Member.builder()
+                            .email("test@vce.com")
+                            .password(passwordEncoder.encode("test1234"))
+                            .name("테스트 사용자")
+                            .phoneNumber("010-1234-5678")
+                            .rrnPrefix("950101")
+                            .address("서울시 강남구")
+                            .accountNumber("123-456-789012")
+                            .role(Member.Role.USER)
+                            .status(Member.Status.ACTIVE)
+                            .build();
+                    memberRepository.save(testUser);
+                    log.info("신규 테스트 계정 생성 완료: test@vce.com / test1234");
+                }
+            );
 
             // FAQ 초기 데이터 생성
             if (faqRepository.count() == 0) {

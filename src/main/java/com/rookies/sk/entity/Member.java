@@ -82,7 +82,7 @@ public class Member {
     private LocalDateTime updatedAt;
 
     public enum Role {
-        GUEST, USER, ADMIN
+        GUEST, USER, STAFF, MANAGER, ADMIN
     }
 
     public enum Status {
