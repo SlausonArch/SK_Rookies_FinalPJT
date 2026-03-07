@@ -667,7 +667,10 @@ const Investments = () => {
         setOpenOrders(normalizeOpenOrders(openOrderData));
       } catch (error: any) {
         console.error('데이터 조회 실패:', error);
-        if (error.response && error.response.status === 401) {
+        if (error.response && (
+          error.response.status === 401 ||
+          (error.response.status === 403 && error.response.data?.message === 'WITHDRAWN_ACCOUNT')
+        )) {
           clearUserSession(true);
           navigate(loginRedirectUrl, { replace: true });
         }
@@ -1161,7 +1164,8 @@ const Investments = () => {
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
+      hour12: false,
     });
   };
 

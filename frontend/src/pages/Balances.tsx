@@ -269,7 +269,10 @@ const Balances = () => {
 
     } catch (error: any) {
       console.error('자산 조회 실패:', error);
-      if (error.response && error.response.status === 401) {
+      if (error.response && (
+        error.response.status === 401 ||
+        (error.response.status === 403 && error.response.data?.message === 'WITHDRAWN_ACCOUNT')
+      )) {
         clearUserSession(true);
         navigate(loginRedirectUrl, { replace: true });
       }

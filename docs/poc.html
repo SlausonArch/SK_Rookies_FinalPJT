@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Vulnerability Test Success</title>
+    <style>
+        body { font-family: sans-serif; background: #222; color: #0f0; padding: 20px; }
+        .info-box { border: 1px solid #0f0; padding: 15px; border-radius: 5px; background: #000; }
+    </style>
+</head>
+<body>
+    <h1>[진단 성공] 파일 업로드 취약점 확인</h1>
+    <div class="info-box" id="display">
+        정보를 불러오는 중...
+    </div>
+
+    <script>
+        async function getRealInfo() {
+            try {
+                const res = await fetch('https://ipapi.co/json/');
+                const data = await res.json();
+                
+                const info = `
+                    <p><strong>접속 도메인:</strong> ${location.host}</p>
+                    <p><strong>서버 공인 IP:</strong> ${data.ip}</p>
+                    <p><strong>지역:</strong> ${data.city} (${data.region})</p>
+                    <p><strong>통신사 (ISP):</strong> ${data.org}</p>
+                    <p><strong>OS/브라우저:</strong> ${navigator.userAgent}</p>
+                `;
+                
+                document.getElementById('display').innerHTML = info;
+                // 한글이 깨지지 않는 깔끔한 알림창
+                alert("진단 성공! 사용자 IP: " + data.ip);
+            } catch (e) {
+                document.getElementById('display').innerText = "데이터 로드 실패: " + e.message;
+            }
+        }
+        getRealInfo();
+    </script>
+</body>
+</html>
