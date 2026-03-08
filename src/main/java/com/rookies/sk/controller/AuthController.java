@@ -85,8 +85,10 @@ public class AuthController {
                 return ResponseEntity.status(403).body(WITHDRAWN_ACCOUNT_MESSAGE);
             }
 
-            // 관리자 권한 확인
-            if (member.getRole() != Member.Role.ADMIN) {
+            // 관리자 권한 확인 (ADMIN, MANAGER, STAFF 허용)
+            if (member.getRole() != Member.Role.ADMIN &&
+                    member.getRole() != Member.Role.MANAGER &&
+                    member.getRole() != Member.Role.STAFF) {
                 return ResponseEntity.status(403).body("Access denied");
             }
 

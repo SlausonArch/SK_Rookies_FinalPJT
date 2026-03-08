@@ -149,7 +149,7 @@ const AdminLogin = () => {
   useEffect(() => {
     const token = getAdminAccessToken();
     const role = getAdminRole();
-    if (token && role === 'ADMIN') {
+    if (token && ['ADMIN', 'MANAGER', 'STAFF'].includes(role || '')) {
       navigate('/admin/dashboard', { replace: true });
     }
   }, [navigate]);

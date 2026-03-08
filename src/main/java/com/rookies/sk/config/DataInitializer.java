@@ -36,47 +36,83 @@ public class DataInitializer {
         return args -> {
             // 관리자 계정 (매번 비밀번호 갱신)
             memberRepository.findByEmail("admin@vce.com").ifPresentOrElse(
-                admin -> {
-                    admin.setPassword(passwordEncoder.encode("admin1234"));
-                    memberRepository.save(admin);
-                    log.info("기존 관리자 계정 비밀번호 갱신 완료: admin@vce.com / admin1234");
-                },
-                () -> {
-                    Member admin = Member.builder()
-                            .email("admin@vce.com")
-                            .password(passwordEncoder.encode("admin1234"))
-                            .name("시스템 관리자")
-                            .role(Member.Role.ADMIN)
-                            .status(Member.Status.ACTIVE)
-                            .build();
-                    memberRepository.save(admin);
-                    log.info("신규 관리자 계정 생성 완료: admin@vce.com / admin1234");
-                }
-            );
+                    admin -> {
+                        admin.setPassword(passwordEncoder.encode("admin1234"));
+                        memberRepository.save(admin);
+                        log.info("기존 관리자 계정 비밀번호 갱신 완료: admin@vce.com / admin1234");
+                    },
+                    () -> {
+                        Member admin = Member.builder()
+                                .email("admin@vce.com")
+                                .password(passwordEncoder.encode("admin1234"))
+                                .name("시스템 관리자")
+                                .role(Member.Role.ADMIN)
+                                .status(Member.Status.ACTIVE)
+                                .build();
+                        memberRepository.save(admin);
+                        log.info("신규 관리자 계정 생성 완료: admin@vce.com / admin1234");
+                    });
 
             // 테스트 유저 계정 (매번 비밀번호 갱신)
             memberRepository.findByEmail("test@vce.com").ifPresentOrElse(
-                testUser -> {
-                    testUser.setPassword(passwordEncoder.encode("test1234"));
-                    memberRepository.save(testUser);
-                    log.info("기존 테스트 계정 비밀번호 갱신 완료: test@vce.com / test1234");
-                },
-                () -> {
-                    Member testUser = Member.builder()
-                            .email("test@vce.com")
-                            .password(passwordEncoder.encode("test1234"))
-                            .name("테스트 사용자")
-                            .phoneNumber("010-1234-5678")
-                            .rrnPrefix("950101")
-                            .address("서울시 강남구")
-                            .accountNumber("123-456-789012")
-                            .role(Member.Role.USER)
-                            .status(Member.Status.ACTIVE)
-                            .build();
-                    memberRepository.save(testUser);
-                    log.info("신규 테스트 계정 생성 완료: test@vce.com / test1234");
-                }
-            );
+                    testUser -> {
+                        testUser.setPassword(passwordEncoder.encode("test1234"));
+                        memberRepository.save(testUser);
+                        log.info("기존 테스트 계정 비밀번호 갱신 완료: test@vce.com / test1234");
+                    },
+                    () -> {
+                        Member testUser = Member.builder()
+                                .email("test@vce.com")
+                                .password(passwordEncoder.encode("test1234"))
+                                .name("테스트 사용자")
+                                .phoneNumber("010-1234-5678")
+                                .rrnPrefix("950101")
+                                .address("서울시 강남구")
+                                .accountNumber("123-456-789012")
+                                .role(Member.Role.USER)
+                                .status(Member.Status.ACTIVE)
+                                .build();
+                        memberRepository.save(testUser);
+                        log.info("신규 테스트 계정 생성 완료: test@vce.com / test1234");
+                    });
+
+            // 매니저 계정 (매번 비밀번호 갱신)
+            memberRepository.findByEmail("manager@vce.com").ifPresentOrElse(
+                    manager -> {
+                        manager.setPassword(passwordEncoder.encode("manager1234"));
+                        memberRepository.save(manager);
+                        log.info("기존 매니저 계정 비밀번호 갱신 완료: manager@vce.com / manager1234");
+                    },
+                    () -> {
+                        Member manager = Member.builder()
+                                .email("manager@vce.com")
+                                .password(passwordEncoder.encode("manager1234"))
+                                .name("매니저")
+                                .role(Member.Role.MANAGER)
+                                .status(Member.Status.ACTIVE)
+                                .build();
+                        memberRepository.save(manager);
+                        log.info("신규 매니저 계정 생성 완료: manager@vce.com / manager1234");
+                    });
+
+            // 스태프 계정 (매번 비밀번호 갱신)
+            memberRepository.findByEmail("staff@vce.com").ifPresentOrElse(
+                    staff -> {
+                        staff.setPassword(passwordEncoder.encode("staff1234"));
+                        memberRepository.save(staff);
+                        log.info("기존 스태프 계정 비밀번호 갱신 완료: staff@vce.com / staff1234");
+                    },
+                    () -> {
+                        Member staff = Member.builder()
+                                .email("staff@vce.com")
+                                .password(passwordEncoder.encode("staff1234"))
+                                .name("스태프")
+                                .role(Member.Role.STAFF)
+                                .status(Member.Status.ACTIVE)
+                                .build();
+                        memberRepository.save(staff);
+                        log.info("신규 스태프 계정 생성 완료: staff@vce.com / staff1234");
+                    });
 
             // FAQ 초기 데이터 생성
             if (faqRepository.count() == 0) {
