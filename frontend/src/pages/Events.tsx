@@ -499,7 +499,7 @@ const Events: React.FC = () => {
               <StatusBadge $status={adMissionCount >= 3 ? 'ended' : 'ongoing'}>
                 {adMissionCount >= 3 ? '오늘 완료 (3/3)' : `진행중 (${adMissionCount}/3)`}
               </StatusBadge>
-              <EventCardTitle>광고 보기 미션 — 500 포인트 즉시 지급</EventCardTitle>
+              <EventCardTitle>광고 보기 미션 — 5,000 KRW 즉시 지급</EventCardTitle>
               <EventCardPeriod>
                 {adMissionResult
                   ? <span style={{ color: '#16a34a', fontWeight: 700 }}>✅ {adMissionResult}</span>

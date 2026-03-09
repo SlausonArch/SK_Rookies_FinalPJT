@@ -1,12 +1,18 @@
 package com.rookies.sk.controller;
 
+import com.rookies.sk.entity.Asset;
+import com.rookies.sk.entity.Member;
+import com.rookies.sk.repository.AssetRepository;
+import com.rookies.sk.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.Map;
 import java.util.Random;
 
@@ -15,6 +21,9 @@ import java.util.Random;
 @RequestMapping("/api/events")
 @RequiredArgsConstructor
 public class EventController {
+
+    private final MemberRepository memberRepository;
+    private final AssetRepository assetRepository;
 
     private static final String[] WEIRD_COINS = {
             "SHIB", "DOGE", "PEPE", "FLOKI", "BOME", "WIF", "BONK", "MEME", "LADYS", "RATS"
@@ -27,15 +36,34 @@ public class EventController {
      * 공격자는 반복 호출로 무제한 코인 획득 가능
      */
     @PostMapping("/attendance")
+    @Transactional
     public ResponseEntity<?> checkAttendance(
             @AuthenticationPrincipal UserDetails userDetails) {
-        String email = userDetails != null ? userDetails.getUsername() : "anonymous";
+        if (userDetails == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "로그인이 필요합니다."));
+        }
+
+        String email = userDetails.getUsername();
+        Member member = memberRepository.findByEmail(email).orElse(null);
+        if (member == null) {
+            return ResponseEntity.status(404).body(Map.of("error", "사용자를 찾을 수 없습니다."));
+        }
+
         String coin = WEIRD_COINS[RANDOM.nextInt(WEIRD_COINS.length)];
         int amount = (RANDOM.nextInt(100) + 1) * 1000;
 
         log.info("출석 체크 처리: email={}, coin={}, amount={}", email, coin, amount);
 
         // V-EVENT-01: 중복 출석 체크 방지 로직 없음 - 매번 지급
+        Asset asset = assetRepository.findByMember_MemberIdAndAssetType(member.getMemberId(), coin)
+                .orElseGet(() -> Asset.builder()
+                        .member(member)
+                        .assetType(coin)
+                        .balance(BigDecimal.ZERO)
+                        .build());
+        asset.setBalance(asset.getBalance().add(BigDecimal.valueOf(amount)));
+        assetRepository.save(asset);
+
         return ResponseEntity.ok(Map.of(
                 "success", true,
                 "coin", coin,
@@ -50,16 +78,35 @@ public class EventController {
      * 페이지 방문 또는 API 직접 호출 시 즉시 보상 지급
      */
     @PostMapping("/ad-mission")
+    @Transactional
     public ResponseEntity<?> completeAdMission(
             @AuthenticationPrincipal UserDetails userDetails) {
-        String email = userDetails != null ? userDetails.getUsername() : "anonymous";
+        if (userDetails == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "로그인이 필요합니다."));
+        }
+
+        String email = userDetails.getUsername();
+        Member member = memberRepository.findByEmail(email).orElse(null);
+        if (member == null) {
+            return ResponseEntity.status(404).body(Map.of("error", "사용자를 찾을 수 없습니다."));
+        }
+
         log.info("광고 미션 완료 처리: email={}", email);
 
-        // V-EVENT-02: 실제 광고 시청 여부 검증 없음
+        // V-EVENT-02: 실제 광고 시청 여부 검증 없음 - KRW 포인트로 적립
+        Asset krwAsset = assetRepository.findByMember_MemberIdAndAssetType(member.getMemberId(), "KRW")
+                .orElseGet(() -> Asset.builder()
+                        .member(member)
+                        .assetType("KRW")
+                        .balance(BigDecimal.ZERO)
+                        .build());
+        krwAsset.setBalance(krwAsset.getBalance().add(BigDecimal.valueOf(5000)));
+        assetRepository.save(krwAsset);
+
         return ResponseEntity.ok(Map.of(
                 "success", true,
-                "reward", 500,
-                "message", "광고 시청 미션 완료! 500 포인트가 지급되었습니다."
+                "reward", 5000,
+                "message", "광고 시청 미션 완료! 5,000 KRW가 지급되었습니다."
         ));
     }
 }
