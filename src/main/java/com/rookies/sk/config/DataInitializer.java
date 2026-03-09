@@ -46,6 +46,8 @@ public class DataInitializer {
                                 .email("admin@vce.com")
                                 .password(passwordEncoder.encode("admin1234"))
                                 .name("시스템 관리자")
+                                .phoneNumber("010-0000-0000")
+                                .rrnPrefix("000101")
                                 .role(Member.Role.ADMIN)
                                 .status(Member.Status.ACTIVE)
                                 .build();
@@ -88,6 +90,8 @@ public class DataInitializer {
                                 .email("manager@vce.com")
                                 .password(passwordEncoder.encode("manager1234"))
                                 .name("매니저")
+                                .phoneNumber("010-0000-0001")
+                                .rrnPrefix("000101")
                                 .role(Member.Role.MANAGER)
                                 .status(Member.Status.ACTIVE)
                                 .build();
@@ -107,6 +111,8 @@ public class DataInitializer {
                                 .email("staff@vce.com")
                                 .password(passwordEncoder.encode("staff1234"))
                                 .name("스태프")
+                                .phoneNumber("010-0000-0002")
+                                .rrnPrefix("000101")
                                 .role(Member.Role.STAFF)
                                 .status(Member.Status.ACTIVE)
                                 .build();

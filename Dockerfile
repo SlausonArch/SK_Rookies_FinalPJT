@@ -8,6 +8,8 @@ RUN gradle build --no-daemon -x test
 
 # Package stage
 FROM eclipse-temurin:17-jre-jammy
+WORKDIR /app
 COPY --from=build /home/gradle/src/build/libs/*.jar app.jar
+COPY docs ./docs
 EXPOSE 18080
-ENTRYPOINT ["java", "-jar", "/app.jar"]
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]

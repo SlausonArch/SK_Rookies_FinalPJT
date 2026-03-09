@@ -9,6 +9,8 @@ services:
       - ORACLE_HOME=/opt/oracle/product/23ai/dbhomeFree
       - ORA_NLS10=/opt/oracle/product/23ai/dbhomeFree/nls/data
       - NLS_LANG=AMERICAN_AMERICA.AL32UTF8
+    ports:
+      - "1521:1521"
     volumes:
       - oracle-data:/opt/oracle/oradata
       - ./src/main/resources/db/schema.sql:/container-entrypoint-initdb.d/01_schema.sql # DDL

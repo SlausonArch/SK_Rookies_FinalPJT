@@ -24,5 +24,4 @@ frontend/.env.*
 *.log
 *.pid
 README.md
-docs
 report_20260218.md
