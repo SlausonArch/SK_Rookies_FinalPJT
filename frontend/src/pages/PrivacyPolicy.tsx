@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import styled from 'styled-components';
+import ReactMarkdown from 'react-markdown';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 
@@ -37,13 +38,64 @@ const Title = styled.h1`
   font-weight: 800;
 `;
 
-const Pre = styled.pre`
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: inherit;
+const MarkdownBody = styled.div`
   font-size: 14px;
   line-height: 1.8;
   color: #374151;
+
+  h1, h2, h3, h4 {
+    color: #111827;
+    margin: 1.4em 0 0.4em;
+    font-weight: 700;
+  }
+  h1 { font-size: 22px; }
+  h2 { font-size: 18px; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; }
+  h3 { font-size: 15px; }
+
+  p { margin: 0.6em 0; }
+
+  ul, ol {
+    padding-left: 1.5em;
+    margin: 0.6em 0;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1em 0;
+    font-size: 13px;
+  }
+  th, td {
+    border: 1px solid #d1d5db;
+    padding: 8px 12px;
+    text-align: left;
+  }
+  th {
+    background: #f3f4f6;
+    font-weight: 600;
+  }
+  tr:nth-child(even) td {
+    background: #f9fafb;
+  }
+
+  hr {
+    border: none;
+    border-top: 1px solid #e5e7eb;
+    margin: 1.5em 0;
+  }
+
+  strong { font-weight: 700; }
+  code {
+    background: #f3f4f6;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 13px;
+  }
+`;
+
+const LoadingText = styled.p`
+  color: #6b7280;
+  font-size: 14px;
 `;
 
 const ErrorMsg = styled.div`
@@ -85,9 +137,13 @@ const PrivacyPolicy: React.FC = () => {
       <Main>
         <Card>
           <Title>개인정보처리방침</Title>
-          {loading && <Pre>불러오는 중...</Pre>}
+          {loading && <LoadingText>불러오는 중...</LoadingText>}
           {error && <ErrorMsg>{error}</ErrorMsg>}
-          {!loading && !error && content && <Pre>{content}</Pre>}
+          {!loading && !error && content && (
+            <MarkdownBody>
+              <ReactMarkdown>{content}</ReactMarkdown>
+            </MarkdownBody>
+          )}
         </Card>
       </Main>
       <Footer />
