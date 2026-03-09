@@ -339,14 +339,29 @@ const Events: React.FC = () => {
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [attendanceResult, setAttendanceResult] = useState<{ coin: string; amount: number; message: string } | null>(null);
   const [adMissionResult, setAdMissionResult] = useState<string | null>(null);
+  const [adMissionCount, setAdMissionCount] = useState(0);
+  const [attendanceDone, setAttendanceDone] = useState(false);
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
 
-  const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:18080';
+
+  const getTodayKey = () => new Date().toISOString().slice(0, 10);
 
   const getAuthHeader = () => {
     const token = localStorage.getItem('accessToken');
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
+
+  // 로컬 저장된 오늘 기록 불러오기
+  React.useEffect(() => {
+    const today = getTodayKey();
+    if (localStorage.getItem('attendance_date') === today) {
+      setAttendanceDone(true);
+    }
+    if (localStorage.getItem('ad_mission_date') === today) {
+      setAdMissionCount(parseInt(localStorage.getItem('ad_mission_count') || '0', 10));
+    }
+  }, []);
 
   const handleAttendance = async () => {
     const token = localStorage.getItem('accessToken');
@@ -355,25 +370,70 @@ const Events: React.FC = () => {
       window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
       return;
     }
+    const today = getTodayKey();
+    if (localStorage.getItem('attendance_date') === today) {
+      alert('오늘은 이미 출석 체크를 완료했습니다! 내일 다시 도전하세요 😊');
+      return;
+    }
     try {
       const res = await axios.post(`${API_BASE}/api/events/attendance`, {}, { headers: getAuthHeader() });
+      localStorage.setItem('attendance_date', today);
+      setAttendanceDone(true);
       setAttendanceResult(res.data);
       setShowAttendanceModal(true);
     } catch {
-      alert('출석 체크에 실패했습니다.');
+      alert('출석 체크에 실패했습니다. 다시 시도해주세요.');
     }
   };
 
-  const handleAdMission = async () => {
+  const callAdMissionAPI = async () => {
     const token = localStorage.getItem('accessToken');
     if (!token) return;
+    const today = getTodayKey();
+    const currentCount = localStorage.getItem('ad_mission_date') === today
+      ? parseInt(localStorage.getItem('ad_mission_count') || '0', 10) : 0;
+    if (currentCount >= 3) return;
     try {
       const res = await axios.post(`${API_BASE}/api/events/ad-mission`, {}, { headers: getAuthHeader() });
+      const newCount = currentCount + 1;
+      localStorage.setItem('ad_mission_date', today);
+      localStorage.setItem('ad_mission_count', String(newCount));
+      setAdMissionCount(newCount);
       setAdMissionResult(res.data.message);
     } catch {
       // 조용히 실패
     }
   };
+
+  const handleAdMissionClick = () => {
+    const token = localStorage.getItem('accessToken');
+    if (!token) {
+      alert('로그인이 필요한 서비스입니다.');
+      window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
+      return;
+    }
+    const today = getTodayKey();
+    const count = localStorage.getItem('ad_mission_date') === today
+      ? parseInt(localStorage.getItem('ad_mission_count') || '0', 10) : 0;
+    if (count >= 3) {
+      alert('오늘 광고 보기 미션을 모두 완료했습니다! (3/3)');
+      return;
+    }
+    // V-EVENT-02: 네이버로 이동 후 복귀 시 광고를 본 것으로 처리 (실제 시청 여부 무검증)
+    localStorage.setItem('ad_watching', 'true');
+    window.open('https://www.naver.com/', '_blank');
+  };
+
+  // 광고 탭에서 복귀 감지 → 포인트 자동 지급
+  React.useEffect(() => {
+    const handleFocus = () => {
+      if (localStorage.getItem('ad_watching') !== 'true') return;
+      localStorage.removeItem('ad_watching');
+      void callAdMissionAPI();
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, []);
 
   const handleCheckReferral = async () => {
     const token = localStorage.getItem('accessToken');
@@ -385,7 +445,7 @@ const Events: React.FC = () => {
     }
 
     try {
-      const res = await axios.get(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/auth/me`, {
+      const res = await axios.get(`${API_BASE}/api/auth/me`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.data && res.data.referralCode) {
@@ -399,11 +459,6 @@ const Events: React.FC = () => {
       alert('정보를 불러오는데 실패했습니다.');
     }
   };
-
-  // V-EVENT-02: 페이지 방문 시 자동으로 광고 미션 완료 처리 (실제 광고 시청 없음)
-  React.useEffect(() => {
-    void handleAdMission();
-  }, []);
 
   return (
     <Container>
@@ -419,14 +474,19 @@ const Events: React.FC = () => {
         <EventsGrid style={{ marginBottom: 40 }}>
           <EventCard onClick={handleAttendance}>
             <EventImagePlaceholder $bg="linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)">
-              📅
+              {attendanceDone ? '✅' : '📅'}
             </EventImagePlaceholder>
             <EventCardBody>
-              <StatusBadge $status="ongoing">진행중</StatusBadge>
+              <StatusBadge $status={attendanceDone ? 'ended' : 'ongoing'}>
+                {attendanceDone ? '오늘 완료' : '진행중'}
+              </StatusBadge>
               <EventCardTitle>매일 출석 체크! 이상한 코인 GET</EventCardTitle>
               <EventCardPeriod>매일 출석 체크하고 랜덤 코인을 받아가세요!</EventCardPeriod>
-              <HeroButton style={{ marginTop: 12, width: '100%' }} onClick={e => { e.stopPropagation(); void handleAttendance(); }}>
-                출석 체크하기
+              <HeroButton
+                style={{ marginTop: 12, width: '100%', opacity: attendanceDone ? 0.6 : 1 }}
+                onClick={e => { e.stopPropagation(); void handleAttendance(); }}
+              >
+                {attendanceDone ? '✅ 오늘 출석 완료' : '출석 체크하기'}
               </HeroButton>
             </EventCardBody>
           </EventCard>
@@ -436,13 +496,21 @@ const Events: React.FC = () => {
               📺
             </EventImagePlaceholder>
             <EventCardBody>
-              <StatusBadge $status="ongoing">진행중</StatusBadge>
+              <StatusBadge $status={adMissionCount >= 3 ? 'ended' : 'ongoing'}>
+                {adMissionCount >= 3 ? '오늘 완료 (3/3)' : `진행중 (${adMissionCount}/3)`}
+              </StatusBadge>
               <EventCardTitle>광고 보기 미션 — 500 포인트 즉시 지급</EventCardTitle>
               <EventCardPeriod>
                 {adMissionResult
                   ? <span style={{ color: '#16a34a', fontWeight: 700 }}>✅ {adMissionResult}</span>
-                  : '이벤트 페이지 방문 시 자동 완료됩니다.'}
+                  : '네이버로 이동 후 돌아오면 포인트가 자동 적립됩니다.'}
               </EventCardPeriod>
+              <HeroButton
+                style={{ marginTop: 12, width: '100%', opacity: adMissionCount >= 3 ? 0.6 : 1 }}
+                onClick={e => { e.stopPropagation(); handleAdMissionClick(); }}
+              >
+                {adMissionCount >= 3 ? '오늘 미션 완료 (3/3)' : '광고 보러 가기'}
+              </HeroButton>
             </EventCardBody>
           </EventCard>
         </EventsGrid>
