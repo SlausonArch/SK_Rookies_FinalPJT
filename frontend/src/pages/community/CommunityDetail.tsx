@@ -197,6 +197,9 @@ function CommunityDetail() {
   const [post, setPost] = useState<Post | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentContent, setCommentContent] = useState('');
+  const [commentSecret, setCommentSecret] = useState(false);
+  const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
+  const [editingContent, setEditingContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [savingComment, setSavingComment] = useState(false);
@@ -275,10 +278,11 @@ function CommunityDetail() {
     try {
       await axios.post(
         `${API_BASE}/api/community/posts/${post.postId}/comments`,
-        { content: commentContent },
+        { content: commentContent, secret: commentSecret },
         { headers: authHeaders }
       );
       setCommentContent('');
+      setCommentSecret(false);
       await loadDetail();
     } finally {
       setSavingComment(false);
@@ -289,6 +293,27 @@ function CommunityDetail() {
     if (!post || !token) return;
     await axios.delete(`${API_BASE}/api/community/comments/${commentId}`, { headers: authHeaders });
     await loadDetail();
+  };
+
+  const onStartEditComment = (comment: Comment) => {
+    setEditingCommentId(comment.commentId);
+    setEditingContent(comment.content);
+  };
+
+  const onSaveEditComment = async (commentId: number) => {
+    if (!token) return;
+    try {
+      await axios.put(
+        `${API_BASE}/api/community/comments/${commentId}`,
+        { content: editingContent },
+        { headers: authHeaders }
+      );
+      setEditingCommentId(null);
+      setEditingContent('');
+      await loadDetail();
+    } catch {
+      alert('댓글 수정에 실패했습니다.');
+    }
   };
 
   const attachmentHref = post?.attachmentUrl
@@ -372,16 +397,34 @@ function CommunityDetail() {
               {comments.map((comment: Comment) => (
                 <CommentCard key={comment.commentId}>
                   <CommentMeta>
+                    {comment.isSecret && (
+                      <span style={{ background: '#4b5563', color: '#fff', borderRadius: 4, padding: '1px 7px', fontSize: 11, fontWeight: 700, marginRight: 6 }}>🔒 비밀</span>
+                    )}
                     {comment.authorName} | {formatDate(comment.createdAt)}
                   </CommentMeta>
-                  <div>{comment.content}</div>
-                  {comment.canDelete && (
-                    <div style={{ marginTop: 8 }}>
-                      <RedButton type="button" onClick={() => void onDeleteComment(comment.commentId)}>
-                        댓글 삭제
-                      </RedButton>
+                  {editingCommentId === comment.commentId ? (
+                    <div>
+                      <Textarea
+                        value={editingContent}
+                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setEditingContent(e.target.value)}
+                        style={{ minHeight: 60 }}
+                      />
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <Button type="button" onClick={() => void onSaveEditComment(comment.commentId)}>저장</Button>
+                        <GrayButton type="button" onClick={() => setEditingCommentId(null)}>취소</GrayButton>
+                      </div>
                     </div>
+                  ) : (
+                    <div>{comment.content}</div>
                   )}
+                  <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
+                    {comment.canEdit && editingCommentId !== comment.commentId && (
+                      <GrayButton type="button" onClick={() => onStartEditComment(comment)}>수정</GrayButton>
+                    )}
+                    {comment.canDelete && (
+                      <RedButton type="button" onClick={() => void onDeleteComment(comment.commentId)}>삭제</RedButton>
+                    )}
+                  </div>
                 </CommentCard>
               ))}
               <form onSubmit={onSubmitComment}>
@@ -391,6 +434,16 @@ function CommunityDetail() {
                   onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setCommentContent(e.target.value)}
                   required
                 />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#607293', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={commentSecret}
+                      onChange={e => setCommentSecret(e.target.checked)}
+                    />
+                    🔒 비밀 댓글
+                  </label>
+                </div>
                 <Button type="submit" disabled={savingComment}>
                   {savingComment ? '등록 중...' : '댓글 등록'}
                 </Button>

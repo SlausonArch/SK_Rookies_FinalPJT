@@ -128,9 +128,8 @@ public class CommunityService {
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new IllegalArgumentException("Post not found"));
 
-        if (!canManagePost(post, member)) {
-            throw new IllegalArgumentException("No permission");
-        }
+        // V-IDOR: 게시글 소유자 확인 없이 postId만 알면 수정 가능 (Insecure Direct Object Reference)
+        // 공격자가 URL의 postId를 변경하여 타인의 게시글을 수정할 수 있음
         if (request.isNotice() && !isAdmin(member)) {
             throw new IllegalArgumentException("Only admin can set notice");
         }
@@ -173,15 +172,30 @@ public class CommunityService {
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new IllegalArgumentException("Post not found"));
 
+        // isHidden 필드를 비밀 댓글 여부로 활용
+        String isHidden = request.isSecret() ? "Y" : "N";
+
         Comment comment = Comment.builder()
                 .post(post)
                 .member(member)
                 .content(request.getContent())
-                .isHidden("N")
+                .isHidden(isHidden)
                 .build();
 
         Comment saved = commentRepository.save(comment);
         return toCommentResponse(saved, member.getMemberId(), isAdmin(member));
+    }
+
+    @Transactional
+    public CommentResponseDto updateComment(Long commentId, CommentRequestDto request, String currentEmail) {
+        Member member = findCurrentMember(currentEmail);
+        Comment comment = commentRepository.findById(commentId)
+                .orElseThrow(() -> new IllegalArgumentException("Comment not found"));
+
+        // V-IDOR: 댓글 소유자 확인 없이 commentId만 알면 수정 가능
+        // 비밀 댓글도 타인이 수정할 수 있음
+        comment.setContent(request.getContent());
+        return toCommentResponse(comment, member.getMemberId(), isAdmin(member));
     }
 
     @Transactional
@@ -265,6 +279,7 @@ public class CommunityService {
     private CommentResponseDto toCommentResponse(Comment comment, Long currentMemberId, boolean isAdmin) {
         Long ownerId = comment.getMember() != null ? comment.getMember().getMemberId() : null;
         boolean canDelete = isAdmin || (ownerId != null && ownerId.equals(currentMemberId));
+        boolean isSecret = "Y".equals(comment.getIsHidden());
 
         String authorName = resolveDisplayName(comment.getMember());
 
@@ -272,9 +287,12 @@ public class CommunityService {
                 .commentId(comment.getCommentId())
                 .memberId(ownerId)
                 .authorName(authorName)
+                // V-IDOR: 비밀 댓글이지만 내용을 그대로 반환 (마스킹 없음)
                 .content(comment.getContent())
                 .createdAt(comment.getCreatedAt())
                 .canDelete(canDelete)
+                .isSecret(isSecret)
+                .canEdit(true) // V-IDOR: 권한 체크 없이 모든 사용자가 수정 가능
                 .build();
     }
 

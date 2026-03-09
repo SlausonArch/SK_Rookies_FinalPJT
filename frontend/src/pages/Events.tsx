@@ -337,6 +337,43 @@ const dummyEvents = [
 const Events: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [referralCode, setReferralCode] = useState<string | null>(null);
+  const [attendanceResult, setAttendanceResult] = useState<{ coin: string; amount: number; message: string } | null>(null);
+  const [adMissionResult, setAdMissionResult] = useState<string | null>(null);
+  const [showAttendanceModal, setShowAttendanceModal] = useState(false);
+
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+
+  const getAuthHeader = () => {
+    const token = localStorage.getItem('accessToken');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
+  const handleAttendance = async () => {
+    const token = localStorage.getItem('accessToken');
+    if (!token) {
+      alert('로그인이 필요한 서비스입니다.');
+      window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
+      return;
+    }
+    try {
+      const res = await axios.post(`${API_BASE}/api/events/attendance`, {}, { headers: getAuthHeader() });
+      setAttendanceResult(res.data);
+      setShowAttendanceModal(true);
+    } catch {
+      alert('출석 체크에 실패했습니다.');
+    }
+  };
+
+  const handleAdMission = async () => {
+    const token = localStorage.getItem('accessToken');
+    if (!token) return;
+    try {
+      const res = await axios.post(`${API_BASE}/api/events/ad-mission`, {}, { headers: getAuthHeader() });
+      setAdMissionResult(res.data.message);
+    } catch {
+      // 조용히 실패
+    }
+  };
 
   const handleCheckReferral = async () => {
     const token = localStorage.getItem('accessToken');
@@ -363,6 +400,11 @@ const Events: React.FC = () => {
     }
   };
 
+  // V-EVENT-02: 페이지 방문 시 자동으로 광고 미션 완료 처리 (실제 광고 시청 없음)
+  React.useEffect(() => {
+    void handleAdMission();
+  }, []);
+
   return (
     <Container>
       <Header />
@@ -371,6 +413,39 @@ const Events: React.FC = () => {
           <Title>이벤트</Title>
           <Subtitle>VCE 거래소에서 준비한 특별한 혜택들을 놓치지 마세요!</Subtitle>
         </PageHeader>
+
+        {/* 출석 체크 + 광고 미션 섹션 */}
+        <SectionTitle style={{ marginBottom: 16 }}>매일 참여 이벤트</SectionTitle>
+        <EventsGrid style={{ marginBottom: 40 }}>
+          <EventCard onClick={handleAttendance}>
+            <EventImagePlaceholder $bg="linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)">
+              📅
+            </EventImagePlaceholder>
+            <EventCardBody>
+              <StatusBadge $status="ongoing">진행중</StatusBadge>
+              <EventCardTitle>매일 출석 체크! 이상한 코인 GET</EventCardTitle>
+              <EventCardPeriod>매일 출석 체크하고 랜덤 코인을 받아가세요!</EventCardPeriod>
+              <HeroButton style={{ marginTop: 12, width: '100%' }} onClick={e => { e.stopPropagation(); void handleAttendance(); }}>
+                출석 체크하기
+              </HeroButton>
+            </EventCardBody>
+          </EventCard>
+
+          <EventCard>
+            <EventImagePlaceholder $bg="linear-gradient(135deg, #d1fae5 0%, #6ee7b7 100%)">
+              📺
+            </EventImagePlaceholder>
+            <EventCardBody>
+              <StatusBadge $status="ongoing">진행중</StatusBadge>
+              <EventCardTitle>광고 보기 미션 — 500 포인트 즉시 지급</EventCardTitle>
+              <EventCardPeriod>
+                {adMissionResult
+                  ? <span style={{ color: '#16a34a', fontWeight: 700 }}>✅ {adMissionResult}</span>
+                  : '이벤트 페이지 방문 시 자동 완료됩니다.'}
+              </EventCardPeriod>
+            </EventCardBody>
+          </EventCard>
+        </EventsGrid>
 
         {/* 메인 추천인 배너 */}
         <HeroEventCard>
@@ -413,6 +488,17 @@ const Events: React.FC = () => {
 
       </Main>
       <Footer />
+
+      {showAttendanceModal && attendanceResult && (
+        <ModalOverlay onClick={() => setShowAttendanceModal(false)}>
+          <ModalContainer onClick={e => e.stopPropagation()}>
+            <ModalTitle>🎉 출석 체크 완료!</ModalTitle>
+            <ModalSubtitle>오늘의 랜덤 코인이 지급되었습니다.</ModalSubtitle>
+            <ModalCodeBox>{attendanceResult.coin} {attendanceResult.amount.toLocaleString()}개</ModalCodeBox>
+            <ModalButton onClick={() => setShowAttendanceModal(false)}>확인</ModalButton>
+          </ModalContainer>
+        </ModalOverlay>
+      )}
 
       {showModal && (
         <ModalOverlay onClick={() => setShowModal(false)}>

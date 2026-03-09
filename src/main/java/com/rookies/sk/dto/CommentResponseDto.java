@@ -14,4 +14,6 @@ public class CommentResponseDto {
     private String content;
     private LocalDateTime createdAt;
     private boolean canDelete;
+    private boolean isSecret;
+    private boolean canEdit; // V-IDOR: 항상 true 반환 - 누구나 수정 가능
 }

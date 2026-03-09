@@ -1,4 +1,5 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import axios from 'axios';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -20,18 +21,60 @@ import WithdrawalComplete from './pages/WithdrawalComplete';
 import Events from './pages/Events';
 import Support from './pages/Support';
 import PrivacyPolicy from './pages/PrivacyPolicy';
-import { syncAuthState } from './utils/auth';
+import { syncAuthState, setUserSession, getUserRefreshToken } from './utils/auth';
 
 const mode = import.meta.env.VITE_APP_MODE || 'exchange'; // 'bank' or 'exchange'
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:18080';
 
 syncAuthState();
 
 function App() {
+  const lastActivityRef = useRef<number>(Date.now());
+
   useEffect(() => {
     syncAuthState();
-    // Keep checking periodically to share state across open tabs (ports) instantly
     const interval = setInterval(syncAuthState, 1000);
     return () => clearInterval(interval);
+  }, []);
+
+  // 사용자 활동 감지 및 세션 자동 연장
+  useEffect(() => {
+    const updateActivity = () => { lastActivityRef.current = Date.now(); };
+    window.addEventListener('click', updateActivity);
+    window.addEventListener('keydown', updateActivity);
+    window.addEventListener('mousemove', updateActivity);
+    window.addEventListener('scroll', updateActivity);
+
+    const refreshInterval = setInterval(async () => {
+      const accessToken = localStorage.getItem('accessToken');
+      const refreshToken = getUserRefreshToken();
+      if (!accessToken || !refreshToken) return;
+
+      // 마지막 활동으로부터 30분 이상 경과 시 갱신 생략
+      if (Date.now() - lastActivityRef.current > 30 * 60 * 1000) return;
+
+      // access token 만료 5분 전부터 갱신
+      try {
+        const payload = JSON.parse(atob(accessToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        const expiresAt = (payload.exp as number) * 1000;
+        if (expiresAt - Date.now() < 5 * 60 * 1000) {
+          const res = await axios.post(`${API_BASE}/api/auth/refresh`, { refreshToken });
+          if (res.data?.accessToken) {
+            setUserSession(res.data.accessToken);
+          }
+        }
+      } catch {
+        // 갱신 실패 시 무시 (다음 주기에 재시도)
+      }
+    }, 60 * 1000); // 1분마다 체크
+
+    return () => {
+      clearInterval(refreshInterval);
+      window.removeEventListener('click', updateActivity);
+      window.removeEventListener('keydown', updateActivity);
+      window.removeEventListener('mousemove', updateActivity);
+      window.removeEventListener('scroll', updateActivity);
+    };
   }, []);
 
   if (mode === 'bank') {

@@ -250,6 +250,29 @@ public class AuthController {
         return ResponseEntity.ok(newAccessToken);
     }
 
+    @PostMapping("/refresh")
+    public ResponseEntity<?> refreshToken(@RequestBody(required = false) java.util.Map<String, String> body) {
+        String refreshToken = body != null ? body.get("refreshToken") : null;
+        if (refreshToken == null || refreshToken.isBlank()) {
+            return ResponseEntity.status(400).body("refreshToken이 필요합니다.");
+        }
+        if (!jwtTokenProvider.validateToken(refreshToken)) {
+            return ResponseEntity.status(401).body("유효하지 않은 refresh token입니다.");
+        }
+        if (!"REFRESH".equals(jwtTokenProvider.getTokenType(refreshToken))) {
+            return ResponseEntity.status(401).body("refresh token이 아닙니다.");
+        }
+        try {
+            String email = jwtTokenProvider.getEmail(refreshToken);
+            Member member = memberService.findByEmailForLogin(email);
+            String newAccessToken = jwtTokenProvider.createAccessToken(
+                    email, member.getRole().name(), member.getMemberId());
+            return ResponseEntity.ok(java.util.Map.of("accessToken", newAccessToken));
+        } catch (Exception e) {
+            return ResponseEntity.status(401).body("토큰 갱신에 실패했습니다.");
+        }
+    }
+
     @PostMapping("/logout")
     public ResponseEntity<?> logout(
             @RequestHeader(value = "Authorization", required = false) String authorizationHeader,

@@ -78,6 +78,14 @@ public class CommunityController {
         return ResponseEntity.ok(communityService.addComment(postId, request, userDetails.getUsername()));
     }
 
+    @PutMapping("/comments/{commentId}")
+    public ResponseEntity<CommentResponseDto> updateComment(
+            @PathVariable Long commentId,
+            @RequestBody CommentRequestDto request,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(communityService.updateComment(commentId, request, userDetails.getUsername()));
+    }
+
     @DeleteMapping("/comments/{commentId}")
     public ResponseEntity<Void> deleteComment(
             @PathVariable Long commentId,
