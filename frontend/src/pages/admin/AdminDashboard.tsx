@@ -961,6 +961,20 @@ const AdminDashboard = () => {
   const [settingsMsg, setSettingsMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [newPw, setNewPw] = useState('');
 
+  // 직원 관리 상태
+  const [staffList, setStaffList] = useState<Array<{
+    memberId: number;
+    email: string;
+    name: string;
+    role: string;
+    status: string;
+    createdAt: string;
+  }>>([]);
+  const [staffLoading, setStaffLoading] = useState(false);
+  const [staffForm, setStaffForm] = useState({ email: '', password: '', name: '', role: 'STAFF' });
+  const [staffMsg, setStaffMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [staffDeleteConfirm, setStaffDeleteConfirm] = useState<number | null>(null);
+
   const [memberQuery, setMemberQuery] = useState({ q: '', role: '', status: '', page: 0, size: 20 });
   const [memberTotal, setMemberTotal] = useState(0);
   const [memberTotalPages, setMemberTotalPages] = useState(0);
@@ -1067,6 +1081,15 @@ const AdminDashboard = () => {
     if (activeMenu === 'community') {
       axios.get(`${API_BASE}/api/community/posts`).then(r => setPosts(r.data.content || r.data)).catch(() => { });
     }
+
+    if (activeMenu === 'settings') {
+      setStaffLoading(true);
+      axios
+        .get(`${API_BASE}/api/admin/staff`, { headers: h })
+        .then(r => setStaffList(r.data))
+        .catch(() => { })
+        .finally(() => setStaffLoading(false));
+    }
   }, [activeMenu, token, txQuery, memberQuery]);
 
   useEffect(() => {
@@ -1094,15 +1117,28 @@ const AdminDashboard = () => {
   const handleUnmask = async (memberId: number, e: React.MouseEvent) => {
     e.stopPropagation();
     const role = getAdminRole();
-    if (role === 'STAFF') {
-      alert('접근 권한이 없습니다.');
+    if (role !== 'ADMIN') {
+      alert('ADMIN 권한만 마스킹 해제가 가능합니다.');
       return;
     }
     try {
       const res = await axios.get(`${API_BASE}/api/admin/members/${memberId}/unmask`, { headers });
       const data = res.data;
 
-      const updateData = (prev: any[]) => prev.map(item => item.memberId === memberId ? { ...item, email: data.email, memberEmail: data.email, name: data.name, memberName: data.name, _unmasked: true } : item);
+      const updateData = (prev: any[]) =>
+        prev.map(item =>
+          item.memberId === memberId
+            ? {
+              ...item,
+              email: data.email,
+              memberEmail: data.email,
+              name: data.name,
+              memberName: data.name,
+              phoneNumber: data.phoneNumber,
+              _unmasked: true,
+            }
+            : item
+        );
 
       setMembers(updateData);
       setIdApprovalMembers(updateData);
@@ -1407,7 +1443,11 @@ const AdminDashboard = () => {
                             {m.email}
                           </span>
                         </td>
-                        <td>{m.name}</td>
+                        <td>
+                          <span onClick={(e) => handleUnmask(m.memberId, e)} style={{ cursor: 'pointer', color: (m as any)._unmasked ? COLORS.primary : 'inherit' }} title="클릭하여 마스킹 해제">
+                            {m.name}
+                          </span>
+                        </td>
                         <td>
                           {m.hasIdPhoto ? (
                             <GhostButton style={{ height: '28px', fontSize: '11px', padding: '0 8px' }} onClick={() => setSelectedImage(m.idPhotoUrl!.startsWith('http') ? m.idPhotoUrl! : `${API_BASE}${m.idPhotoUrl!}`)}>
@@ -1493,7 +1533,11 @@ const AdminDashboard = () => {
                           {m.email}
                         </span>
                       </td>
-                      <td>{m.name}</td>
+                      <td>
+                        <span onClick={(e) => handleUnmask(m.memberId, e)} style={{ cursor: 'pointer', color: (m as any)._unmasked ? COLORS.primary : 'inherit' }} title="클릭하여 마스킹 해제">
+                          {m.name}
+                        </span>
+                      </td>
                       <td>
                         <Badge $tone={toneFromStatus(m.status)}>{m.status}</Badge>
                       </td>
@@ -1594,7 +1638,11 @@ const AdminDashboard = () => {
                     const reclaimable = Math.max(0, Number(a.balance) - Number(a.lockedBalance));
                     return (
                       <tr key={a.assetId}>
-                        <td>{a.memberName}</td>
+                        <td>
+                          <span onClick={(e) => handleUnmask(a.memberId, e)} style={{ cursor: 'pointer', color: (a as any)._unmasked ? COLORS.primary : 'inherit' }} title="클릭하여 마스킹 해제">
+                            {a.memberName}
+                          </span>
+                        </td>
                         <td>
                           <span onClick={(e) => handleUnmask(a.memberId, e)} style={{ cursor: 'pointer', color: (a as any)._unmasked ? COLORS.primary : 'inherit' }} title="클릭하여 마스킹 해제">
                             {a.memberEmail}
@@ -1919,34 +1967,218 @@ const AdminDashboard = () => {
 
       case 'settings':
         return (
-          <Card>
-            <CardTitle>관리자 설정</CardTitle>
-            {settingsMsg && <Msg $ok={settingsMsg.ok}>{settingsMsg.text}</Msg>}
+          <>
+            {/* ── 내 비밀번호 변경 ── */}
+            <Card>
+              <CardTitle>관리자 설정</CardTitle>
+              {settingsMsg && <Msg $ok={settingsMsg.ok}>{settingsMsg.text}</Msg>}
 
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-              <Input
-                type="password"
-                value={newPw}
-                onChange={e => setNewPw(e.target.value)}
-                placeholder="새 비밀번호 입력"
-                style={{ width: 320 }}
-              />
-              <PrimaryButton
-                disabled={!newPw}
-                onClick={async () => {
-                  try {
-                    await axios.put(`${API_BASE}/api/admin/change-password`, { newPassword: newPw }, { headers });
-                    setSettingsMsg({ text: '비밀번호가 변경되었습니다.', ok: true });
-                    setNewPw('');
-                  } catch {
-                    setSettingsMsg({ text: '비밀번호 변경 기능은 준비 중입니다.', ok: false });
-                  }
-                }}
-              >
-                비밀번호 변경
-              </PrimaryButton>
-            </div>
-          </Card>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                <Input
+                  type="password"
+                  value={newPw}
+                  onChange={e => setNewPw(e.target.value)}
+                  placeholder="새 비밀번호 입력"
+                  style={{ width: 320 }}
+                />
+                <PrimaryButton
+                  disabled={!newPw}
+                  onClick={async () => {
+                    try {
+                      await axios.put(`${API_BASE}/api/admin/change-password`, { newPassword: newPw }, { headers });
+                      setSettingsMsg({ text: '비밀번호가 변경되었습니다.', ok: true });
+                      setNewPw('');
+                    } catch {
+                      setSettingsMsg({ text: '비밀번호 변경 기능은 준비 중입니다.', ok: false });
+                    }
+                  }}
+                >
+                  비밀번호 변경
+                </PrimaryButton>
+              </div>
+            </Card>
+
+            {/* ── 직원(Admin/Manager/Staff) 관리 — ADMIN 전용 ── */}
+            {role === 'ADMIN' && (
+              <>
+                {/* 직원 생성 폼 */}
+                <Card style={{ marginTop: 14 }}>
+                  <CardTitle>직원 계정 생성</CardTitle>
+                  {staffMsg && <Msg $ok={staffMsg.ok}>{staffMsg.text}</Msg>}
+
+                  <FormGrid style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+                    <FieldLabel>
+                      이메일
+                      <Input
+                        type="email"
+                        value={staffForm.email}
+                        onChange={e => setStaffForm(f => ({ ...f, email: e.target.value }))}
+                        placeholder="staff@example.com"
+                      />
+                    </FieldLabel>
+                    <FieldLabel>
+                      비밀번호
+                      <Input
+                        type="password"
+                        value={staffForm.password}
+                        onChange={e => setStaffForm(f => ({ ...f, password: e.target.value }))}
+                        placeholder="비밀번호 입력"
+                      />
+                    </FieldLabel>
+                    <FieldLabel>
+                      이름
+                      <Input
+                        type="text"
+                        value={staffForm.name}
+                        onChange={e => setStaffForm(f => ({ ...f, name: e.target.value }))}
+                        placeholder="홍길동"
+                      />
+                    </FieldLabel>
+                    <FieldLabel>
+                      역할
+                      <Select
+                        value={staffForm.role}
+                        onChange={e => setStaffForm(f => ({ ...f, role: e.target.value }))}
+                      >
+                        <option value="STAFF">STAFF</option>
+                        <option value="MANAGER">MANAGER</option>
+                        <option value="ADMIN">ADMIN</option>
+                      </Select>
+                    </FieldLabel>
+                  </FormGrid>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <PrimaryButton
+                      disabled={!staffForm.email || !staffForm.password || !staffForm.name}
+                      onClick={async () => {
+                        setStaffMsg(null);
+                        try {
+                          await axios.post(
+                            `${API_BASE}/api/admin/staff`,
+                            staffForm,
+                            { headers }
+                          );
+                          setStaffMsg({ text: '직원 계정이 생성되었습니다.', ok: true });
+                          setStaffForm({ email: '', password: '', name: '', role: 'STAFF' });
+                          // 목록 새로 고침
+                          const r = await axios.get(`${API_BASE}/api/admin/staff`, { headers });
+                          setStaffList(r.data);
+                        } catch (err: unknown) {
+                          const msg =
+                            (err as { response?: { data?: string } })?.response?.data ||
+                            '계정 생성에 실패했습니다.';
+                          setStaffMsg({ text: String(msg), ok: false });
+                        }
+                      }}
+                    >
+                      계정 생성
+                    </PrimaryButton>
+                  </div>
+                </Card>
+
+                {/* 직원 목록 */}
+                <Card style={{ marginTop: 14 }}>
+                  <CardTitle>직원 목록</CardTitle>
+                  {staffLoading ? (
+                    <EmptyState>불러오는 중…</EmptyState>
+                  ) : staffList.length === 0 ? (
+                    <EmptyState>등록된 직원 계정이 없습니다.</EmptyState>
+                  ) : (
+                    <Table>
+                      <thead>
+                        <tr>
+                          <th>ID</th>
+                          <th>이메일</th>
+                          <th>이름</th>
+                          <th>역할</th>
+                          <th>상태</th>
+                          <th>생성일</th>
+                          <th>삭제</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {staffList.map(s => (
+                          <tr key={s.memberId}>
+                            <td>{s.memberId}</td>
+                            <td>{s.email}</td>
+                            <td>{s.name}</td>
+                            <td>
+                              <Badge
+                                $tone={
+                                  s.role === 'ADMIN'
+                                    ? 'danger'
+                                    : s.role === 'MANAGER'
+                                      ? 'warn'
+                                      : 'info'
+                                }
+                              >
+                                {s.role}
+                              </Badge>
+                            </td>
+                            <td>
+                              <Badge $tone={s.status === 'ACTIVE' ? 'success' : 'neutral'}>
+                                {s.status}
+                              </Badge>
+                            </td>
+                            <td>
+                              {s.createdAt
+                                ? new Date(s.createdAt).toLocaleDateString('ko-KR')
+                                : '-'}
+                            </td>
+                            <td>
+                              {staffDeleteConfirm === s.memberId ? (
+                                <div style={{ display: 'flex', gap: 6 }}>
+                                  <ModalButton
+                                    $variant="danger"
+                                    style={{ height: 30, fontSize: 12 }}
+                                    onClick={async () => {
+                                      try {
+                                        await axios.delete(
+                                          `${API_BASE}/api/admin/staff/${s.memberId}`,
+                                          { headers }
+                                        );
+                                        setStaffList(prev =>
+                                          prev.filter(x => x.memberId !== s.memberId)
+                                        );
+                                        setStaffDeleteConfirm(null);
+                                        setStaffMsg({ text: '직원 계정이 삭제되었습니다.', ok: true });
+                                      } catch (err: unknown) {
+                                        const msg =
+                                          (err as { response?: { data?: string } })?.response?.data ||
+                                          '삭제에 실패했습니다.';
+                                        setStaffMsg({ text: String(msg), ok: false });
+                                        setStaffDeleteConfirm(null);
+                                      }
+                                    }}
+                                  >
+                                    확인
+                                  </ModalButton>
+                                  <ModalButton
+                                    style={{ height: 30, fontSize: 12 }}
+                                    onClick={() => setStaffDeleteConfirm(null)}
+                                  >
+                                    취소
+                                  </ModalButton>
+                                </div>
+                              ) : (
+                                <ModalButton
+                                  $variant="danger"
+                                  style={{ height: 30, fontSize: 12 }}
+                                  onClick={() => setStaffDeleteConfirm(s.memberId)}
+                                >
+                                  삭제
+                                </ModalButton>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                  )}
+                </Card>
+              </>
+            )}
+          </>
         );
 
       default:
@@ -2384,24 +2616,49 @@ const AdminDashboard = () => {
               <p style={{ margin: '4px 0', fontSize: '13px' }}>
                 <strong style={{ display: 'inline-block', width: '80px', color: COLORS.muted }}>이메일</strong>
                 <span
-                  onClick={(e) => {
-                    handleUnmask(selectedMemberDetails.memberId, e).then(() => {
-                      setTimeout(() => handleViewMemberDetails(selectedMemberDetails.memberId), 500);
-                    });
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (getAdminRole() !== 'ADMIN') {
+                      alert('ADMIN 권한만 마스킹 해제가 가능합니다.');
+                      return;
+                    }
+                    if (selectedMemberDetails._unmasked) return;
+                    try {
+                      const res = await axios.get(
+                        `${API_BASE}/api/admin/members/${selectedMemberDetails.memberId}/unmask`,
+                        { headers }
+                      );
+                      setSelectedMemberDetails((prev: any) => ({
+                        ...prev,
+                        email: res.data.email,
+                        name: res.data.name,
+                        phoneNumber: res.data.phoneNumber,
+                        _unmasked: true,
+                      }));
+                    } catch (err: any) {
+                      alert(err?.response?.data?.message || '마스킹 해제 실패');
+                    }
                   }}
-                  style={{ cursor: 'pointer', color: selectedMemberDetails._unmasked ? COLORS.primary : 'inherit' }}
-                  title="클릭하여 마스킹 해제"
+                  style={{
+                    cursor: selectedMemberDetails._unmasked ? 'default' : 'pointer',
+                    color: selectedMemberDetails._unmasked ? COLORS.primary : 'inherit',
+                  }}
+                  title={selectedMemberDetails._unmasked ? undefined : '클릭하여 마스킹 해제'}
                 >
                   {selectedMemberDetails.email}
                 </span>
               </p>
               <p style={{ margin: '4px 0', fontSize: '13px' }}>
                 <strong style={{ display: 'inline-block', width: '80px', color: COLORS.muted }}>이름</strong>
-                {selectedMemberDetails.name}
+                <span style={{ color: selectedMemberDetails._unmasked ? COLORS.primary : 'inherit' }}>
+                  {selectedMemberDetails.name}
+                </span>
               </p>
               <p style={{ margin: '4px 0', fontSize: '13px' }}>
                 <strong style={{ display: 'inline-block', width: '80px', color: COLORS.muted }}>전화번호</strong>
-                {selectedMemberDetails.phoneNumber}
+                <span style={{ color: selectedMemberDetails._unmasked ? COLORS.primary : 'inherit' }}>
+                  {selectedMemberDetails.phoneNumber || '-'}
+                </span>
               </p>
               <p style={{ margin: '4px 0', fontSize: '13px' }}>
                 <strong style={{ display: 'inline-block', width: '80px', color: COLORS.muted }}>역할</strong>

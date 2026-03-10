@@ -4,6 +4,7 @@ import com.rookies.sk.entity.*;
 import com.rookies.sk.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -36,6 +37,7 @@ public class AdminService {
     private final TransactionRepository transactionRepository;
     private final InquiryRepository inquiryRepository;
     private final AuditLogRepository auditLogRepository;
+    private final PasswordEncoder passwordEncoder;
 
     private boolean isManager() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -479,6 +481,99 @@ public class AdminService {
 
         return response;
     }
+
+    // ── 직원(Staff) 관리 ─────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getStaffMembers() {
+        List<Member.Role> staffRoles = List.of(
+                Member.Role.ADMIN, Member.Role.MANAGER, Member.Role.STAFF);
+        return memberRepository.findAll().stream()
+                .filter(m -> staffRoles.contains(m.getRole()))
+                .sorted(Comparator.comparing(
+                        m -> m.getCreatedAt() != null ? m.getCreatedAt() : LocalDateTime.MIN))
+                .map(m -> {
+                    Map<String, Object> map = new LinkedHashMap<>();
+                    map.put("memberId", m.getMemberId());
+                    map.put("email", m.getEmail());
+                    map.put("name", m.getName());
+                    map.put("role", m.getRole().name());
+                    map.put("status", m.getStatus().name());
+                    map.put("createdAt", m.getCreatedAt());
+                    return map;
+                }).collect(Collectors.toList());
+    }
+
+    @Transactional
+    public Map<String, Object> createStaffMember(
+            String email, String password, String name, String role) {
+
+        if (isBlank(email) || isBlank(password) || isBlank(name) || isBlank(role)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "email, password, name, role은 필수 항목입니다.");
+        }
+
+        Set<String> allowedRoles = Set.of("ADMIN", "MANAGER", "STAFF");
+        String upperRole = role.trim().toUpperCase();
+        if (!allowedRoles.contains(upperRole)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "role은 ADMIN / MANAGER / STAFF 중 하나여야 합니다.");
+        }
+
+        if (memberRepository.existsByEmail(email.trim())) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "이미 사용 중인 이메일입니다.");
+        }
+
+        Member member = Member.builder()
+                .email(email.trim())
+                .password(passwordEncoder.encode(password))
+                .name(name.trim())
+                .role(Member.Role.valueOf(upperRole))
+                .status(Member.Status.ACTIVE)
+                .build();
+        memberRepository.save(member);
+
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("memberId", member.getMemberId());
+        map.put("email", member.getEmail());
+        map.put("name", member.getName());
+        map.put("role", member.getRole().name());
+        map.put("status", member.getStatus().name());
+        map.put("message", "직원 계정이 생성되었습니다.");
+        return map;
+    }
+
+    @Transactional
+    public Map<String, Object> deleteStaffMember(Long memberId) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "직원 계정을 찾을 수 없습니다."));
+
+        List<Member.Role> staffRoles = List.of(
+                Member.Role.ADMIN, Member.Role.MANAGER, Member.Role.STAFF);
+        if (!staffRoles.contains(member.getRole())) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "직원 계정이 아닙니다.");
+        }
+
+        // 현재 로그인된 관리자가 자기 자신을 삭제하는 것을 방지
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String currentEmail = auth != null ? auth.getName() : null;
+        if (currentEmail != null && currentEmail.equals(member.getEmail())) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "자신의 계정은 삭제할 수 없습니다.");
+        }
+
+        memberRepository.delete(member);
+
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("memberId", memberId);
+        map.put("message", "직원 계정이 삭제되었습니다.");
+        return map;
+    }
+
+    // ── 내부 유틸리티 ────────────────────────────────────────────────
 
     private LocalDateTime parseFrom(String from) {
         if (isBlank(from))

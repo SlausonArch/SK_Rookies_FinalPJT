@@ -45,7 +45,7 @@ public class AdminController {
     }
 
     @GetMapping("/members/{memberId}/unmask")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> getUnmaskedMemberInfo(
             @PathVariable Long memberId,
             HttpServletRequest request) {
@@ -145,6 +145,32 @@ public class AdminController {
         String status = body.getOrDefault("status", "ANSWERED");
         String reply = body.get("reply");
         return ResponseEntity.ok(adminService.replyToInquiry(inquiryId, status, reply));
+    }
+
+    // ── 직원(Staff) 관리 ──────────────────────────────────────────────
+
+    @GetMapping("/staff")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<Map<String, Object>>> getStaffMembers() {
+        return ResponseEntity.ok(adminService.getStaffMembers());
+    }
+
+    @PostMapping("/staff")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> createStaffMember(
+            @RequestBody Map<String, String> body) {
+        return ResponseEntity.ok(adminService.createStaffMember(
+                body.get("email"),
+                body.get("password"),
+                body.get("name"),
+                body.get("role")));
+    }
+
+    @DeleteMapping("/staff/{memberId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> deleteStaffMember(
+            @PathVariable Long memberId) {
+        return ResponseEntity.ok(adminService.deleteStaffMember(memberId));
     }
 
     // [VULNERABILITY] Path Traversal / LFI
