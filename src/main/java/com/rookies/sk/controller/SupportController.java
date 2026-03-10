@@ -58,4 +58,20 @@ public class SupportController {
         Inquiry savedInquiry = supportService.createInquiry(userDetails.getUsername(), title, content, attachmentUrl);
         return ResponseEntity.ok(savedInquiry);
     }
+
+    // 1:1 문의 삭제 (본인만 가능)
+    @DeleteMapping("/inquiries/{inquiryId}")
+    public ResponseEntity<?> deleteInquiry(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @PathVariable Long inquiryId) {
+        if (userDetails == null) {
+            return ResponseEntity.status(401).build();
+        }
+        try {
+            supportService.deleteInquiry(inquiryId, userDetails.getUsername());
+            return ResponseEntity.ok(java.util.Map.of("message", "문의가 삭제되었습니다."));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(403).body(java.util.Map.of("message", e.getMessage()));
+        }
+    }
 }

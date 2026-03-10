@@ -46,4 +46,18 @@ public class SupportService {
 
         return inquiryRepository.save(inquiry);
     }
+
+    @Transactional
+    public void deleteInquiry(Long inquiryId, String userEmail) {
+        Member member = memberRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        Inquiry inquiry = inquiryRepository.findById(inquiryId)
+                .orElseThrow(() -> new IllegalArgumentException("Inquiry not found"));
+
+        if (!inquiry.getMember().getMemberId().equals(member.getMemberId())) {
+            throw new IllegalArgumentException("No permission");
+        }
+
+        inquiryRepository.delete(inquiry);
+    }
 }

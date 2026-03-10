@@ -173,6 +173,22 @@ const InquiryReply = styled.div`
   line-height: 1.6;
 `;
 
+const DeleteBtn = styled.button`
+  background: none;
+  border: 1px solid #dc2626;
+  color: #dc2626;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-left: 8px;
+  &:hover {
+    background: #dc2626;
+    color: white;
+  }
+`;
+
 // Modal Styles
 const ModalOverlay = styled.div`
   position: fixed;
@@ -323,6 +339,19 @@ const Support: React.FC = () => {
     }
   };
 
+  const handleDeleteInquiry = async (inquiryId: number) => {
+    if (!window.confirm('문의를 삭제하시겠습니까?')) return;
+    try {
+      await axios.delete(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/support/inquiries/${inquiryId}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
+      });
+      setInquiries(prev => prev.filter(inq => inq.inquiryId !== inquiryId));
+      if (openInquiryId === inquiryId) setOpenInquiryId(null);
+    } catch {
+      alert('삭제에 실패했습니다.');
+    }
+  };
+
   const handleSubmitInquiry = async () => {
     if (!formTitle.trim() || !formContent.trim()) {
       alert('제목과 내용을 모두 입력해주세요.');
@@ -411,8 +440,13 @@ const Support: React.FC = () => {
                           </StatusBadge>
                           {inq.title}
                         </span>
-                        <span style={{ fontSize: '13px', color: '#999', fontWeight: 400 }}>
-                          {new Date(inq.createdAt).toLocaleDateString()}
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: '13px', color: '#999', fontWeight: 400 }}>
+                            {new Date(inq.createdAt).toLocaleDateString()}
+                          </span>
+                          <DeleteBtn onClick={e => { e.stopPropagation(); void handleDeleteInquiry(inq.inquiryId); }}>
+                            삭제
+                          </DeleteBtn>
                         </span>
                       </InquiryTitleRow>
 
