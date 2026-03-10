@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import styled from 'styled-components';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 
@@ -141,7 +142,7 @@ const PrivacyPolicy: React.FC = () => {
           {error && <ErrorMsg>{error}</ErrorMsg>}
           {!loading && !error && content && (
             <MarkdownBody>
-              <ReactMarkdown>{content}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
             </MarkdownBody>
           )}
         </Card>
