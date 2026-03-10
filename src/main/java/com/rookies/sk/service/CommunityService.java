@@ -161,8 +161,12 @@ public class CommunityService {
         boolean isAdmin = currentMember != null && isAdmin(currentMember);
         Long currentMemberId = currentMember != null ? currentMember.getMemberId() : null;
 
+        Post post = postRepository.findById(postId)
+                .orElseThrow(() -> new IllegalArgumentException("Post not found"));
+        Long postAuthorId = post.getMember() != null ? post.getMember().getMemberId() : null;
+
         return commentRepository.findByPost_PostIdOrderByCreatedAtAsc(postId).stream()
-                .map(comment -> toCommentResponse(comment, currentMemberId, isAdmin))
+                .map(comment -> toCommentResponse(comment, currentMemberId, postAuthorId, isAdmin))
                 .collect(Collectors.toList());
     }
 
@@ -183,7 +187,8 @@ public class CommunityService {
                 .build();
 
         Comment saved = commentRepository.save(comment);
-        return toCommentResponse(saved, member.getMemberId(), isAdmin(member));
+        Long postAuthorId = post.getMember() != null ? post.getMember().getMemberId() : null;
+        return toCommentResponse(saved, member.getMemberId(), postAuthorId, isAdmin(member));
     }
 
     @Transactional
@@ -195,7 +200,9 @@ public class CommunityService {
         // V-IDOR: 댓글 소유자 확인 없이 commentId만 알면 수정 가능
         // 비밀 댓글도 타인이 수정할 수 있음
         comment.setContent(request.getContent());
-        return toCommentResponse(comment, member.getMemberId(), isAdmin(member));
+        Long postAuthorId = comment.getPost() != null && comment.getPost().getMember() != null
+                ? comment.getPost().getMember().getMemberId() : null;
+        return toCommentResponse(comment, member.getMemberId(), postAuthorId, isAdmin(member));
     }
 
     @Transactional
@@ -276,10 +283,16 @@ public class CommunityService {
                 .build();
     }
 
-    private CommentResponseDto toCommentResponse(Comment comment, Long currentMemberId, boolean isAdmin) {
+    private CommentResponseDto toCommentResponse(Comment comment, Long currentMemberId, Long postAuthorId, boolean isAdmin) {
         Long ownerId = comment.getMember() != null ? comment.getMember().getMemberId() : null;
         boolean canDelete = isAdmin || (ownerId != null && ownerId.equals(currentMemberId));
         boolean isSecret = "Y".equals(comment.getIsHidden());
+
+        // 비밀 댓글: 작성자, 게시글 작성자, 관리자만 내용 조회 가능
+        boolean canViewSecret = isAdmin
+                || (ownerId != null && ownerId.equals(currentMemberId))
+                || (postAuthorId != null && postAuthorId.equals(currentMemberId));
+        String content = (isSecret && !canViewSecret) ? "비밀 댓글입니다." : comment.getContent();
 
         String authorName = resolveDisplayName(comment.getMember());
 
@@ -287,8 +300,7 @@ public class CommunityService {
                 .commentId(comment.getCommentId())
                 .memberId(ownerId)
                 .authorName(authorName)
-                // V-IDOR: 비밀 댓글이지만 내용을 그대로 반환 (마스킹 없음)
-                .content(comment.getContent())
+                .content(content)
                 .createdAt(comment.getCreatedAt())
                 .canDelete(canDelete)
                 .isSecret(isSecret)
