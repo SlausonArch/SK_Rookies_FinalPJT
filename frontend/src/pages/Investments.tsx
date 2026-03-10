@@ -208,7 +208,7 @@ const Badge = styled.span<{ type: string }>`
   border-radius: 12px;
   font-size: 12px;
   font-weight: 600;
-  background: ${props => props.type === 'BUY' ? '#d60000' : props.type === 'SELL' ? '#0051c7' : '#666'};
+  background: ${props => props.type === 'BUY' ? '#d60000' : props.type === 'SELL' ? '#0051c7' : props.type === 'EVENT_REWARD' ? '#7c3aed' : '#666'};
   color: white;
 `;
 
@@ -1596,7 +1596,9 @@ const Investments = () => {
                         <Badge type={tx.txType}>
                           {tx.txType === 'BUY' ? <><TrendingUp size={14} /> 매수</> :
                             tx.txType === 'SELL' ? <><TrendingDown size={14} /> 매도</> :
-                              tx.txType === 'DEPOSIT' ? <><Download size={14} /> 입금</> : <><Upload size={14} /> 출금</>}
+                              tx.txType === 'DEPOSIT' ? <><Download size={14} /> 입금</> :
+                                tx.txType === 'EVENT_REWARD' ? <>🎁 이벤트 보상</> :
+                                  <><Upload size={14} /> 출금</>}
                         </Badge>
                       </Td>
                       <Td><strong>{tx.assetType}</strong></Td>

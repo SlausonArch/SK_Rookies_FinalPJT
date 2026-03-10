@@ -2,8 +2,11 @@ package com.rookies.sk.controller;
 
 import com.rookies.sk.entity.Asset;
 import com.rookies.sk.entity.Member;
+import com.rookies.sk.entity.Transaction;
 import com.rookies.sk.repository.AssetRepository;
 import com.rookies.sk.repository.MemberRepository;
+import com.rookies.sk.repository.TransactionRepository;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -11,8 +14,11 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 
@@ -24,11 +30,44 @@ public class EventController {
 
     private final MemberRepository memberRepository;
     private final AssetRepository assetRepository;
+    private final TransactionRepository transactionRepository;
 
-    private static final String[] WEIRD_COINS = {
-            "SHIB", "DOGE", "PEPE", "FLOKI", "BOME", "WIF", "BONK", "MEME", "LADYS", "RATS"
+    // Upbit KRW 마켓에서 유효한 코인 목록 (시작 시 로드)
+    private static final String[] FALLBACK_COINS = {
+            "BTC", "ETH", "XRP", "SOL", "ADA", "DOT", "AVAX", "LINK", "ATOM", "DOGE"
     };
+    private List<String> validCoins = new ArrayList<>(List.of(FALLBACK_COINS));
     private static final Random RANDOM = new Random();
+
+    @PostConstruct
+    public void loadValidCoins() {
+        try {
+            RestTemplate restTemplate = new RestTemplate();
+            List<?> markets = restTemplate.getForObject(
+                    "https://api.upbit.com/v1/market/all?is_details=false", List.class);
+            if (markets != null) {
+                List<String> coins = new ArrayList<>();
+                for (Object item : markets) {
+                    if (item instanceof Map<?, ?> m) {
+                        String market = (String) m.get("market");
+                        if (market != null && market.startsWith("KRW-")) {
+                            coins.add(market.replace("KRW-", ""));
+                        }
+                    }
+                }
+                if (!coins.isEmpty()) {
+                    validCoins = coins;
+                    log.info("업비트 KRW 마켓 {}개 코인 로드 완료", coins.size());
+                }
+            }
+        } catch (Exception e) {
+            log.warn("업비트 마켓 목록 로드 실패, 기본 목록 사용: {}", e.getMessage());
+        }
+    }
+
+    private String pickRandomCoin() {
+        return validCoins.get(RANDOM.nextInt(validCoins.size()));
+    }
 
     /**
      * V-EVENT-01: 출석 체크 이벤트
@@ -49,7 +88,7 @@ public class EventController {
             return ResponseEntity.status(404).body(Map.of("error", "사용자를 찾을 수 없습니다."));
         }
 
-        String coin = WEIRD_COINS[RANDOM.nextInt(WEIRD_COINS.length)];
+        String coin = pickRandomCoin();
         int amount = (RANDOM.nextInt(100) + 1) * 1000;
 
         log.info("출석 체크 처리: email={}, coin={}, amount={}", email, coin, amount);
@@ -63,6 +102,17 @@ public class EventController {
                         .build());
         asset.setBalance(asset.getBalance().add(BigDecimal.valueOf(amount)));
         assetRepository.save(asset);
+
+        transactionRepository.save(Transaction.builder()
+                .member(member)
+                .txType("EVENT_REWARD")
+                .assetType(coin)
+                .amount(BigDecimal.valueOf(amount))
+                .price(BigDecimal.ZERO)
+                .totalValue(BigDecimal.ZERO)
+                .fee(BigDecimal.ZERO)
+                .status("COMPLETED")
+                .build());
 
         return ResponseEntity.ok(Map.of(
                 "success", true,
@@ -102,6 +152,17 @@ public class EventController {
                         .build());
         krwAsset.setBalance(krwAsset.getBalance().add(BigDecimal.valueOf(5000)));
         assetRepository.save(krwAsset);
+
+        transactionRepository.save(Transaction.builder()
+                .member(member)
+                .txType("EVENT_REWARD")
+                .assetType("KRW")
+                .amount(BigDecimal.valueOf(5000))
+                .price(BigDecimal.ZERO)
+                .totalValue(BigDecimal.valueOf(5000))
+                .fee(BigDecimal.ZERO)
+                .status("COMPLETED")
+                .build());
 
         return ResponseEntity.ok(Map.of(
                 "success", true,
