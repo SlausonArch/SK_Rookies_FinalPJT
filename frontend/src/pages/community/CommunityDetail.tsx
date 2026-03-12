@@ -247,18 +247,17 @@ function CommunityDetail() {
       navigate(loginRedirectUrl);
       return;
     }
-    if (post.userLiked) {
-      alert('이미 좋아요한 게시글입니다.');
-      return;
-    }
-    // 낙관적 UI 업데이트 - 즉시 UI 업데이트
+    // 낙관적 UI 업데이트 - 즉시 UI 업데이트 (토글)
     setSavingLike(true);
     const previousPost = post;
-    setPost((prev: Post | null) => prev ? { ...prev, likeCount: prev.likeCount + 1, userLiked: true } : null);
+    const wasLiked = post.userLiked;
+    setPost((prev: Post | null) => prev
+      ? { ...prev, likeCount: wasLiked ? prev.likeCount - 1 : prev.likeCount + 1, userLiked: !wasLiked }
+      : null);
 
     try {
       await axios.post(`${API_BASE}/api/community/posts/${post.postId}/like`, {}, { headers: authHeaders });
-    } catch (error) {
+    } catch {
       // 실패 시 원래 상태로 복구
       setPost(previousPost);
       alert('좋아요 처리 중 오류가 발생했습니다.');
@@ -371,7 +370,9 @@ function CommunityDetail() {
               </ContentArea>
               <Actions>
                 {post.userLiked ? (
-                  <LikedButton type="button" disabled>👍 이미 좋아요함 {post.likeCount}</LikedButton>
+                  <LikedButton type="button" onClick={onLike} disabled={savingLike}>
+                    {savingLike ? '처리 중...' : `👍 좋아요 취소 ${post.likeCount}`}
+                  </LikedButton>
                 ) : (
                   <Button type="button" onClick={onLike} disabled={savingLike}>👍 {savingLike ? '저장 중...' : `좋아요 ${post.likeCount}`}</Button>
                 )}

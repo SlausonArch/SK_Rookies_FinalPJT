@@ -233,7 +233,10 @@ public class CommunityService {
 
         boolean exists = communityLikeRepository.existsByTargetTypeAndTargetIdAndMember_MemberId(
                 "POST", postId, member.getMemberId());
-        if (!exists) {
+        if (exists) {
+            communityLikeRepository.deleteByTargetTypeAndTargetIdAndMember_MemberId(
+                    "POST", postId, member.getMemberId());
+        } else {
             CommunityLike like = CommunityLike.builder()
                     .targetType("POST")
                     .targetId(postId)

@@ -7,4 +7,6 @@ public interface CommunityLikeRepository extends JpaRepository<CommunityLike, Lo
     boolean existsByTargetTypeAndTargetIdAndMember_MemberId(String targetType, Long targetId, Long memberId);
 
     long countByTargetTypeAndTargetId(String targetType, Long targetId);
+
+    void deleteByTargetTypeAndTargetIdAndMember_MemberId(String targetType, Long targetId, Long memberId);
 }

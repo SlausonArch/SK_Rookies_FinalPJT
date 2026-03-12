@@ -206,6 +206,18 @@ const NoticeBadge = styled.span`
   margin-right: 8px;
 `;
 
+const PopularBadge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  background: #ff4d4d;
+  color: #fff;
+  border-radius: 999px;
+  padding: 2px 8px;
+  margin-right: 8px;
+`;
+
 const CommentCount = styled.span`
   margin-left: 6px;
   color: #6a7ea3;
@@ -309,6 +321,15 @@ function Community() {
   const currentPage = Math.min(page, totalPages);
   const pagedPosts = filteredPosts.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
+  const PAGE_GROUP_SIZE = 10;
+  const currentGroup = Math.ceil(currentPage / PAGE_GROUP_SIZE);
+  const groupStart = (currentGroup - 1) * PAGE_GROUP_SIZE + 1;
+  const groupEnd = Math.min(groupStart + PAGE_GROUP_SIZE - 1, totalPages);
+  const hasPrevGroup = groupStart > 1;
+  const hasNextGroup = groupEnd < totalPages;
+
+  const isPopular = (post: Post) => !post.notice && (post.likeCount >= 5 || post.viewCount >= 50);
+
   useEffect(() => {
     setPage(1);
   }, [tab, sortBy, filteredPosts.length]);
@@ -386,6 +407,7 @@ function Community() {
                   <td>{filteredPosts.length - ((currentPage - 1) * PAGE_SIZE + index)}</td>
                   <TitleCell>
                     {post.notice && <NoticeBadge>공지</NoticeBadge>}
+                    {isPopular(post) && <PopularBadge>🔥 인기</PopularBadge>}
                     {post.title}
                     <CommentCount>[{post.commentCount ?? 0}]</CommentCount>
                   </TitleCell>
@@ -404,7 +426,12 @@ function Community() {
 
           {filteredPosts.length > 0 && (
             <Pagination>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map(num => (
+              {hasPrevGroup && (
+                <PageButton type="button" $active={false} onClick={() => setPage(groupStart - 1)}>
+                  &lt;
+                </PageButton>
+              )}
+              {Array.from({ length: groupEnd - groupStart + 1 }, (_, i) => groupStart + i).map(num => (
                 <PageButton
                   key={num}
                   type="button"
@@ -414,6 +441,11 @@ function Community() {
                   {num}
                 </PageButton>
               ))}
+              {hasNextGroup && (
+                <PageButton type="button" $active={false} onClick={() => setPage(groupEnd + 1)}>
+                  &gt;
+                </PageButton>
+              )}
             </Pagination>
           )}
         </Board>
