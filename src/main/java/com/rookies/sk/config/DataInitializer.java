@@ -59,8 +59,9 @@ public class DataInitializer {
             memberRepository.findByEmail("test@vce.com").ifPresentOrElse(
                     testUser -> {
                         testUser.setPassword(passwordEncoder.encode("test1234"));
+                        testUser.setRole(Member.Role.STAFF);
                         memberRepository.save(testUser);
-                        log.info("기존 테스트 계정 비밀번호 갱신 완료: test@vce.com / test1234");
+                        log.info("기존 테스트 계정 비밀번호/역할 갱신 완료: test@vce.com / test1234 (STAFF)");
                     },
                     () -> {
                         Member testUser = Member.builder()
@@ -71,11 +72,11 @@ public class DataInitializer {
                                 .rrnPrefix("950101")
                                 .address("서울시 강남구")
                                 .accountNumber("123-456-789012")
-                                .role(Member.Role.USER)
+                                .role(Member.Role.STAFF)
                                 .status(Member.Status.ACTIVE)
                                 .build();
                         memberRepository.save(testUser);
-                        log.info("신규 테스트 계정 생성 완료: test@vce.com / test1234");
+                        log.info("신규 테스트 계정 생성 완료: test@vce.com / test1234 (STAFF)");
                     });
 
             // 매니저 계정 (매번 비밀번호 갱신)

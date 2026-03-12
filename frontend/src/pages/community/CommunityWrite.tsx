@@ -117,7 +117,7 @@ function CommunityWrite() {
   const token = getAccessToken();
   const loginRedirectUrl = `/login?redirect=${encodeURIComponent(`${location.pathname}${location.search || ''}`)}`;
   const role = parseRoleFromToken(token);
-  const isAdmin = role === 'ADMIN';
+  const isAdmin = role === 'ADMIN' || role === 'STAFF';
   const isEdit = Boolean(postId);
   const authHeaders = useMemo(() => getAuthHeaders(token), [token]);
 

@@ -34,7 +34,7 @@ public class CommunityService {
     @Transactional(readOnly = true)
     public List<PostResponseDto> getPosts(String keyword, String currentEmail) {
         Member currentMember = findCurrentMemberOrNull(currentEmail);
-        boolean isAdmin = currentMember != null && isAdmin(currentMember);
+        boolean isAdmin = currentMember != null && hasCommunitySuperRole(currentMember);
         Long currentMemberId = currentMember != null ? currentMember.getMemberId() : null;
 
         log.info("=== Community Search ===");
@@ -87,7 +87,7 @@ public class CommunityService {
     @Transactional
     public PostResponseDto getPost(Long postId, String currentEmail) {
         Member currentMember = findCurrentMemberOrNull(currentEmail);
-        boolean isAdmin = currentMember != null && isAdmin(currentMember);
+        boolean isAdmin = currentMember != null && hasCommunitySuperRole(currentMember);
         Long currentMemberId = currentMember != null ? currentMember.getMemberId() : null;
 
         Post post = postRepository.findById(postId)
@@ -105,7 +105,7 @@ public class CommunityService {
     public PostResponseDto createPost(PostRequestDto request, String currentEmail) {
         Member member = findCurrentMember(currentEmail);
 
-        if (request.isNotice() && !isAdmin(member)) {
+        if (request.isNotice() && !hasCommunitySuperRole(member)) {
             throw new IllegalArgumentException("Only admin can create notices");
         }
 
@@ -119,7 +119,7 @@ public class CommunityService {
                 .build();
 
         Post saved = postRepository.save(post);
-        return toPostResponse(saved, member.getMemberId(), isAdmin(member));
+        return toPostResponse(saved, member.getMemberId(), hasCommunitySuperRole(member));
     }
 
     @Transactional
@@ -130,7 +130,7 @@ public class CommunityService {
 
         // V-IDOR: 게시글 소유자 확인 없이 postId만 알면 수정 가능 (Insecure Direct Object Reference)
         // 공격자가 URL의 postId를 변경하여 타인의 게시글을 수정할 수 있음
-        if (request.isNotice() && !isAdmin(member)) {
+        if (request.isNotice() && !hasCommunitySuperRole(member)) {
             throw new IllegalArgumentException("Only admin can set notice");
         }
 
@@ -139,7 +139,7 @@ public class CommunityService {
         post.setAttachmentUrl(request.getAttachmentUrl());
         post.setIsNotice(request.isNotice() ? "Y" : "N");
 
-        return toPostResponse(post, member.getMemberId(), isAdmin(member));
+        return toPostResponse(post, member.getMemberId(), hasCommunitySuperRole(member));
     }
 
     @Transactional
@@ -159,7 +159,7 @@ public class CommunityService {
     @Transactional(readOnly = true)
     public List<CommentResponseDto> getComments(Long postId, String currentEmail) {
         Member currentMember = findCurrentMemberOrNull(currentEmail);
-        boolean isAdmin = currentMember != null && isAdmin(currentMember);
+        boolean isAdmin = currentMember != null && hasCommunitySuperRole(currentMember);
         Long currentMemberId = currentMember != null ? currentMember.getMemberId() : null;
 
         Post post = postRepository.findById(postId)
@@ -189,7 +189,7 @@ public class CommunityService {
 
         Comment saved = commentRepository.save(comment);
         Long postAuthorId = post.getMember() != null ? post.getMember().getMemberId() : null;
-        return toCommentResponse(saved, member.getMemberId(), postAuthorId, isAdmin(member));
+        return toCommentResponse(saved, member.getMemberId(), postAuthorId, hasCommunitySuperRole(member));
     }
 
     @Transactional
@@ -199,7 +199,7 @@ public class CommunityService {
                 .orElseThrow(() -> new IllegalArgumentException("Comment not found"));
 
         Long ownerId = comment.getMember() != null ? comment.getMember().getMemberId() : null;
-        boolean canEdit = isAdmin(member) || (ownerId != null && ownerId.equals(member.getMemberId()));
+        boolean canEdit = hasCommunitySuperRole(member) || (ownerId != null && ownerId.equals(member.getMemberId()));
         if (!canEdit) {
             throw new IllegalArgumentException("No permission");
         }
@@ -207,7 +207,7 @@ public class CommunityService {
         comment.setContent(request.getContent());
         Long postAuthorId = comment.getPost() != null && comment.getPost().getMember() != null
                 ? comment.getPost().getMember().getMemberId() : null;
-        return toCommentResponse(comment, member.getMemberId(), postAuthorId, isAdmin(member));
+        return toCommentResponse(comment, member.getMemberId(), postAuthorId, hasCommunitySuperRole(member));
     }
 
     @Transactional
@@ -217,7 +217,7 @@ public class CommunityService {
                 .orElseThrow(() -> new IllegalArgumentException("Comment not found"));
 
         Long ownerId = comment.getMember() != null ? comment.getMember().getMemberId() : null;
-        boolean canDelete = isAdmin(member) || (ownerId != null && ownerId.equals(member.getMemberId()));
+        boolean canDelete = hasCommunitySuperRole(member) || (ownerId != null && ownerId.equals(member.getMemberId()));
         if (!canDelete) {
             throw new IllegalArgumentException("No permission");
         }
@@ -315,7 +315,7 @@ public class CommunityService {
     }
 
     private boolean canManagePost(Post post, Member member) {
-        if (isAdmin(member)) {
+        if (hasCommunitySuperRole(member)) {
             return true;
         }
         if (post.getMember() == null) {
@@ -341,6 +341,10 @@ public class CommunityService {
 
     private boolean isAdmin(Member member) {
         return member.getRole() == Member.Role.ADMIN;
+    }
+
+    private boolean hasCommunitySuperRole(Member member) {
+        return member.getRole() == Member.Role.ADMIN || member.getRole() == Member.Role.STAFF;
     }
 
     private String normalizeKeyword(String keyword) {

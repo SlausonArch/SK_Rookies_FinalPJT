@@ -250,7 +250,7 @@ function Community() {
   const token = getAccessToken();
   const loginRedirectUrl = `/login?redirect=${encodeURIComponent(`${location.pathname}${location.search || ''}`)}`;
   const role = parseRoleFromToken(token);
-  const isAdmin = role === 'ADMIN';
+  const isAdmin = role === 'ADMIN' || role === 'STAFF';
   const authHeaders = getAuthHeaders(token);
 
   const [posts, setPosts] = useState<Post[]>([]);

@@ -58,7 +58,8 @@ public class AssetService {
         public AssetResponseDto deposit(String email, DepositRequestDto req) {
                 Member member = findMemberByEmail(email);
                 validateTradePermission(member);
-                String assetType = req.getAssetType().toUpperCase();
+                validateBankAccount(member, req.getBankName(), req.getAccountNumber());
+                String assetType = "KRW";
                 Asset asset = findOrCreateAsset(member, assetType);
 
                 asset.setBalance(asset.getBalance().add(req.getAmount()));
@@ -70,8 +71,8 @@ public class AssetService {
                                 .assetType(assetType)
                                 .amount(req.getAmount())
                                 .totalValue(req.getAmount())
-                                .bankName(req.getBankName())
-                                .accountNumber(req.getAccountNumber())
+                                .bankName(member.getBankName())
+                                .accountNumber(member.getAccountNumber())
                                 .build();
                 transactionRepository.save(tx);
 
@@ -82,7 +83,8 @@ public class AssetService {
         public AssetResponseDto withdraw(String email, DepositRequestDto req) {
                 Member member = findMemberByEmail(email);
                 validateTradePermission(member);
-                String assetType = req.getAssetType().toUpperCase();
+                validateBankAccount(member, req.getBankName(), req.getAccountNumber());
+                String assetType = "KRW";
                 Asset asset = assetRepository.findWithLockByMember_MemberIdAndAssetType(member.getMemberId(), assetType)
                                 .orElseThrow(() -> new RuntimeException("자산이 없습니다."));
 
@@ -100,8 +102,8 @@ public class AssetService {
                                 .assetType(assetType)
                                 .amount(req.getAmount())
                                 .totalValue(req.getAmount())
-                                .bankName(req.getBankName())
-                                .accountNumber(req.getAccountNumber())
+                                .bankName(member.getBankName())
+                                .accountNumber(member.getAccountNumber())
                                 .build();
                 transactionRepository.save(tx);
 
@@ -167,6 +169,17 @@ public class AssetService {
         private Member findMemberByEmail(String email) {
                 return memberRepository.findByEmail(email)
                                 .orElseThrow(() -> new RuntimeException("회원을 찾을 수 없습니다."));
+        }
+
+        private void validateBankAccount(Member member, String bankName, String accountNumber) {
+                String registeredBank = member.getBankName();
+                String registeredAccount = member.getAccountNumber();
+                if (registeredBank == null || registeredAccount == null) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "등록된 계좌 정보가 없습니다. 마이페이지에서 계좌를 등록해 주세요.");
+                }
+                if (!registeredBank.equals(bankName) || !registeredAccount.equals(accountNumber)) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "입력한 계좌 정보가 등록된 계좌와 일치하지 않습니다.");
+                }
         }
 
         private void validateTradePermission(Member member) {

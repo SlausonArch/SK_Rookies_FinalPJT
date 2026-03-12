@@ -4,6 +4,20 @@ import axios from 'axios';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+
+function parseRoleFromToken(token: string | null): string | null {
+  if (!token) return null;
+  try {
+    const payload = token.split('.')[1];
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const decoded = JSON.parse(atob(normalized));
+    return typeof decoded.role === 'string' ? decoded.role : null;
+  } catch {
+    return null;
+  }
+}
+
 const Container = styled.div`
   min-height: 100vh;
   background: #f5f6f7;
@@ -189,6 +203,75 @@ const DeleteBtn = styled.button`
   }
 `;
 
+const ReplyBtn = styled.button`
+  background: none;
+  border: 1px solid #4f46e5;
+  color: #4f46e5;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-left: 8px;
+  &:hover {
+    background: #4f46e5;
+    color: white;
+  }
+`;
+
+const ReplyForm = styled.div`
+  margin-top: 12px;
+  padding: 16px;
+  background: #f0f0ff;
+  border-radius: 8px;
+`;
+
+const ReplyTextarea = styled.textarea`
+  width: 100%;
+  min-height: 80px;
+  border: 1px solid #c7d2fe;
+  border-radius: 6px;
+  padding: 10px;
+  font-size: 14px;
+  resize: vertical;
+  margin-bottom: 8px;
+`;
+
+const ReplySubmitBtn = styled.button`
+  background: #4f46e5;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-right: 8px;
+  &:hover { background: #4338ca; }
+`;
+
+const ReplyCancelBtn = styled.button`
+  background: #e2e8f0;
+  color: #475569;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  &:hover { background: #cbd5e1; }
+`;
+
+const StaffBadge = styled.span`
+  background: #4f46e5;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  margin-left: 8px;
+`;
+
 // Modal Styles
 const ModalOverlay = styled.div`
   position: fixed;
@@ -273,31 +356,56 @@ interface Inquiry {
   createdAt: string;
 }
 
+interface AdminInquiry {
+  inquiryId: number;
+  memberId: number;
+  memberEmail: string;
+  memberName: string;
+  title: string;
+  content: string;
+  status: string;
+  reply: string | null;
+  attachmentUrl: string | null;
+  createdAt: string;
+}
+
 const Support: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'faq' | 'inquiry'>('faq');
   const [faqs, setFaqs] = useState<Faq[]>([]);
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
+  const [adminInquiries, setAdminInquiries] = useState<AdminInquiry[]>([]);
 
   // UI State
   const [openFaqId, setOpenFaqId] = useState<number | null>(null);
   const [openInquiryId, setOpenInquiryId] = useState<number | null>(null);
   const [isWriting, setIsWriting] = useState(false);
+  const [replyingId, setReplyingId] = useState<number | null>(null);
+  const [replyText, setReplyText] = useState('');
 
   // Form State
   const [formTitle, setFormTitle] = useState('');
   const [formContent, setFormContent] = useState('');
   const [file, setFile] = useState<File | null>(null);
 
-  const isLoggedIn = !!localStorage.getItem('accessToken');
+  const token = localStorage.getItem('accessToken');
+  const isLoggedIn = !!token;
+  const role = parseRoleFromToken(token);
+  const isStaff = role === 'STAFF' || role === 'ADMIN' || role === 'MANAGER';
 
   useEffect(() => {
     fetchFaqs();
-    if (isLoggedIn) fetchInquiries();
-  }, [isLoggedIn]);
+    if (isLoggedIn) {
+      if (isStaff) {
+        fetchAdminInquiries();
+      } else {
+        fetchInquiries();
+      }
+    }
+  }, [isLoggedIn, isStaff]);
 
   const fetchFaqs = async () => {
     try {
-      const res = await axios.get(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/support/faqs`);
+      const res = await axios.get(`${API_BASE}/api/support/faqs`);
       setFaqs(res.data);
     } catch (e) {
       console.error(e);
@@ -306,10 +414,21 @@ const Support: React.FC = () => {
 
   const fetchInquiries = async () => {
     try {
-      const res = await axios.get(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/support/inquiries`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
+      const res = await axios.get(`${API_BASE}/api/support/inquiries`, {
+        headers: { Authorization: `Bearer ${token}` }
       });
       setInquiries(res.data);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const fetchAdminInquiries = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/api/admin/inquiries`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setAdminInquiries(res.data);
     } catch (e) {
       console.error(e);
     }
@@ -328,7 +447,6 @@ const Support: React.FC = () => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const selectedFile = e.target.files[0];
-      // 10MB 크기 제한
       if (selectedFile.size > 10 * 1024 * 1024) {
         alert('파일 크기는 10MB 이하만 가능합니다.');
         e.target.value = '';
@@ -342,8 +460,8 @@ const Support: React.FC = () => {
   const handleDeleteInquiry = async (inquiryId: number) => {
     if (!window.confirm('문의를 삭제하시겠습니까?')) return;
     try {
-      await axios.delete(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/support/inquiries/${inquiryId}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
+      await axios.delete(`${API_BASE}/api/support/inquiries/${inquiryId}`, {
+        headers: { Authorization: `Bearer ${token}` }
       });
       setInquiries(prev => prev.filter(inq => inq.inquiryId !== inquiryId));
       if (openInquiryId === inquiryId) setOpenInquiryId(null);
@@ -366,9 +484,9 @@ const Support: React.FC = () => {
         formData.append('file', file);
       }
 
-      await axios.post(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/support/inquiries`, formData, {
+      await axios.post(`${API_BASE}/api/support/inquiries`, formData, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'multipart/form-data'
         }
       });
@@ -377,7 +495,11 @@ const Support: React.FC = () => {
       setFormTitle('');
       setFormContent('');
       setFile(null);
-      fetchInquiries();
+      if (isStaff) {
+        fetchAdminInquiries();
+      } else {
+        fetchInquiries();
+      }
       setActiveTab('inquiry');
     } catch (e) {
       console.error(e);
@@ -385,15 +507,46 @@ const Support: React.FC = () => {
     }
   };
 
+  const handleStartReply = (inquiryId: number, existingReply: string | null) => {
+    setReplyingId(inquiryId);
+    setOpenInquiryId(inquiryId);
+    setReplyText(existingReply ?? '');
+  };
+
+  const handleSubmitReply = async (inquiryId: number) => {
+    if (!replyText.trim()) {
+      alert('답글 내용을 입력해주세요.');
+      return;
+    }
+    try {
+      await axios.patch(
+        `${API_BASE}/api/admin/inquiries/${inquiryId}/reply`,
+        { reply: replyText, status: 'ANSWERED' },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setReplyingId(null);
+      setReplyText('');
+      fetchAdminInquiries();
+    } catch {
+      alert('답글 등록에 실패했습니다.');
+    }
+  };
+
   return (
     <Container>
       <Header />
       <Main>
-        <Title>고객센터</Title>
+        <Title>
+          고객센터
+          {isStaff && <StaffBadge>STAFF</StaffBadge>}
+        </Title>
 
         <Tabs>
           <Tab $active={activeTab === 'faq'} onClick={() => setActiveTab('faq')}>자주 묻는 질문</Tab>
-          <Tab $active={activeTab === 'inquiry'} onClick={() => setActiveTab('inquiry')}>1:1 문의 게시판</Tab>
+          <Tab $active={activeTab === 'inquiry'} onClick={() => setActiveTab('inquiry')}>
+            1:1 문의 게시판
+            {isStaff && ' (전체)'}
+          </Tab>
         </Tabs>
 
         <ContentArea>
@@ -418,7 +571,83 @@ const Support: React.FC = () => {
                 ))
               )}
             </div>
+          ) : isStaff ? (
+            /* ── STAFF: 전체 문의 목록 + 답글 ── */
+            <div>
+              <InquiryHeader>
+                <span>전체 문의 내역 ({adminInquiries.length}건)</span>
+                <WriteBtn onClick={handleWriteClick}>문의하기</WriteBtn>
+              </InquiryHeader>
+              {adminInquiries.length === 0 ? (
+                <p style={{ textAlign: 'center', color: '#888', padding: '40px 0' }}>등록된 문의가 없습니다.</p>
+              ) : (
+                <InquiryList>
+                  {adminInquiries.map(inq => (
+                    <InquiryItem key={inq.inquiryId}>
+                      <InquiryTitleRow onClick={() => setOpenInquiryId(openInquiryId === inq.inquiryId ? null : inq.inquiryId)}>
+                        <span>
+                          <StatusBadge $status={inq.status}>
+                            {inq.status === 'PENDING' ? '답변대기' : '답변완료'}
+                          </StatusBadge>
+                          {inq.title}
+                          <span style={{ fontSize: 12, color: '#6b7280', fontWeight: 400, marginLeft: 8 }}>
+                            {inq.memberName} ({inq.memberEmail})
+                          </span>
+                        </span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: '13px', color: '#999', fontWeight: 400 }}>
+                            {new Date(inq.createdAt).toLocaleDateString()}
+                          </span>
+                          <ReplyBtn onClick={e => { e.stopPropagation(); handleStartReply(inq.inquiryId, inq.reply); }}>
+                            {inq.reply ? '답글 수정' : '답글 달기'}
+                          </ReplyBtn>
+                        </span>
+                      </InquiryTitleRow>
+
+                      {openInquiryId === inq.inquiryId && (
+                        <>
+                          <InquiryContent>
+                            <strong>문의 내용:</strong><br />
+                            {inq.content}
+                            {inq.attachmentUrl && (
+                              <div style={{ marginTop: '12px' }}>
+                                <a href={`${API_BASE}${inq.attachmentUrl}`} target="_blank" rel="noreferrer" style={{ color: '#093687', fontWeight: 600, textDecoration: 'underline' }}>
+                                  📎 첨부파일 보기
+                                </a>
+                              </div>
+                            )}
+                          </InquiryContent>
+
+                          {inq.reply && (
+                            <InquiryReply>
+                              <strong>답변:</strong><br />
+                              {inq.reply}
+                            </InquiryReply>
+                          )}
+
+                          {replyingId === inq.inquiryId && (
+                            <ReplyForm onClick={e => e.stopPropagation()}>
+                              <strong style={{ fontSize: 13, color: '#4f46e5' }}>답글 작성</strong>
+                              <ReplyTextarea
+                                value={replyText}
+                                onChange={e => setReplyText(e.target.value)}
+                                placeholder="답글 내용을 입력하세요."
+                              />
+                              <div>
+                                <ReplySubmitBtn onClick={() => void handleSubmitReply(inq.inquiryId)}>등록</ReplySubmitBtn>
+                                <ReplyCancelBtn onClick={() => { setReplyingId(null); setReplyText(''); }}>취소</ReplyCancelBtn>
+                              </div>
+                            </ReplyForm>
+                          )}
+                        </>
+                      )}
+                    </InquiryItem>
+                  ))}
+                </InquiryList>
+              )}
+            </div>
           ) : (
+            /* ── 일반 사용자: 내 문의 목록 ── */
             <div>
               <InquiryHeader>
                 <span>내 문의 내역 ({inquiries.length}건)</span>
@@ -457,7 +686,7 @@ const Support: React.FC = () => {
                             {inq.content}
                             {inq.attachmentUrl && (
                               <div style={{ marginTop: '12px' }}>
-                                <a href={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}${inq.attachmentUrl}`} target="_blank" rel="noreferrer" style={{ color: '#093687', fontWeight: 600, textDecoration: 'underline' }}>
+                                <a href={`${API_BASE}${inq.attachmentUrl}`} target="_blank" rel="noreferrer" style={{ color: '#093687', fontWeight: 600, textDecoration: 'underline' }}>
                                   📎 첨부파일 보기
                                 </a>
                               </div>
