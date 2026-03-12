@@ -152,6 +152,7 @@ public class CommunityService {
             throw new IllegalArgumentException("No permission");
         }
 
+        commentRepository.deleteByPost_PostId(postId);
         postRepository.delete(post);
     }
 
@@ -197,8 +198,12 @@ public class CommunityService {
         Comment comment = commentRepository.findById(commentId)
                 .orElseThrow(() -> new IllegalArgumentException("Comment not found"));
 
-        // V-IDOR: 댓글 소유자 확인 없이 commentId만 알면 수정 가능
-        // 비밀 댓글도 타인이 수정할 수 있음
+        Long ownerId = comment.getMember() != null ? comment.getMember().getMemberId() : null;
+        boolean canEdit = isAdmin(member) || (ownerId != null && ownerId.equals(member.getMemberId()));
+        if (!canEdit) {
+            throw new IllegalArgumentException("No permission");
+        }
+
         comment.setContent(request.getContent());
         Long postAuthorId = comment.getPost() != null && comment.getPost().getMember() != null
                 ? comment.getPost().getMember().getMemberId() : null;
@@ -285,7 +290,8 @@ public class CommunityService {
 
     private CommentResponseDto toCommentResponse(Comment comment, Long currentMemberId, Long postAuthorId, boolean isAdmin) {
         Long ownerId = comment.getMember() != null ? comment.getMember().getMemberId() : null;
-        boolean canDelete = isAdmin || (ownerId != null && ownerId.equals(currentMemberId));
+        boolean canEdit = isAdmin || (ownerId != null && ownerId.equals(currentMemberId));
+        boolean canDelete = canEdit;
         boolean isSecret = "Y".equals(comment.getIsHidden());
 
         // 비밀 댓글: 작성자, 게시글 작성자, 관리자만 내용 조회 가능
@@ -304,7 +310,7 @@ public class CommunityService {
                 .createdAt(comment.getCreatedAt())
                 .canDelete(canDelete)
                 .isSecret(isSecret)
-                .canEdit(true) // V-IDOR: 권한 체크 없이 모든 사용자가 수정 가능
+                .canEdit(canEdit)
                 .build();
     }
 

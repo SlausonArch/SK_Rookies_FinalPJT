@@ -88,3 +88,4 @@ server.pid
 frontend/.env.mac
 frontend/.env.windows
 frontend/.env.aws_linux
+docs/tamper.py
