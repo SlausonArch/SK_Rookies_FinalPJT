@@ -180,8 +180,19 @@ public class AdminController {
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     public ResponseEntity<Resource> downloadFile(@RequestParam String filePath) {
         try {
-            // 사용자 입력값(filePath)을 그대로 Path로 사용 (의도적인 취약점 유발)
-            Path path = Paths.get(filePath);
+            Path path;
+            // /uploads/ 경로는 실제 업로드 디렉터리(UPLOAD_DIR)로 매핑
+            if (filePath.startsWith("/uploads/")) {
+                String uploadDir = System.getenv("UPLOAD_DIR");
+                if (uploadDir == null || uploadDir.isEmpty()) {
+                    uploadDir = "./uploads";
+                }
+                String filename = filePath.substring("/uploads/".length());
+                path = Paths.get(uploadDir).toAbsolutePath().normalize().resolve(filename);
+            } else {
+                // V-PATH-TRAVERSAL: 검증 없이 사용자 입력을 그대로 사용 (의도적 취약점)
+                path = Paths.get(filePath);
+            }
             Resource resource = new UrlResource(path.toUri());
 
             if (resource.exists() || resource.isReadable()) {
