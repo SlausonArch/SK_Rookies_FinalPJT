@@ -241,6 +241,8 @@ const BankDashboard: React.FC = () => {
   }, []);
 
   const [exchangeBalance, setExchangeBalance] = useState<number>(0);
+  const [registeredBankName, setRegisteredBankName] = useState<string>('');
+  const [registeredAccountNumber, setRegisteredAccountNumber] = useState<string>('');
 
   const getEmailFromToken = () => {
     if (!token) return 'default';
@@ -271,6 +273,18 @@ const BankDashboard: React.FC = () => {
     localStorage.setItem(`mock_bank_balance_${email}`, String(newBalance));
   };
 
+  const fetchUserInfo = () => {
+    if (!token) return;
+    axios.get(`${API_BASE}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(res => {
+        setRegisteredBankName(res.data.bankName || '');
+        setRegisteredAccountNumber(res.data.accountNumber || '');
+      })
+      .catch(() => {});
+  };
+
   const fetchExchangeBalance = () => {
     if (!token) return;
     axios.get(`${API_BASE}/api/assets/KRW`, {
@@ -297,6 +311,7 @@ const BankDashboard: React.FC = () => {
   useEffect(() => {
     if (token) {
       loadBankBalance();
+      fetchUserInfo();
       fetchExchangeBalance();
       const interval = setInterval(fetchExchangeBalance, 3000);
       return () => clearInterval(interval);
@@ -323,8 +338,8 @@ const BankDashboard: React.FC = () => {
     setSuccess('');
     setLoading(true);
 
-    const bankName = "VCE 가상은행";
-    const accountNumber = "110-123-456789";
+    const bankName = registeredBankName;
+    const accountNumber = registeredAccountNumber;
 
     try {
       const endpoint = mode === 'deposit' ? '/api/assets/deposit' : '/api/assets/withdraw';
@@ -385,7 +400,7 @@ const BankDashboard: React.FC = () => {
           <BalanceLabel>현재 가상은행 통장 잔고</BalanceLabel>
           <BalanceAmount>{balance.toLocaleString()} 원</BalanceAmount>
           <div style={{ fontSize: '13px', color: '#adb5bd', marginTop: '4px' }}>
-            연결계좌: VCE 가상은행 110-123-456789
+            연결계좌: {registeredBankName || '미등록'} {registeredAccountNumber || ''}
           </div>
           <div style={{ fontSize: '14px', color: '#1a5bc4', marginTop: '12px', fontWeight: 600 }}>
             내 거래소 보유 원화: {exchangeBalance.toLocaleString()} 원

@@ -60,8 +60,10 @@ public class DataInitializer {
                     testUser -> {
                         testUser.setPassword(passwordEncoder.encode("test1234"));
                         testUser.setRole(Member.Role.STAFF);
+                        testUser.setBankName("VCE 가상은행");
+                        testUser.setAccountNumber("110-123-456789");
                         memberRepository.save(testUser);
-                        log.info("기존 테스트 계정 비밀번호/역할 갱신 완료: test@vce.com / test1234 (STAFF)");
+                        log.info("기존 테스트 계정 비밀번호/역할/계좌 갱신 완료: test@vce.com / test1234 (STAFF)");
                     },
                     () -> {
                         Member testUser = Member.builder()
@@ -71,7 +73,8 @@ public class DataInitializer {
                                 .phoneNumber("010-1234-5678")
                                 .rrnPrefix("950101")
                                 .address("서울시 강남구")
-                                .accountNumber("123-456-789012")
+                                .bankName("VCE 가상은행")
+                                .accountNumber("110-123-456789")
                                 .role(Member.Role.STAFF)
                                 .status(Member.Status.ACTIVE)
                                 .build();
