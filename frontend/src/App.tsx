@@ -33,7 +33,7 @@ function App() {
 
   useEffect(() => {
     syncAuthState();
-    const interval = setInterval(syncAuthState, 1000);
+    const interval = setInterval(syncAuthState, 5000);
     return () => clearInterval(interval);
   }, []);
 

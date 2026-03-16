@@ -929,7 +929,7 @@ const AdminDashboard = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const userName = getAdminName() || '관리자';
-  const token = getAdminAccessToken();
+  const [token, setToken] = useState<string | null>(getAdminAccessToken);
 
   const [stats, setStats] = useState<Stats | null>(null);
   const [members, setMembers] = useState<MemberRow[]>([]);
@@ -991,14 +991,31 @@ const AdminDashboard = () => {
   const [txTotal, setTxTotal] = useState(0);
   const [txTotalPages, setTxTotalPages] = useState(0);
 
+  // 마운트 시 인증 확인 + 다른 탭 로그아웃 감지
+  useEffect(() => {
+    const checkAuth = () => {
+      const currentToken = getAdminAccessToken();
+      const r = getAdminRole();
+      if (!currentToken || !r) {
+        navigate('/admin/login', { replace: true });
+        return;
+      }
+      setToken(currentToken);
+    };
+
+    checkAuth();
+    window.addEventListener('storage', checkAuth);
+    return () => window.removeEventListener('storage', checkAuth);
+  }, [navigate]);
+
+  // STAFF 권한 탭 보정 (마운트 시 1회)
   useEffect(() => {
     const r = getAdminRole();
-    if (!token || !r) navigate('/admin/login', { replace: true });
-    // 초기 접속 시 권한에 따라 기본 활성화 탭 보정
     if (r === 'STAFF' && !['community', 'inquiries'].includes(activeMenu)) {
       setActiveMenu('community');
     }
-  }, [navigate, activeMenu]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
 
