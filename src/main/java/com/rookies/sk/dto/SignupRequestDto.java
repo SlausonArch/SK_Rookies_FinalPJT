@@ -12,7 +12,7 @@ public class SignupRequestDto {
     private String name;
 
     @NotBlank(message = "주민등록번호 앞자리를 입력해 주세요.")
-    @Pattern(regexp = "\\d{6}[1-4]", message = "주민등록번호 형식이 올바르지 않습니다.")
+    @Pattern(regexp = "\\d{6}-?[1-4]", message = "주민등록번호 형식이 올바르지 않습니다.")
     private String rrnPrefix;
 
     @NotBlank(message = "전화번호를 입력해 주세요.")
