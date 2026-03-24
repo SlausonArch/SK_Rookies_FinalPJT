@@ -292,7 +292,7 @@ public class AuthController {
             return ResponseEntity.status(401).body("refresh token이 아닙니다.");
         }
         // 이미 사용된(블랙리스트) refresh token 차단
-        if (tokenBlacklistService.isBlacklisted(jwtTokenProvider.getTokenId(refreshToken))) {
+        if (tokenBlacklistService.isRevoked(refreshToken)) {
             return ResponseEntity.status(401).body("이미 사용된 refresh token입니다.");
         }
         try {
