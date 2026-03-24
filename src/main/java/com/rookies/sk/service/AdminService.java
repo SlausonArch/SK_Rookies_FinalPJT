@@ -208,11 +208,6 @@ public class AdminService {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new RuntimeException("회원을 찾을 수 없습니다."));
 
-        if ("ACTIVE".equalsIgnoreCase(status)
-                && (member.getIdPhotoUrl() == null || member.getIdPhotoUrl().isBlank())) {
-            throw new RuntimeException("신분증 제출 확인 후에만 ACTIVE 승인할 수 있습니다.");
-        }
-
         member.setStatus(Member.Status.valueOf(status));
         memberRepository.save(member);
 

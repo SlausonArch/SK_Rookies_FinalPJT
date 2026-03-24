@@ -6,7 +6,7 @@ export const USER_REFRESH_TOKEN_KEY = 'refreshToken';
 export const USER_TOKEN_COOKIE = 'vce_token';
 export const USER_LOGGED_OUT_SENTINEL = 'LOGGED_OUT';
 
-export const ADMIN_ACCESS_TOKEN_KEY = 'adminAccessToken';
+export const ADMIN_ACCESS_TOKEN_KEY = 'token';
 export const ADMIN_TOKEN_COOKIE = 'vce_admin_token';
 export const ADMIN_LOGGED_OUT_SENTINEL = 'ADMIN_LOGGED_OUT';
 
@@ -44,20 +44,25 @@ function getJwtIat(token: string | null): number {
 
   try {
     const payload = token.split('.')[1];
-    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
-    const decoded = JSON.parse(atob(normalized));
+    const decoded = JSON.parse(decodeBase64Url(payload));
     return Number(decoded.iat) || 0;
   } catch {
     return 0;
   }
 }
 
+function decodeBase64Url(str: string): string {
+  const normalized = str.replace(/-/g, '+').replace(/_/g, '/');
+  const binary = atob(normalized);
+  const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+  return new TextDecoder('utf-8').decode(bytes);
+}
+
 function getJwtPayload(token: string | null): Record<string, unknown> | null {
   if (!token || token.length < 20) return null;
   try {
     const payload = token.split('.')[1];
-    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
-    return JSON.parse(atob(normalized));
+    return JSON.parse(decodeBase64Url(payload));
   } catch {
     return null;
   }
@@ -108,10 +113,10 @@ function syncTokenPair(
 
 // 레거시 키 정리 (이전 버전 호환)
 function migrateLegacyAdminSession() {
-  const LEGACY_KEYS = ['token', 'role', 'email', 'name', 'adminRole', 'adminEmail', 'adminName'];
-  const legacyToken = localStorage.getItem('token');
+  // 구버전 adminAccessToken 키 → token으로 마이그레이션
+  const LEGACY_KEYS = ['adminAccessToken', 'role', 'email', 'name', 'adminRole', 'adminEmail', 'adminName'];
+  const legacyToken = localStorage.getItem('adminAccessToken');
 
-  // 구버전 token 키가 있고 adminAccessToken이 없으면 마이그레이션
   if (legacyToken && !localStorage.getItem(ADMIN_ACCESS_TOKEN_KEY)) {
     localStorage.setItem(ADMIN_ACCESS_TOKEN_KEY, legacyToken);
     setCookie(ADMIN_TOKEN_COOKIE, legacyToken);
