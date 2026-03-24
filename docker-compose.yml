@@ -20,6 +20,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+    restart: unless-stopped
 
   # 2. Backend (Spring Boot Monolith)
   backend:
@@ -47,8 +48,9 @@ services:
       - NAVER_CLIENT_ID=${NAVER_CLIENT_ID}
       - NAVER_CLIENT_SECRET=${NAVER_CLIENT_SECRET}
       - SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_NAVER_REDIRECT_URI=${NAVER_REDIRECT_URI}
+    restart: unless-stopped
 
-  # 3. Frontend - Exchange & Admin
+  # 3. Frontend - Exchange
   exchange-front:
     build: ./frontend
     ports:
@@ -60,6 +62,7 @@ services:
       - VITE_APP_MODE=exchange
     stdin_open: true
     tty: true
+    restart: unless-stopped
 
   # 4. Frontend - Bank
   bank-front:
@@ -73,6 +76,7 @@ services:
       - VITE_APP_MODE=bank
     stdin_open: true
     tty: true
+    restart: unless-stopped
 
   # 5. Frontend - Admin
   admin-front:
@@ -86,6 +90,7 @@ services:
       - VITE_APP_MODE=admin
     stdin_open: true
     tty: true
+    restart: unless-stopped
 
 volumes:
   oracle-data:

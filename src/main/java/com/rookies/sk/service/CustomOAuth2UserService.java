@@ -54,7 +54,16 @@ public class CustomOAuth2UserService implements OAuth2UserService<OAuth2UserRequ
         
         return memberRepository.findByEmail(effectiveEmail)
                 .map(existingMember -> {
-                    // 필요 시 업데이트 로직 (이미 있는 경우)
+                    // 탈퇴 계정이 재가입 시도 → 계정 초기화하여 재가입 허용
+                    if (existingMember.getStatus() == Member.Status.WITHDRAWN) {
+                        existingMember.setRole(Member.Role.GUEST);
+                        existingMember.setStatus(Member.Status.PENDING);
+                        existingMember.setName(userProfile.getName());
+                        existingMember.setPassword(UUID.randomUUID().toString());
+                        existingMember.setIdPhotoUrl(null);
+                        existingMember.setLoginFailCount(0);
+                        return memberRepository.save(existingMember);
+                    }
                     return existingMember;
                 })
                 .orElseGet(() -> {
