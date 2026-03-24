@@ -1010,6 +1010,29 @@ const AdminDashboard = () => {
     return () => window.removeEventListener('storage', checkAuth);
   }, [navigate]);
 
+  // 1분 유휴 시 자동 로그아웃
+  useEffect(() => {
+    const IDLE_MS = 60 * 1000;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const reset = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        clearAdminSession(true);
+        navigate('/admin/login', { replace: true });
+      }, IDLE_MS);
+    };
+
+    const events = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart'];
+    events.forEach(e => window.addEventListener(e, reset));
+    reset();
+
+    return () => {
+      clearTimeout(timer);
+      events.forEach(e => window.removeEventListener(e, reset));
+    };
+  }, [navigate]);
+
   // STAFF 권한 탭 보정 (마운트 시 1회)
   useEffect(() => {
     const r = getAdminRole();
