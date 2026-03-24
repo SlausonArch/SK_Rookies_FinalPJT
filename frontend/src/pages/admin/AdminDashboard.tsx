@@ -1521,7 +1521,8 @@ const AdminDashboard = () => {
                         </td>
                         <td>{fmtDate(m.createdAt)}</td>
                         <td style={{ display: 'flex', gap: '4px', alignItems: 'center', height: '100%', minHeight: '44px' }}>
-                          <Select value={m.status} onChange={e => handleStatusChange(m.memberId, e.target.value)} style={{ width: '110px' }}>
+                          <Select value={m.status} onChange={e => handleStatusChange(m.memberId, e.target.value)} style={{ width: '115px' }}>
+                            <option value="PENDING" disabled>PENDING</option>
                             <option value="ACTIVE">ACTIVE</option>
                             <option value="LOCKED">LOCKED</option>
                             <option value="WITHDRAWN">WITHDRAWN</option>
