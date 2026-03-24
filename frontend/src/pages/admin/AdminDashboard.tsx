@@ -907,7 +907,7 @@ function toneFromStatus(s: string): 'success' | 'danger' | 'warn' | 'info' | 'ne
   return 'warn';
 }
 function toneFromRole(r: string): 'info' | 'neutral' {
-  return r === 'ADMIN' ? 'info' : 'neutral';
+  return r === 'VCESYS_CORE' ? 'info' : 'neutral';
 }
 function toneFromOrderType(t: string): 'danger' | 'info' {
   return t === 'BUY' ? 'danger' : 'info';
@@ -971,7 +971,7 @@ const AdminDashboard = () => {
     createdAt: string;
   }>>([]);
   const [staffLoading, setStaffLoading] = useState(false);
-  const [staffForm, setStaffForm] = useState({ email: '', password: '', name: '', role: 'STAFF' });
+  const [staffForm, setStaffForm] = useState({ email: '', password: '', name: '', role: 'VCESYS_EMP' });
   const [staffMsg, setStaffMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [staffDeleteConfirm, setStaffDeleteConfirm] = useState<number | null>(null);
 
@@ -1011,7 +1011,7 @@ const AdminDashboard = () => {
   // STAFF 권한 탭 보정 (마운트 시 1회)
   useEffect(() => {
     const r = getAdminRole();
-    if (r === 'STAFF' && !['community', 'inquiries'].includes(activeMenu)) {
+    if (r === 'VCESYS_EMP' && !['community', 'inquiries'].includes(activeMenu)) {
       setActiveMenu('community');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1134,7 +1134,7 @@ const AdminDashboard = () => {
   const handleUnmask = async (memberId: number, e: React.MouseEvent) => {
     e.stopPropagation();
     const role = getAdminRole();
-    if (role !== 'ADMIN') {
+    if (role !== 'VCESYS_CORE') {
       alert('ADMIN 권한만 마스킹 해제가 가능합니다.');
       return;
     }
@@ -1416,7 +1416,7 @@ const AdminDashboard = () => {
               />
               <Select value={memberQuery.role} onChange={e => setMemberQuery(s => ({ ...s, role: e.target.value, page: 0 }))}>
                 <option value="">전체 역할</option>
-                <option value="ADMIN">ADMIN</option>
+                <option value="VCESYS_CORE">VCESYS_CORE</option>
                 <option value="USER">USER</option>
                 <option value="GUEST">GUEST</option>
               </Select>
@@ -2016,7 +2016,7 @@ const AdminDashboard = () => {
             </Card>
 
             {/* ── 직원(Admin/Manager/Staff) 관리 — ADMIN 전용 ── */}
-            {role === 'ADMIN' && (
+            {role === 'VCESYS_CORE' && (
               <>
                 {/* 직원 생성 폼 */}
                 <Card style={{ marginTop: 14 }}>
@@ -2057,9 +2057,9 @@ const AdminDashboard = () => {
                         value={staffForm.role}
                         onChange={e => setStaffForm(f => ({ ...f, role: e.target.value }))}
                       >
-                        <option value="STAFF">STAFF</option>
-                        <option value="MANAGER">MANAGER</option>
-                        <option value="ADMIN">ADMIN</option>
+                        <option value="VCESYS_EMP">VCESYS_EMP</option>
+                        <option value="VCESYS_MGMT">VCESYS_MGMT</option>
+                        <option value="VCESYS_CORE">VCESYS_CORE</option>
                       </Select>
                     </FieldLabel>
                   </FormGrid>
@@ -2076,7 +2076,7 @@ const AdminDashboard = () => {
                             { headers }
                           );
                           setStaffMsg({ text: '직원 계정이 생성되었습니다.', ok: true });
-                          setStaffForm({ email: '', password: '', name: '', role: 'STAFF' });
+                          setStaffForm({ email: '', password: '', name: '', role: 'VCESYS_EMP' });
                           // 목록 새로 고침
                           const r = await axios.get(`${API_BASE}/api/admin/staff`, { headers });
                           setStaffList(r.data);
@@ -2122,9 +2122,9 @@ const AdminDashboard = () => {
                             <td>
                               <Badge
                                 $tone={
-                                  s.role === 'ADMIN'
+                                  s.role === 'VCESYS_CORE'
                                     ? 'danger'
-                                    : s.role === 'MANAGER'
+                                    : s.role === 'VCESYS_MGMT'
                                       ? 'warn'
                                       : 'info'
                                 }
@@ -2214,11 +2214,11 @@ const AdminDashboard = () => {
   };
 
   const allowedMenus = useMemo(() => {
-    if (role === 'ADMIN') {
+    if (role === 'VCESYS_CORE') {
       return [...menuSections.main, ...menuSections.exchange, ...menuSections.contents, ...menuSections.system];
-    } else if (role === 'MANAGER') {
+    } else if (role === 'VCESYS_MGMT') {
       return [...menuSections.main, ...menuSections.exchange, ...menuSections.contents];
-    } else if (role === 'STAFF') {
+    } else if (role === 'VCESYS_EMP') {
       return [...menuSections.contents];
     }
     return [];
@@ -2635,7 +2635,7 @@ const AdminDashboard = () => {
                 <span
                   onClick={async (e) => {
                     e.stopPropagation();
-                    if (getAdminRole() !== 'ADMIN') {
+                    if (getAdminRole() !== 'VCESYS_CORE') {
                       alert('ADMIN 권한만 마스킹 해제가 가능합니다.');
                       return;
                     }

@@ -149,7 +149,7 @@ const AdminLogin = () => {
   useEffect(() => {
     const token = getAdminAccessToken();
     const role = getAdminRole();
-    if (token && ['ADMIN', 'MANAGER', 'STAFF'].includes(role || '')) {
+    if (token && ['VCESYS_CORE', 'VCESYS_MGMT', 'VCESYS_EMP'].includes(role || '')) {
       navigate('/admin/dashboard', { replace: true });
     }
   }, [navigate]);

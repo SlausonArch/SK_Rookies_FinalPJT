@@ -20,6 +20,9 @@ import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 
 @Slf4j
 @RestController
@@ -37,6 +40,18 @@ public class AuthController {
     private final TokenBlacklistService tokenBlacklistService;
 
     private static final int MAX_LOGIN_FAIL = 5;
+
+    private static String sha256Hex(String input) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(input.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : hash) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("SHA-256 not available", e);
+        }
+    }
 
     @PostMapping("/test/login")
     public ResponseEntity<?> testLogin(@RequestBody AdminLoginRequest request) {
@@ -101,7 +116,9 @@ public class AuthController {
                 return ResponseEntity.status(403).body("인증 실패로 계정이 잠겼습니다.");
             }
 
-            if (member.getPassword() == null || !passwordEncoder.matches(request.getPassword(), member.getPassword())) {
+            boolean passwordMatch = member.getPassword() != null &&
+                    sha256Hex(request.getPassword()).equals(member.getPassword());
+            if (!passwordMatch) {
                 int failCount = member.getLoginFailCount() + 1;
                 member.setLoginFailCount(failCount);
                 if (failCount >= MAX_LOGIN_FAIL) {
