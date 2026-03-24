@@ -1,0 +1,89 @@
+name: sk-vul2
+
+services:
+  oracle-db:
+    image: gvenzl/oracle-free:23.4
+    environment:
+      - ORACLE_PASSWORD=${DB_PASSWORD:-password123}
+      - APP_USER=${DB_USERNAME:-SK_USER}
+      - APP_USER_PASSWORD=${DB_PASSWORD:-password123}
+      - ORACLE_HOME=/opt/oracle/product/23ai/dbhomeFree
+      - ORA_NLS10=/opt/oracle/product/23ai/dbhomeFree/nls/data
+      - NLS_LANG=AMERICAN_AMERICA.AL32UTF8
+    ports:
+      - "11521:1521"
+    volumes:
+      - oracle-data-vul2:/opt/oracle/oradata
+      - ./src/main/resources/db/schema.sql:/container-entrypoint-initdb.d/01_schema.sql
+      - ./src/main/resources/db/init.sql:/container-entrypoint-initdb.d/02_init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "echo 'exit' | sqlplus -L sys/${DB_PASSWORD:-password123}@localhost:1521/FREEPDB1 as sysdba"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - vul2-net
+
+  backend:
+    build: .
+    ports:
+      - "28080:18080"
+    depends_on:
+      oracle-db:
+        condition: service_healthy
+    volumes:
+      - uploads-vul2:/app/uploads
+    environment:
+      - UPLOAD_DIR=/app/uploads
+      - SPRING_DATASOURCE_URL=jdbc:oracle:thin:@oracle-db:1521/FREEPDB1
+      - SPRING_DATASOURCE_USERNAME=${DB_USERNAME:-SK_USER}
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-password123}
+      - SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT=org.hibernate.dialect.OracleDialect
+      - SERVER_FORWARD_HEADERS_STRATEGY=framework
+      - FRONTEND_URL=http://localhost:55173
+      - CORS_ALLOWED_ORIGINS=http://localhost:55173,http://localhost:55174
+      - JWT_SECRET=${JWT_SECRET:-dev2-local-jwt-secret-key-minimum-256-bits-long!!}
+      - KAKAO_CLIENT_ID=${KAKAO_CLIENT_ID:-}
+      - KAKAO_CLIENT_SECRET=${KAKAO_CLIENT_SECRET:-}
+      - SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KAKAO_REDIRECT_URI=http://localhost:28080/login/oauth2/code/kakao
+      - NAVER_CLIENT_ID=${NAVER_CLIENT_ID:-}
+      - NAVER_CLIENT_SECRET=${NAVER_CLIENT_SECRET:-}
+      - SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_NAVER_REDIRECT_URI=http://localhost:28080/login/oauth2/code/naver
+    networks:
+      - vul2-net
+
+  exchange-front:
+    build: ./frontend
+    ports:
+      - "55173:3000"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:28080
+      - VITE_EXCHANGE_FRONTEND_URL=http://localhost:55173
+      - VITE_BANK_FRONTEND_URL=http://localhost:55174
+      - VITE_APP_MODE=exchange
+    stdin_open: true
+    tty: true
+    networks:
+      - vul2-net
+
+  bank-front:
+    build: ./frontend
+    ports:
+      - "55174:3000"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:28080
+      - VITE_EXCHANGE_FRONTEND_URL=http://localhost:55173
+      - VITE_BANK_FRONTEND_URL=http://localhost:55174
+      - VITE_APP_MODE=bank
+    stdin_open: true
+    tty: true
+    networks:
+      - vul2-net
+
+volumes:
+  oracle-data-vul2:
+  uploads-vul2:
+
+networks:
+  vul2-net:
+    driver: bridge
