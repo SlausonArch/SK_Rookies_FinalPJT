@@ -1,5 +1,6 @@
 package com.rookies.sk.controller;
 
+import com.rookies.sk.dto.SupportDto;
 import com.rookies.sk.entity.Faq;
 import com.rookies.sk.entity.Inquiry;
 import com.rookies.sk.service.FileService;
@@ -33,16 +34,20 @@ public class SupportController {
 
     // 내 1:1 문의 내역 조회 (로그인 필수)
     @GetMapping("/inquiries")
-    public ResponseEntity<List<Inquiry>> getMyInquiries(@AuthenticationPrincipal UserDetails userDetails) {
+    public ResponseEntity<List<SupportDto.InquiryResponse>> getMyInquiries(@AuthenticationPrincipal UserDetails userDetails) {
         if (userDetails == null) {
             return ResponseEntity.status(401).build();
         }
-        return ResponseEntity.ok(supportService.getMyInquiries(userDetails.getUsername()));
+        List<SupportDto.InquiryResponse> result = supportService.getMyInquiries(userDetails.getUsername())
+                .stream()
+                .map(SupportDto.InquiryResponse::from)
+                .toList();
+        return ResponseEntity.ok(result);
     }
 
     // 1:1 문의 작성 (로그인 필수, Multipart 파일 첨부 지원)
     @PostMapping(value = "/inquiries", consumes = "multipart/form-data")
-    public ResponseEntity<Inquiry> createInquiry(
+    public ResponseEntity<SupportDto.InquiryResponse> createInquiry(
             @AuthenticationPrincipal UserDetails userDetails,
             @NotBlank @Size(max = 200) @RequestParam("title") String title,
             @NotBlank @Size(max = 5000) @RequestParam("content") String content,
@@ -54,13 +59,11 @@ public class SupportController {
 
         String attachmentUrl = null;
         if (file != null && !file.isEmpty()) {
-            // V-03: No extension check in FileService.storeFile. Files like .php, .jsp can
-            // be uploaded.
             attachmentUrl = fileService.storeFile(file);
         }
 
         Inquiry savedInquiry = supportService.createInquiry(userDetails.getUsername(), title, content, attachmentUrl);
-        return ResponseEntity.ok(savedInquiry);
+        return ResponseEntity.ok(SupportDto.InquiryResponse.from(savedInquiry));
     }
 
     // 1:1 문의 삭제 (본인만 가능)
