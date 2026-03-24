@@ -92,6 +92,18 @@ function App() {
     );
   }
 
+  if (mode === 'admin') {
+    return (
+      <Router>
+        <Routes>
+          <Route path="/admin/login" element={<AdminLogin />} />
+          <Route path="/admin/dashboard" element={<AdminDashboard />} />
+          <Route path="*" element={<Navigate to="/admin/login" />} />
+        </Routes>
+      </Router>
+    );
+  }
+
   return (
     <Router>
       <Routes>
@@ -112,8 +124,6 @@ function App() {
         <Route path="/mypage" element={<MyPage />} />
         <Route path="/withdrawal-complete" element={<WithdrawalComplete />} />
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-        <Route path="/admin/login" element={<AdminLogin />} />
-        <Route path="/admin/dashboard" element={<AdminDashboard />} />
         <Route path="/" element={<Navigate to="/crypto" />} />
         <Route path="/crypto" element={<Home />} />
         <Route path="*" element={<Navigate to="/crypto" />} />

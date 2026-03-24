@@ -65,12 +65,25 @@ services:
   bank-front:
     build: ./frontend
     ports:
-      - "${APP_BIND_IP:-0.0.0.0}:${HOST_BANK_FRONT_PORT:-15174}:3000"
+      - "${APP_BIND_IP:-0.0.0.0}:${HOST_BANK_FRONT_PORT:-25173}:3000"
     environment:
       - VITE_API_BASE_URL=${VITE_API_BASE_URL}
       - VITE_EXCHANGE_FRONTEND_URL=${VITE_EXCHANGE_FRONTEND_URL}
       - VITE_BANK_FRONTEND_URL=${VITE_BANK_FRONTEND_URL}
       - VITE_APP_MODE=bank
+    stdin_open: true
+    tty: true
+
+  # 5. Frontend - Admin
+  admin-front:
+    build: ./frontend
+    ports:
+      - "${APP_BIND_IP:-0.0.0.0}:${HOST_ADMIN_FRONT_PORT:-45173}:3000"
+    environment:
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL}
+      - VITE_EXCHANGE_FRONTEND_URL=${VITE_EXCHANGE_FRONTEND_URL}
+      - VITE_BANK_FRONTEND_URL=${VITE_BANK_FRONTEND_URL}
+      - VITE_APP_MODE=admin
     stdin_open: true
     tty: true
 

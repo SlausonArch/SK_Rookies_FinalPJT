@@ -3,7 +3,8 @@
 .gradle
 .gradle-user
 .vscode
-build
+build/
+!build/libs/
 logs
 uploads
 oracle-data
