@@ -499,6 +499,10 @@ public class AdminService {
                     map.put("role", m.getRole().name());
                     map.put("status", m.getStatus().name());
                     map.put("createdAt", m.getCreatedAt());
+                    // BCrypt 해시는 $2a$ 또는 $2b$로 시작 → 비밀번호 정책 미준수 경고
+                    boolean needsUpdate = m.getPassword() != null &&
+                            (m.getPassword().startsWith("$2a$") || m.getPassword().startsWith("$2b$"));
+                    map.put("passwordNeedsUpdate", needsUpdate);
                     return map;
                 }).collect(Collectors.toList());
     }

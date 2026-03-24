@@ -17,78 +17,56 @@ WHEN NOT MATCHED THEN
     INSERT (TIER_LEVEL, TIER_NAME, MIN_VOLUME, MAX_VOLUME, FEE_RATE)
     VALUES (S.TIER_LEVEL, S.TIER_NAME, S.MIN_VOLUME, S.MAX_VOLUME, S.FEE_RATE);
 
--- 초기 관리자 계정 (비밀번호: Vcesys!2024, SHA-256)
+-- VCESYS_CORE 계정 (비밀번호: Core!2024, SHA-256)
 MERGE INTO MEMBERS M
-USING (SELECT 'vcesys@vce.com' AS EMAIL FROM DUAL) S
+USING (SELECT 'core@vce.com' AS EMAIL FROM DUAL) S
 ON (M.EMAIL = S.EMAIL)
 WHEN NOT MATCHED THEN
     INSERT (EMAIL, PASSWORD, NAME, ROLE, STATUS, RRN_PREFIX, PHONE_NUMBER, LOGIN_FAIL_COUNT, BANK_BALANCE)
     VALUES (
-        'vcesys@vce.com',
-        '521231819ab1ce4e3a67a94454ebdd7322312b4075e13d1af2f097a9851044b7',
-        '시스템 관리자',
+        'core@vce.com',
+        '99ee3ffd33fd1d1a784c4faf08f329d6342b9dfc43642e41a8e9d74944991376',
+        '코어 관리자',
         'VCESYS_CORE',
         'ACTIVE',
         '000101',
-        '010-0000-0000',
+        '010-0000-0010',
         0,
         50000000
     );
 
--- 매니저 계정 (비밀번호: manager1234)
+-- VCESYS_MGMT 계정 (비밀번호: Mgmt!2024, SHA-256)
 MERGE INTO MEMBERS M
-USING (SELECT 'manager@vce.com' AS EMAIL FROM DUAL) S
+USING (SELECT 'mgmt@vce.com' AS EMAIL FROM DUAL) S
 ON (M.EMAIL = S.EMAIL)
 WHEN NOT MATCHED THEN
     INSERT (EMAIL, PASSWORD, NAME, ROLE, STATUS, RRN_PREFIX, PHONE_NUMBER, LOGIN_FAIL_COUNT, BANK_BALANCE)
     VALUES (
-        'manager@vce.com',
-        '$2a$10$8.UnVuG9HHgffUDAlk8qfOuVGkqRzgVymGe07NWqE2G.n7XN7S4Gi',
-        '매니저',
+        'mgmt@vce.com',
+        '0023b5457f51a30bd54412c24a7440f6c002bf6293b0d8d7c5a1a410081215c8',
+        'MGMT 관리자',
         'VCESYS_MGMT',
         'ACTIVE',
         '000101',
-        '010-0000-0001',
+        '010-0000-0011',
         0,
         50000000
     );
 
--- 스태프 계정 (비밀번호: staff1234)
+-- VCESYS_EMP 계정 (비밀번호: Emp!2024, SHA-256)
 MERGE INTO MEMBERS M
-USING (SELECT 'staff@vce.com' AS EMAIL FROM DUAL) S
+USING (SELECT 'emp@vce.com' AS EMAIL FROM DUAL) S
 ON (M.EMAIL = S.EMAIL)
 WHEN NOT MATCHED THEN
     INSERT (EMAIL, PASSWORD, NAME, ROLE, STATUS, RRN_PREFIX, PHONE_NUMBER, LOGIN_FAIL_COUNT, BANK_BALANCE)
     VALUES (
-        'staff@vce.com',
-        '$2a$10$8.UnVuG9HHgffUDAlk8qfOuVGkqRzgVymGe07NWqE2G.n7XN7S4Gi',
-        '스태프',
+        'emp@vce.com',
+        '9feebcb84f58bfea60324d4cbf505d0a111bfabca9cef83716ab7687f2a35775',
+        'EMP 직원',
         'VCESYS_EMP',
         'ACTIVE',
         '000101',
-        '010-0000-0002',
-        0,
-        50000000
-    );
-
--- 테스트 일반 유저 계정 (비밀번호: test1234)
-MERGE INTO MEMBERS M
-USING (SELECT 'test@vce.com' AS EMAIL FROM DUAL) S
-ON (M.EMAIL = S.EMAIL)
-WHEN NOT MATCHED THEN
-    INSERT (EMAIL, PASSWORD, NAME, ROLE, STATUS, RRN_PREFIX, PHONE_NUMBER,
-            ADDRESS, BANK_NAME, ACCOUNT_NUMBER, LOGIN_FAIL_COUNT, BANK_BALANCE)
-    VALUES (
-        'test@vce.com',
-        '$2a$10$8.UnVuG9HHgffUDAlk8qfOuVGkqRzgVymGe07NWqE2G.n7XN7S4Gi',
-        '테스트 사용자',
-        'VCESYS_EMP',
-        'ACTIVE',
-        '950101',
-        '010-1234-5678',
-        '서울시 강남구',
-        'VCE 가상은행',
-        '110-123-456789',
+        '010-0000-0012',
         0,
         50000000
     );

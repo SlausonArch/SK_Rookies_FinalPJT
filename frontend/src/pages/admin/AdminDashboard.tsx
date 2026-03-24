@@ -970,6 +970,7 @@ const AdminDashboard = () => {
     role: string;
     status: string;
     createdAt: string;
+    passwordNeedsUpdate: boolean;
   }>>([]);
   const [staffLoading, setStaffLoading] = useState(false);
   const [staffForm, setStaffForm] = useState({ email: '', password: '', name: '', role: 'VCESYS_EMP' });
@@ -2157,6 +2158,7 @@ const AdminDashboard = () => {
                           <th>이름</th>
                           <th>역할</th>
                           <th>상태</th>
+                          <th>비밀번호</th>
                           <th>생성일</th>
                           <th>삭제</th>
                         </tr>
@@ -2184,6 +2186,15 @@ const AdminDashboard = () => {
                               <Badge $tone={s.status === 'ACTIVE' ? 'success' : 'neutral'}>
                                 {s.status}
                               </Badge>
+                            </td>
+                            <td>
+                              {s.passwordNeedsUpdate ? (
+                                <Badge $tone="danger" title="BCrypt 방식으로 저장된 비밀번호입니다. 계정을 삭제 후 재생성하여 비밀번호 정책을 적용해 주세요.">
+                                  ⚠ 정책 미준수
+                                </Badge>
+                              ) : (
+                                <Badge $tone="success">정상</Badge>
+                              )}
                             </td>
                             <td>
                               {s.createdAt
