@@ -117,8 +117,16 @@ public class AuthController {
                 return ResponseEntity.status(403).body("인증 실패로 계정이 잠겼습니다.");
             }
 
-            boolean passwordMatch = member.getPassword() != null &&
-                    sha256Hex(request.getPassword()).equals(member.getPassword());
+            boolean passwordMatch = false;
+            if (member.getPassword() != null) {
+                if (sha256Hex(request.getPassword()).equals(member.getPassword())) {
+                    passwordMatch = true;
+                } else if (passwordEncoder.matches(request.getPassword(), member.getPassword())) {
+                    // BCrypt로 저장된 구버전 계정 → SHA256으로 자동 마이그레이션
+                    member.setPassword(sha256Hex(request.getPassword()));
+                    passwordMatch = true;
+                }
+            }
             if (!passwordMatch) {
                 int failCount = member.getLoginFailCount() + 1;
                 member.setLoginFailCount(failCount);
