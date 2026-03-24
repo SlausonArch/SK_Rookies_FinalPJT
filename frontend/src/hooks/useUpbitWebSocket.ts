@@ -39,9 +39,24 @@ export interface TradeWS {
   sequential_id: number;
 }
 
+const decodeJson = (raw: unknown): Promise<unknown> => {
+  try {
+    if (typeof raw === 'string') return Promise.resolve(JSON.parse(raw));
+    if (raw instanceof ArrayBuffer)
+      return Promise.resolve(JSON.parse(new TextDecoder().decode(raw)));
+    if (raw instanceof Blob)
+      return raw.text().then((t) => JSON.parse(t));
+  } catch {
+    // ignore
+  }
+  return Promise.resolve(null);
+};
+
 export function useUpbitTicker(markets: string[]) {
   const [tickers, setTickers] = useState<Map<string, TickerWS>>(new Map());
   const wsRef = useRef<WebSocket | null>(null);
+  const pendingRef = useRef<Map<string, TickerWS>>(new Map());
+  const flushTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const marketsKey = markets.join(',');
 
   useEffect(() => {
@@ -51,18 +66,17 @@ export function useUpbitTicker(markets: string[]) {
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let pollTimer: ReturnType<typeof setInterval> | null = null;
 
-    const decodeJson = async (raw: unknown) => {
-      try {
-        if (typeof raw === 'string') return JSON.parse(raw);
-        if (raw instanceof Blob) return JSON.parse(await raw.text());
-        if (raw instanceof ArrayBuffer) {
-          return JSON.parse(new TextDecoder().decode(raw));
-        }
-      } catch {
-        return null;
-      }
-      return null;
-    };
+    // 300ms마다 누적된 변경을 한 번에 setState
+    flushTimerRef.current = setInterval(() => {
+      if (pendingRef.current.size === 0) return;
+      const snapshot = new Map(pendingRef.current);
+      pendingRef.current.clear();
+      setTickers((prev) => {
+        const next = new Map(prev);
+        snapshot.forEach((v, k) => next.set(k, v));
+        return next;
+      });
+    }, 300);
 
     const updateFromRest = async () => {
       try {
@@ -94,9 +108,7 @@ export function useUpbitTicker(markets: string[]) {
     const startPolling = () => {
       if (pollTimer) return;
       void updateFromRest();
-      pollTimer = setInterval(() => {
-        void updateFromRest();
-      }, 3000);
+      pollTimer = setInterval(() => void updateFromRest(), 5000);
     };
 
     const stopPolling = () => {
@@ -113,32 +125,26 @@ export function useUpbitTicker(markets: string[]) {
       wsRef.current = ws;
 
       ws.onopen = () => {
-        const wsCodes = markets.slice(0, 100);
+        stopPolling(); // WebSocket 연결 성공 시 폴링 중단
         ws.send(JSON.stringify([
           { ticket: 'vce-ticker' },
-          { type: 'ticker', codes: wsCodes }
+          { type: 'ticker', codes: markets.slice(0, 100) },
         ]));
       };
 
       ws.onmessage = async (event) => {
         const data = await decodeJson(event.data);
-        if (!data || data.type !== 'ticker' || !data.code) return;
-
-        setTickers((prev: Map<string, TickerWS>) => {
-          const next = new Map(prev);
-          next.set(data.code, data as TickerWS);
-          return next;
-        });
+        if (!data || (data as TickerWS).type !== 'ticker' || !(data as TickerWS).code) return;
+        // 바로 setState 대신 pending 버퍼에 누적
+        pendingRef.current.set((data as TickerWS).code, data as TickerWS);
       };
 
-      ws.onerror = () => {
-        startPolling();
-      };
+      ws.onerror = () => startPolling();
 
       ws.onclose = () => {
         startPolling();
         if (cancelled) return;
-        reconnectTimer = setTimeout(connect, 2000);
+        reconnectTimer = setTimeout(connect, 3000);
       };
     };
 
@@ -149,10 +155,10 @@ export function useUpbitTicker(markets: string[]) {
       cancelled = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       stopPolling();
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
+      if (flushTimerRef.current) clearInterval(flushTimerRef.current);
+      if (wsRef.current) wsRef.current.close();
       wsRef.current = null;
+      pendingRef.current.clear();
     };
   }, [marketsKey]);
 
@@ -169,19 +175,6 @@ export function useUpbitOrderbook(market: string) {
     let cancelled = false;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let pollTimer: ReturnType<typeof setInterval> | null = null;
-
-    const decodeJson = async (raw: unknown) => {
-      try {
-        if (typeof raw === 'string') return JSON.parse(raw);
-        if (raw instanceof Blob) return JSON.parse(await raw.text());
-        if (raw instanceof ArrayBuffer) {
-          return JSON.parse(new TextDecoder().decode(raw));
-        }
-      } catch {
-        return null;
-      }
-      return null;
-    };
 
     const updateFromRest = async () => {
       try {
@@ -202,9 +195,7 @@ export function useUpbitOrderbook(market: string) {
     const startPolling = () => {
       if (pollTimer) return;
       void updateFromRest();
-      pollTimer = setInterval(() => {
-        void updateFromRest();
-      }, 1500);
+      pollTimer = setInterval(() => void updateFromRest(), 3000);
     };
 
     const stopPolling = () => {
@@ -221,27 +212,25 @@ export function useUpbitOrderbook(market: string) {
       wsRef.current = ws;
 
       ws.onopen = () => {
+        stopPolling();
         ws.send(JSON.stringify([
           { ticket: 'vce-orderbook' },
-          { type: 'orderbook', codes: [market] }
+          { type: 'orderbook', codes: [market] },
         ]));
-        stopPolling();
       };
 
       ws.onmessage = async (event) => {
         const data = await decodeJson(event.data);
-        if (!data || data.type !== 'orderbook') return;
+        if (!data || (data as OrderbookWS).type !== 'orderbook') return;
         setOrderbook(data as OrderbookWS);
       };
 
-      ws.onerror = () => {
-        startPolling();
-      };
+      ws.onerror = () => startPolling();
 
       ws.onclose = () => {
         startPolling();
         if (cancelled) return;
-        reconnectTimer = setTimeout(connect, 2000);
+        reconnectTimer = setTimeout(connect, 3000);
       };
     };
 
@@ -252,9 +241,7 @@ export function useUpbitOrderbook(market: string) {
       cancelled = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       stopPolling();
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
+      if (wsRef.current) wsRef.current.close();
       wsRef.current = null;
     };
   }, [market]);
@@ -274,24 +261,11 @@ export function useUpbitTrades(market: string) {
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let pollTimer: ReturnType<typeof setInterval> | null = null;
 
-    const decodeJson = async (raw: unknown) => {
-      try {
-        if (typeof raw === 'string') return JSON.parse(raw);
-        if (raw instanceof Blob) return JSON.parse(await raw.text());
-        if (raw instanceof ArrayBuffer) {
-          return JSON.parse(new TextDecoder().decode(raw));
-        }
-      } catch {
-        return null;
-      }
-      return null;
-    };
-
     const updateFromRest = async () => {
       try {
         const rows = await fetchTradeTicks(market, 50);
         if (cancelled) return;
-        const mapped: TradeWS[] = rows.map((row) => ({
+        setTrades(rows.map((row) => ({
           type: 'trade',
           code: row.market,
           trade_price: row.trade_price,
@@ -301,8 +275,7 @@ export function useUpbitTrades(market: string) {
           trade_time: row.trade_time_utc || '',
           trade_timestamp: row.timestamp,
           sequential_id: row.sequential_id,
-        }));
-        setTrades(mapped);
+        })));
       } catch {
         // ignore
       }
@@ -311,9 +284,7 @@ export function useUpbitTrades(market: string) {
     const startPolling = () => {
       if (pollTimer) return;
       void updateFromRest();
-      pollTimer = setInterval(() => {
-        void updateFromRest();
-      }, 2000);
+      pollTimer = setInterval(() => void updateFromRest(), 3000);
     };
 
     const stopPolling = () => {
@@ -330,27 +301,25 @@ export function useUpbitTrades(market: string) {
       wsRef.current = ws;
 
       ws.onopen = () => {
+        stopPolling();
         ws.send(JSON.stringify([
           { ticket: 'vce-trade' },
-          { type: 'trade', codes: [market] }
+          { type: 'trade', codes: [market] },
         ]));
-        stopPolling();
       };
 
       ws.onmessage = async (event) => {
         const data = await decodeJson(event.data);
-        if (!data || data.type !== 'trade') return;
-        setTrades((prev: TradeWS[]) => [data as TradeWS, ...prev].slice(0, 50));
+        if (!data || (data as TradeWS).type !== 'trade') return;
+        setTrades((prev) => [data as TradeWS, ...prev].slice(0, 50));
       };
 
-      ws.onerror = () => {
-        startPolling();
-      };
+      ws.onerror = () => startPolling();
 
       ws.onclose = () => {
         startPolling();
         if (cancelled) return;
-        reconnectTimer = setTimeout(connect, 2000);
+        reconnectTimer = setTimeout(connect, 3000);
       };
     };
 
@@ -361,9 +330,7 @@ export function useUpbitTrades(market: string) {
       cancelled = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       stopPolling();
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
+      if (wsRef.current) wsRef.current.close();
       wsRef.current = null;
     };
   }, [market]);
