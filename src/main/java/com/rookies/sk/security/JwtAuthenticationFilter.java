@@ -58,6 +58,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 writeJsonError(response, HttpServletResponse.SC_FORBIDDEN, "WITHDRAWN_ACCOUNT");
                 return;
             }
+            if (member.getStatus() == Member.Status.AUTH_FAILED) {
+                String requestURI = request.getRequestURI();
+                if (!requestURI.startsWith("/api/support/inquiries") && !requestURI.equals("/api/auth/logout")) {
+                    writeJsonError(response, HttpServletResponse.SC_FORBIDDEN, "AUTH_FAILED_ACCOUNT");
+                    return;
+                }
+            }
             if (!StringUtils.hasText(role)) {
                 writeJsonError(response, HttpServletResponse.SC_UNAUTHORIZED, "INVALID_TOKEN_ROLE");
                 return;

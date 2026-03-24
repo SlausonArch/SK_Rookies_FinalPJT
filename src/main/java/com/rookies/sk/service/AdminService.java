@@ -23,6 +23,9 @@ import java.time.LocalDateTime;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.GrantedAuthority;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 
 @Service
 @RequiredArgsConstructor
@@ -172,8 +175,9 @@ public class AdminService {
         Member.Role roleEnum = isBlank(role) ? null : Member.Role.valueOf(role.toUpperCase());
         Member.Status statusEnum = isBlank(status) ? null : Member.Status.valueOf(status.toUpperCase());
 
+        String sanitizedQ = isBlank(q) ? null : q.trim().replace("%", "").replace("_", "");
         Page<Member> result = memberRepository.searchMembers(
-                isBlank(q) ? null : q.trim(),
+                sanitizedQ,
                 roleEnum,
                 statusEnum,
                 pageable);
@@ -513,12 +517,14 @@ public class AdminService {
                     HttpStatus.BAD_REQUEST, "email, password, name, role은 필수 항목입니다.");
         }
 
-        Set<String> allowedRoles = Set.of("ADMIN", "MANAGER", "STAFF");
+        Set<String> allowedRoles = Set.of("VCESYS_CORE", "VCESYS_MGMT", "VCESYS_EMP");
         String upperRole = role.trim().toUpperCase();
         if (!allowedRoles.contains(upperRole)) {
             throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, "role은 ADMIN / MANAGER / STAFF 중 하나여야 합니다.");
+                    HttpStatus.BAD_REQUEST, "role은 VCESYS_CORE / VCESYS_MGMT / VCESYS_EMP 중 하나여야 합니다.");
         }
+
+        validateAdminPassword(password);
 
         if (memberRepository.existsByEmail(email.trim())) {
             throw new ResponseStatusException(
@@ -527,7 +533,7 @@ public class AdminService {
 
         Member member = Member.builder()
                 .email(email.trim())
-                .password(passwordEncoder.encode(password))
+                .password(sha256Hex(password))
                 .name(name.trim())
                 .role(Member.Role.valueOf(upperRole))
                 .status(Member.Status.ACTIVE)
@@ -604,5 +610,40 @@ public class AdminService {
             return BigDecimal.ZERO;
         }
         return value.max(BigDecimal.ZERO);
+    }
+
+    /**
+     * 관리자 계정 비밀번호 정책 검증
+     * - 최소 8자 이상
+     * - 영문 대소문자, 숫자, 특수문자 각 1개 이상 포함
+     */
+    private void validateAdminPassword(String password) {
+        if (isBlank(password) || password.length() < 8) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "비밀번호는 8자 이상이어야 합니다.");
+        }
+        if (!password.matches(".*[A-Z].*")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "비밀번호에 영문 대문자를 1자 이상 포함해야 합니다.");
+        }
+        if (!password.matches(".*[a-z].*")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "비밀번호에 영문 소문자를 1자 이상 포함해야 합니다.");
+        }
+        if (!password.matches(".*[0-9].*")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "비밀번호에 숫자를 1자 이상 포함해야 합니다.");
+        }
+        if (!password.matches(".*[!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>/?].*")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "비밀번호에 특수문자를 1자 이상 포함해야 합니다.");
+        }
+    }
+
+    private String sha256Hex(String input) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(input.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : hash) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("SHA-256 not available", e);
+        }
     }
 }

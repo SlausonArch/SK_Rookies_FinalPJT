@@ -7,16 +7,8 @@ export const USER_TOKEN_COOKIE = 'vce_token';
 export const USER_LOGGED_OUT_SENTINEL = 'LOGGED_OUT';
 
 export const ADMIN_ACCESS_TOKEN_KEY = 'adminAccessToken';
-export const ADMIN_ROLE_KEY = 'adminRole';
-export const ADMIN_EMAIL_KEY = 'adminEmail';
-export const ADMIN_NAME_KEY = 'adminName';
 export const ADMIN_TOKEN_COOKIE = 'vce_admin_token';
 export const ADMIN_LOGGED_OUT_SENTINEL = 'ADMIN_LOGGED_OUT';
-
-const LEGACY_ADMIN_TOKEN_KEY = 'token';
-const LEGACY_ADMIN_ROLE_KEY = 'role';
-const LEGACY_ADMIN_EMAIL_KEY = 'email';
-const LEGACY_ADMIN_NAME_KEY = 'name';
 
 function dispatchAuthChange() {
   window.dispatchEvent(new Event('storage'));
@@ -57,6 +49,17 @@ function getJwtIat(token: string | null): number {
     return Number(decoded.iat) || 0;
   } catch {
     return 0;
+  }
+}
+
+function getJwtPayload(token: string | null): Record<string, unknown> | null {
+  if (!token || token.length < 20) return null;
+  try {
+    const payload = token.split('.')[1];
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(atob(normalized));
+  } catch {
+    return null;
   }
 }
 
@@ -103,43 +106,24 @@ function syncTokenPair(
   }
 }
 
+// 레거시 키 정리 (이전 버전 호환)
 function migrateLegacyAdminSession() {
-  const legacyToken = localStorage.getItem(LEGACY_ADMIN_TOKEN_KEY);
-  const legacyRole = localStorage.getItem(LEGACY_ADMIN_ROLE_KEY);
+  const LEGACY_KEYS = ['token', 'role', 'email', 'name', 'adminRole', 'adminEmail', 'adminName'];
+  const legacyToken = localStorage.getItem('token');
 
-  if (legacyToken && legacyRole === 'ADMIN' && !localStorage.getItem(ADMIN_ACCESS_TOKEN_KEY)) {
+  // 구버전 token 키가 있고 adminAccessToken이 없으면 마이그레이션
+  if (legacyToken && !localStorage.getItem(ADMIN_ACCESS_TOKEN_KEY)) {
     localStorage.setItem(ADMIN_ACCESS_TOKEN_KEY, legacyToken);
-    localStorage.setItem(ADMIN_ROLE_KEY, legacyRole);
-
-    const legacyEmail = localStorage.getItem(LEGACY_ADMIN_EMAIL_KEY);
-    const legacyName = localStorage.getItem(LEGACY_ADMIN_NAME_KEY);
-    if (legacyEmail) {
-      localStorage.setItem(ADMIN_EMAIL_KEY, legacyEmail);
-    }
-    if (legacyName) {
-      localStorage.setItem(ADMIN_NAME_KEY, legacyName);
-    }
-
     setCookie(ADMIN_TOKEN_COOKIE, legacyToken);
   }
 
-  clearStorageKeys([
-    LEGACY_ADMIN_TOKEN_KEY,
-    LEGACY_ADMIN_ROLE_KEY,
-    LEGACY_ADMIN_EMAIL_KEY,
-    LEGACY_ADMIN_NAME_KEY,
-  ]);
+  clearStorageKeys(LEGACY_KEYS);
 }
 
 export function syncAuthState() {
   migrateLegacyAdminSession();
   syncTokenPair(USER_TOKEN_COOKIE, USER_ACCESS_TOKEN_KEY, USER_LOGGED_OUT_SENTINEL, [USER_REFRESH_TOKEN_KEY]);
-  syncTokenPair(
-    ADMIN_TOKEN_COOKIE,
-    ADMIN_ACCESS_TOKEN_KEY,
-    ADMIN_LOGGED_OUT_SENTINEL,
-    [ADMIN_ROLE_KEY, ADMIN_EMAIL_KEY, ADMIN_NAME_KEY],
-  );
+  syncTokenPair(ADMIN_TOKEN_COOKIE, ADMIN_ACCESS_TOKEN_KEY, ADMIN_LOGGED_OUT_SENTINEL);
 }
 
 export function getUserAccessToken(): string | null {
@@ -176,24 +160,31 @@ export function getAdminAccessToken(): string | null {
 }
 
 export function getAdminRole(): string | null {
-  return localStorage.getItem(ADMIN_ROLE_KEY);
+  const token = localStorage.getItem(ADMIN_ACCESS_TOKEN_KEY);
+  const payload = getJwtPayload(token);
+  return (payload?.role as string) ?? null;
+}
+
+export function getAdminEmail(): string | null {
+  const token = localStorage.getItem(ADMIN_ACCESS_TOKEN_KEY);
+  const payload = getJwtPayload(token);
+  return (payload?.sub as string) ?? null;
 }
 
 export function getAdminName(): string | null {
-  return localStorage.getItem(ADMIN_NAME_KEY);
+  const token = localStorage.getItem(ADMIN_ACCESS_TOKEN_KEY);
+  const payload = getJwtPayload(token);
+  return (payload?.name as string) ?? null;
 }
 
-export function setAdminSession(accessToken: string, role: string, email: string, name: string) {
+export function setAdminSession(accessToken: string) {
   localStorage.setItem(ADMIN_ACCESS_TOKEN_KEY, accessToken);
-  localStorage.setItem(ADMIN_ROLE_KEY, role);
-  localStorage.setItem(ADMIN_EMAIL_KEY, email);
-  localStorage.setItem(ADMIN_NAME_KEY, name);
   setCookie(ADMIN_TOKEN_COOKIE, accessToken);
   dispatchAuthChange();
 }
 
 export function clearAdminSession(shareAcrossOrigins = false) {
-  clearStorageKeys([ADMIN_ACCESS_TOKEN_KEY, ADMIN_ROLE_KEY, ADMIN_EMAIL_KEY, ADMIN_NAME_KEY]);
+  localStorage.removeItem(ADMIN_ACCESS_TOKEN_KEY);
   if (shareAcrossOrigins) {
     setCookie(ADMIN_TOKEN_COOKIE, ADMIN_LOGGED_OUT_SENTINEL);
   } else {

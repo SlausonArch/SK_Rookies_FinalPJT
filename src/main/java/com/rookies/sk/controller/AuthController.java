@@ -40,6 +40,7 @@ public class AuthController {
     private final TokenBlacklistService tokenBlacklistService;
 
     private static final int MAX_LOGIN_FAIL = 5;
+    private static final int MAX_ADMIN_LOGIN_FAIL = 3;
 
     private static String sha256Hex(String input) {
         try {
@@ -121,13 +122,13 @@ public class AuthController {
             if (!passwordMatch) {
                 int failCount = member.getLoginFailCount() + 1;
                 member.setLoginFailCount(failCount);
-                if (failCount >= MAX_LOGIN_FAIL) {
+                if (failCount >= MAX_ADMIN_LOGIN_FAIL) {
                     member.setStatus(Member.Status.AUTH_FAILED);
                     memberService.saveMember(member);
-                    return ResponseEntity.status(403).body("인증 실패 횟수(" + MAX_LOGIN_FAIL + "회)를 초과하여 계정이 잠겼습니다.");
+                    return ResponseEntity.status(403).body("인증 실패 횟수(" + MAX_ADMIN_LOGIN_FAIL + "회)를 초과하여 계정이 잠겼습니다.");
                 }
                 memberService.saveMember(member);
-                return ResponseEntity.status(401).body("Invalid credentials (" + failCount + "/" + MAX_LOGIN_FAIL + ")");
+                return ResponseEntity.status(401).body("Invalid credentials (" + failCount + "/" + MAX_ADMIN_LOGIN_FAIL + ")");
             }
 
             // 관리자 권한 확인 (VCESYS_CORE, VCESYS_MGMT, VCESYS_EMP 허용)
@@ -143,7 +144,8 @@ public class AuthController {
             String accessToken = jwtTokenProvider.createAccessToken(
                     member.getEmail(),
                     member.getRole().name(),
-                    member.getMemberId());
+                    member.getMemberId(),
+                    member.getName());
 
             AdminLoginResponse response = new AdminLoginResponse(
                     accessToken,

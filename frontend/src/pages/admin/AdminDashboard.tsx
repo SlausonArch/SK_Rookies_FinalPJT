@@ -900,6 +900,7 @@ function fmtDate(v: string | null) {
 function toneFromStatus(s: string): 'success' | 'danger' | 'warn' | 'info' | 'neutral' {
   if (s === 'ACTIVE') return 'success';
   if (s === 'LOCKED') return 'danger';
+  if (s === 'AUTH_FAILED') return 'danger';
   if (s === 'WITHDRAWN') return 'neutral';
   if (s === 'PENDING') return 'warn';
   if (s === 'ANSWERED') return 'success';
@@ -1138,6 +1139,43 @@ const AdminDashboard = () => {
       alert('ADMIN 권한만 마스킹 해제가 가능합니다.');
       return;
     }
+
+    const isCurrentlyUnmasked = members.some(m => m.memberId === memberId && (m as any)._unmasked) ||
+      orders.some(o => (o as any).memberId === memberId && (o as any)._unmasked) ||
+      assets.some(a => a.memberId === memberId && (a as any)._unmasked) ||
+      transactions.some(t => (t as any).memberId === memberId && (t as any)._unmasked) ||
+      inquiries.some(i => (i as any).memberId === memberId && (i as any)._unmasked);
+
+    if (isCurrentlyUnmasked) {
+      // 재마스킹: 마스킹된 데이터로 복원
+      try {
+        const res = await axios.get(`${API_BASE}/api/admin/members/${memberId}`, { headers });
+        const data = res.data;
+        const revertData = (prev: any[]) =>
+          prev.map(item =>
+            item.memberId === memberId
+              ? { ...item, email: data.email, memberEmail: data.email, name: data.name, memberName: data.name, phoneNumber: data.phoneNumber, _unmasked: false }
+              : item
+          );
+        setMembers(revertData);
+        setIdApprovalMembers(revertData);
+        setOrders(revertData);
+        setAssets(revertData);
+        setTransactions(revertData);
+        setInquiries(revertData);
+      } catch {
+        const revertData = (prev: any[]) =>
+          prev.map(item => item.memberId === memberId ? { ...item, _unmasked: false } : item);
+        setMembers(revertData);
+        setIdApprovalMembers(revertData);
+        setOrders(revertData);
+        setAssets(revertData);
+        setTransactions(revertData);
+        setInquiries(revertData);
+      }
+      return;
+    }
+
     try {
       const res = await axios.get(`${API_BASE}/api/admin/members/${memberId}/unmask`, { headers });
       const data = res.data;
@@ -1429,6 +1467,7 @@ const AdminDashboard = () => {
                 <option value="ACTIVE">ACTIVE</option>
                 <option value="LOCKED">LOCKED</option>
                 <option value="WITHDRAWN">WITHDRAWN</option>
+                <option value="AUTH_FAILED">AUTH_FAILED</option>
               </Select>
               <PrimaryButton onClick={fetchData}>검색</PrimaryButton>
               <GhostButton onClick={() => setMemberQuery({ q: '', role: '', status: '', page: 0, size: 20 })}>초기화</GhostButton>
@@ -1482,10 +1521,11 @@ const AdminDashboard = () => {
                         </td>
                         <td>{fmtDate(m.createdAt)}</td>
                         <td style={{ display: 'flex', gap: '4px', alignItems: 'center', height: '100%', minHeight: '44px' }}>
-                          <Select value={m.status} onChange={e => handleStatusChange(m.memberId, e.target.value)} style={{ width: '100px' }}>
+                          <Select value={m.status} onChange={e => handleStatusChange(m.memberId, e.target.value)} style={{ width: '110px' }}>
                             <option value="ACTIVE">ACTIVE</option>
                             <option value="LOCKED">LOCKED</option>
                             <option value="WITHDRAWN">WITHDRAWN</option>
+                            <option value="AUTH_FAILED">AUTH_FAILED</option>
                           </Select>
                           <PrimaryButton style={{ height: '32px', fontSize: '11px', padding: '0 8px' }} onClick={() => handleViewMemberDetails(m.memberId)}>
                             상세 보기
@@ -2039,8 +2079,17 @@ const AdminDashboard = () => {
                         type="password"
                         value={staffForm.password}
                         onChange={e => setStaffForm(f => ({ ...f, password: e.target.value }))}
-                        placeholder="비밀번호 입력"
+                        placeholder="8자↑ 대소문자+숫자+특수문자"
+                        style={{
+                          borderColor: staffForm.password && !/^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[!@#$%^&*()\-_=+\[\]{};':"\\|,.<>/?]).{8,}$/.test(staffForm.password)
+                            ? COLORS.danger : undefined
+                        }}
                       />
+                      {staffForm.password && !/^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[!@#$%^&*()\-_=+\[\]{};':"\\|,.<>/?]).{8,}$/.test(staffForm.password) && (
+                        <span style={{ fontSize: '11px', color: COLORS.danger, marginTop: '3px' }}>
+                          8자 이상, 대소문자·숫자·특수문자 각 1자 이상 필요
+                        </span>
+                      )}
                     </FieldLabel>
                     <FieldLabel>
                       이름
@@ -2066,7 +2115,7 @@ const AdminDashboard = () => {
 
                   <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                     <PrimaryButton
-                      disabled={!staffForm.email || !staffForm.password || !staffForm.name}
+                      disabled={!staffForm.email || !staffForm.password || !staffForm.name || !/^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[!@#$%^&*()\-_=+\[\]{};':"\\|,.<>/?]).{8,}$/.test(staffForm.password)}
                       onClick={async () => {
                         setStaffMsg(null);
                         try {
@@ -2585,38 +2634,6 @@ const AdminDashboard = () => {
               X
             </CloseButton>
             <img src={selectedImage} alt="ID Card Original" />
-            <div style={{ marginTop: '16px', textAlign: 'center' }}>
-              <PrimaryButton
-                onClick={() => {
-                  const url = new URL(selectedImage);
-                  const path = url.pathname;
-                  const downloadUrl = `${API_BASE}/api/admin/files/download?filePath=${encodeURIComponent(path)}`;
-
-                  const link = document.createElement('a');
-                  link.href = downloadUrl;
-                  link.setAttribute('download', 'id_photo');
-
-                  fetch(downloadUrl, { headers })
-                    .then(r => {
-                      if (!r.ok) throw new Error('Download Failed');
-                      return r.blob();
-                    })
-                    .then(blob => {
-                      const blobUrl = window.URL.createObjectURL(blob);
-                      link.href = blobUrl;
-                      document.body.appendChild(link);
-                      link.click();
-                      document.body.removeChild(link);
-                      window.URL.revokeObjectURL(blobUrl);
-                    })
-                    .catch(() => {
-                      alert('파일 다운로드에 실패했습니다. (Server Error)');
-                    });
-                }}
-              >
-                신분증 다운로드
-              </PrimaryButton>
-            </div>
           </ImageModalContent>
         </ImageModalOverlay>
       )}
@@ -2639,7 +2656,25 @@ const AdminDashboard = () => {
                       alert('ADMIN 권한만 마스킹 해제가 가능합니다.');
                       return;
                     }
-                    if (selectedMemberDetails._unmasked) return;
+                    if (selectedMemberDetails._unmasked) {
+                      // 재마스킹: 마스킹된 데이터로 복원
+                      try {
+                        const res = await axios.get(
+                          `${API_BASE}/api/admin/members/${selectedMemberDetails.memberId}`,
+                          { headers }
+                        );
+                        setSelectedMemberDetails((prev: any) => ({
+                          ...prev,
+                          email: res.data.email,
+                          name: res.data.name,
+                          phoneNumber: res.data.phoneNumber,
+                          _unmasked: false,
+                        }));
+                      } catch {
+                        setSelectedMemberDetails((prev: any) => ({ ...prev, _unmasked: false }));
+                      }
+                      return;
+                    }
                     try {
                       const res = await axios.get(
                         `${API_BASE}/api/admin/members/${selectedMemberDetails.memberId}/unmask`,
@@ -2657,10 +2692,10 @@ const AdminDashboard = () => {
                     }
                   }}
                   style={{
-                    cursor: selectedMemberDetails._unmasked ? 'default' : 'pointer',
+                    cursor: 'pointer',
                     color: selectedMemberDetails._unmasked ? COLORS.primary : 'inherit',
                   }}
-                  title={selectedMemberDetails._unmasked ? undefined : '클릭하여 마스킹 해제'}
+                  title={selectedMemberDetails._unmasked ? '클릭하여 재마스킹' : '클릭하여 마스킹 해제'}
                 >
                   {selectedMemberDetails.email}
                 </span>

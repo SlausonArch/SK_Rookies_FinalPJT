@@ -27,19 +27,25 @@ public class JwtTokenProvider {
     }
 
     public String createAccessToken(String email, String role, Long memberId) {
-        return createToken(email, role, memberId, "ACCESS", ACCESS_TOKEN_EXPIRE_TIME);
+        return createToken(email, role, memberId, null, "ACCESS", ACCESS_TOKEN_EXPIRE_TIME);
+    }
+
+    public String createAccessToken(String email, String role, Long memberId, String name) {
+        return createToken(email, role, memberId, name, "ACCESS", ACCESS_TOKEN_EXPIRE_TIME);
     }
 
     public String createRefreshToken(String email) {
-        return createToken(email, null, null, "REFRESH", REFRESH_TOKEN_EXPIRE_TIME);
+        return createToken(email, null, null, null, "REFRESH", REFRESH_TOKEN_EXPIRE_TIME);
     }
 
-    private String createToken(String email, String role, Long memberId, String tokenType, long expireTime) {
+    private String createToken(String email, String role, Long memberId, String name, String tokenType, long expireTime) {
         Claims claims = Jwts.claims().setSubject(email);
         if (role != null)
             claims.put("role", role);
         if (memberId != null)
             claims.put("memberId", memberId);
+        if (name != null)
+            claims.put("name", name);
         claims.put("tokenType", tokenType);
         claims.put("jti", UUID.randomUUID().toString());
 

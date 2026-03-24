@@ -165,8 +165,8 @@ const AdminLogin = () => {
         password,
       });
 
-      const { accessToken, role, email: userEmail, name } = response.data;
-      setAdminSession(accessToken, role, userEmail, name);
+      const { accessToken } = response.data;
+      setAdminSession(accessToken);
 
       navigate('/admin/dashboard', { replace: true });
     } catch (err: any) {

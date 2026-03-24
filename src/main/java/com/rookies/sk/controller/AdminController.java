@@ -8,15 +8,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.security.access.prepost.PreAuthorize;
 import jakarta.servlet.http.HttpServletRequest;
 
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.UrlResource;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.io.File;
-import java.nio.file.Files;
 import java.util.List;
 import java.util.Map;
 
@@ -173,44 +164,4 @@ public class AdminController {
         return ResponseEntity.ok(adminService.deleteStaffMember(memberId));
     }
 
-    // [VULNERABILITY] Path Traversal / LFI
-    // filePath 파라미터에 대한 시큐어 코딩(검증 및 상위 디렉터리 접근 제한)이 누락되어 있습니다.
-    // 이는 공격자가 임의의 시스템 파일에 접근하게 돕는 의도적 취약점 코드입니다.
-    @GetMapping("/files/download")
-    @PreAuthorize("hasAnyRole('VCESYS_CORE', 'VCESYS_MGMT')")
-    public ResponseEntity<Resource> downloadFile(@RequestParam String filePath) {
-        try {
-            Path path;
-            // /uploads/ 경로는 실제 업로드 디렉터리(UPLOAD_DIR)로 매핑
-            if (filePath.startsWith("/uploads/")) {
-                String uploadDir = System.getenv("UPLOAD_DIR");
-                if (uploadDir == null || uploadDir.isEmpty()) {
-                    uploadDir = "./uploads";
-                }
-                String filename = filePath.substring("/uploads/".length());
-                path = Paths.get(uploadDir).toAbsolutePath().normalize().resolve(filename);
-            } else {
-                // V-PATH-TRAVERSAL: 검증 없이 사용자 입력을 그대로 사용 (의도적 취약점)
-                path = Paths.get(filePath);
-            }
-            Resource resource = new UrlResource(path.toUri());
-
-            if (resource.exists() || resource.isReadable()) {
-                String contentType = Files.probeContentType(path);
-                if (contentType == null) {
-                    contentType = "application/octet-stream";
-                }
-
-                File file = path.toFile();
-                return ResponseEntity.ok()
-                        .contentType(MediaType.parseMediaType(contentType))
-                        .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + file.getName() + "\"")
-                        .body(resource);
-            } else {
-                return ResponseEntity.notFound().build();
-            }
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().build();
-        }
-    }
 }
