@@ -4,6 +4,7 @@ import com.rookies.sk.dto.OrderRequestDto;
 import com.rookies.sk.dto.OrderResponseDto;
 import com.rookies.sk.service.OrderService;
 import lombok.RequiredArgsConstructor;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -20,7 +21,7 @@ public class OrderController {
 
     @PostMapping
     public ResponseEntity<OrderResponseDto> createOrder(
-            @RequestBody OrderRequestDto request,
+            @Valid @RequestBody OrderRequestDto request,
             @AuthenticationPrincipal UserDetails userDetails) {
         return ResponseEntity.ok(orderService.createOrder(userDetails.getUsername(), request));
     }

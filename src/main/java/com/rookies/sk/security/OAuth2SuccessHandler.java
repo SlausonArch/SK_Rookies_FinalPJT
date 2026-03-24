@@ -29,6 +29,9 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
     @org.springframework.beans.factory.annotation.Value("${app.frontend-url}")
     private String frontendUrl;
 
+    @org.springframework.beans.factory.annotation.Value("${app.cors.allowed-origins}")
+    private java.util.List<String> allowedOrigins;
+
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
             Authentication authentication) throws IOException, ServletException {
@@ -45,9 +48,18 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
                 if (HttpCookieOAuth2AuthorizationRequestRepository.REDIRECT_URI_PARAM_COOKIE_NAME
                         .equals(cookie.getName())) {
                     try {
-                        targetFrontendUrl = java.net.URLDecoder.decode(cookie.getValue(), "UTF-8");
+                        String decoded = java.net.URLDecoder.decode(cookie.getValue(), "UTF-8");
+                        if (decoded.contains(",")) {
+                            decoded = decoded.split(",")[0];
+                        }
+                        // 화이트리스트 검증: 허용된 origin으로 시작하는 경우만 사용
+                        String candidate = decoded;
+                        boolean allowed = allowedOrigins.stream().anyMatch(origin -> candidate.startsWith(origin));
+                        if (allowed) {
+                            targetFrontendUrl = candidate;
+                        }
                     } catch (Exception e) {
-                        targetFrontendUrl = cookie.getValue();
+                        // 디코딩 실패 시 기본 URL 사용
                     }
                     break;
                 }

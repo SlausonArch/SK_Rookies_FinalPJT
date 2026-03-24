@@ -48,8 +48,20 @@ public class SecurityConfig {
         public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
                 http
                                 .httpBasic(AbstractHttpConfigurer::disable)
-                                .csrf(AbstractHttpConfigurer::disable) // Disable CSRF for REST API
+                                .csrf(AbstractHttpConfigurer::disable)
                                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                                .headers(headers -> headers
+                                                .frameOptions(frame -> frame.deny())
+                                                .contentTypeOptions(ct -> {})
+                                                .httpStrictTransportSecurity(hsts -> hsts
+                                                                .includeSubDomains(true)
+                                                                .maxAgeInSeconds(31536000))
+                                                .addHeaderWriter((req, res) -> {
+                                                        res.setHeader("X-Content-Type-Options", "nosniff");
+                                                        res.setHeader("X-Frame-Options", "DENY");
+                                                        res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+                                                        res.setHeader("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
+                                                }))
                                 .sessionManagement(session -> session
                                                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS)) // V-15:
                                                                                                          // Even if
@@ -68,21 +80,20 @@ public class SecurityConfig {
                                                                                                          // necessarily
                                                                                                          // here.
                                 .authorizeHttpRequests(auth -> auth
+                                                .requestMatchers(HttpMethod.TRACE, "/**").denyAll()
                                                 .requestMatchers("/api/auth/me/**", "/api/auth/withdraw",
                                                                 "/api/auth/logout")
                                                 .authenticated()
                                                 .requestMatchers("/", "/login/**", "/oauth2/**", "/api/auth/**",
-                                                                "/error", "/uploads/**", "/api/files")
+                                                                "/error", "/uploads/**", "/api/files/privacy-policy")
                                                 .permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/api/community/posts/**").permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/api/news").permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/api/market/**").permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/api/support/faqs").permitAll()
-                                                .requestMatchers("/api/auth/signup/complete").hasRole("GUEST") // Need
-                                                                                                               // Guest
-                                                                                                               // role
+                                                .requestMatchers("/api/auth/signup/complete").hasRole("GUEST")
                                                 .requestMatchers("/api/admin/**")
-                                                .hasAnyRole("ADMIN", "MANAGER", "STAFF")
+                                                .hasAnyRole("VCESYS_CORE", "VCESYS_MGMT", "VCESYS_EMP")
                                                 .anyRequest().authenticated())
                                 .oauth2Login(oauth2 -> oauth2
                                                 .authorizationEndpoint(auth -> auth

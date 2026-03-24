@@ -16,6 +16,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import java.math.BigDecimal;
@@ -35,23 +36,40 @@ public class AuthController {
     private final TransactionRepository transactionRepository;
     private final TokenBlacklistService tokenBlacklistService;
 
+    private static final int MAX_LOGIN_FAIL = 5;
+
     @PostMapping("/test/login")
     public ResponseEntity<?> testLogin(@RequestBody AdminLoginRequest request) {
         log.info("Test login request received for email: {}", request.getEmail());
         try {
             Member member = memberService.findByEmailForLogin(request.getEmail());
 
-            if (member.getPassword() == null || !passwordEncoder.matches(request.getPassword(), member.getPassword())) {
-                return ResponseEntity.status(401).body("이메일 또는 비밀번호가 올바르지 않습니다.");
-            }
-
             if (member.getStatus() == Member.Status.WITHDRAWN) {
                 return ResponseEntity.status(403).body(WITHDRAWN_ACCOUNT_MESSAGE);
+            }
+
+            if (member.getStatus() == Member.Status.AUTH_FAILED) {
+                return ResponseEntity.status(403).body("인증 실패로 계정이 잠겼습니다. 문의 게시판을 통해 해제 요청해 주세요.");
+            }
+
+            if (member.getPassword() == null || !passwordEncoder.matches(request.getPassword(), member.getPassword())) {
+                int failCount = member.getLoginFailCount() + 1;
+                member.setLoginFailCount(failCount);
+                if (failCount >= MAX_LOGIN_FAIL) {
+                    member.setStatus(Member.Status.AUTH_FAILED);
+                    memberService.saveMember(member);
+                    return ResponseEntity.status(403).body("인증 실패 횟수(" + MAX_LOGIN_FAIL + "회)를 초과하여 계정이 잠겼습니다.");
+                }
+                memberService.saveMember(member);
+                return ResponseEntity.status(401).body("이메일 또는 비밀번호가 올바르지 않습니다. (실패 " + failCount + "/" + MAX_LOGIN_FAIL + ")");
             }
 
             if (member.getRole() == Member.Role.GUEST) {
                 return ResponseEntity.status(403).body("회원가입이 완료되지 않은 계정입니다.");
             }
+
+            member.setLoginFailCount(0);
+            memberService.saveMember(member);
 
             String accessToken = jwtTokenProvider.createAccessToken(
                     member.getEmail(), member.getRole().name(), member.getMemberId());
@@ -73,32 +91,43 @@ public class AuthController {
     public ResponseEntity<?> adminLogin(@RequestBody AdminLoginRequest request) {
         log.info("Admin login request received for email: {}", request.getEmail());
         try {
-            // 이메일로 회원 조회
             Member member = memberService.findByEmailForLogin(request.getEmail());
-
-            // 비밀번호 검증
-            if (member.getPassword() == null || !passwordEncoder.matches(request.getPassword(), member.getPassword())) {
-                return ResponseEntity.status(401).body("Invalid credentials");
-            }
 
             if (member.getStatus() == Member.Status.WITHDRAWN) {
                 return ResponseEntity.status(403).body(WITHDRAWN_ACCOUNT_MESSAGE);
             }
 
-            // 관리자 권한 확인 (ADMIN, MANAGER, STAFF 허용)
-            if (member.getRole() != Member.Role.ADMIN &&
-                    member.getRole() != Member.Role.MANAGER &&
-                    member.getRole() != Member.Role.STAFF) {
+            if (member.getStatus() == Member.Status.AUTH_FAILED) {
+                return ResponseEntity.status(403).body("인증 실패로 계정이 잠겼습니다.");
+            }
+
+            if (member.getPassword() == null || !passwordEncoder.matches(request.getPassword(), member.getPassword())) {
+                int failCount = member.getLoginFailCount() + 1;
+                member.setLoginFailCount(failCount);
+                if (failCount >= MAX_LOGIN_FAIL) {
+                    member.setStatus(Member.Status.AUTH_FAILED);
+                    memberService.saveMember(member);
+                    return ResponseEntity.status(403).body("인증 실패 횟수(" + MAX_LOGIN_FAIL + "회)를 초과하여 계정이 잠겼습니다.");
+                }
+                memberService.saveMember(member);
+                return ResponseEntity.status(401).body("Invalid credentials (" + failCount + "/" + MAX_LOGIN_FAIL + ")");
+            }
+
+            // 관리자 권한 확인 (VCESYS_CORE, VCESYS_MGMT, VCESYS_EMP 허용)
+            if (member.getRole() != Member.Role.VCESYS_CORE &&
+                    member.getRole() != Member.Role.VCESYS_MGMT &&
+                    member.getRole() != Member.Role.VCESYS_EMP) {
                 return ResponseEntity.status(403).body("Access denied");
             }
 
-            // JWT 토큰 생성
+            member.setLoginFailCount(0);
+            memberService.saveMember(member);
+
             String accessToken = jwtTokenProvider.createAccessToken(
                     member.getEmail(),
                     member.getRole().name(),
                     member.getMemberId());
 
-            // 응답 생성
             AdminLoginResponse response = new AdminLoginResponse(
                     accessToken,
                     member.getRole().name(),
@@ -203,7 +232,7 @@ public class AuthController {
 
     @PostMapping("/signup/complete")
     public ResponseEntity<?> completeSignup(
-            @RequestPart("data") SignupRequestDto dto,
+            @Valid @RequestPart("data") SignupRequestDto dto,
             @RequestPart("file") MultipartFile file,
             @AuthenticationPrincipal UserDetails userDetails) {
 
@@ -262,12 +291,24 @@ public class AuthController {
         if (!"REFRESH".equals(jwtTokenProvider.getTokenType(refreshToken))) {
             return ResponseEntity.status(401).body("refresh token이 아닙니다.");
         }
+        // 이미 사용된(블랙리스트) refresh token 차단
+        if (tokenBlacklistService.isBlacklisted(jwtTokenProvider.getTokenId(refreshToken))) {
+            return ResponseEntity.status(401).body("이미 사용된 refresh token입니다.");
+        }
         try {
             String email = jwtTokenProvider.getEmail(refreshToken);
             Member member = memberService.findByEmailForLogin(email);
+
+            // 기존 refresh token 즉시 무효화 (재사용 방지)
+            tokenBlacklistService.revokeTokens(null, refreshToken, "REFRESH_ROTATION");
+
             String newAccessToken = jwtTokenProvider.createAccessToken(
                     email, member.getRole().name(), member.getMemberId());
-            return ResponseEntity.ok(java.util.Map.of("accessToken", newAccessToken));
+            String newRefreshToken = jwtTokenProvider.createRefreshToken(email);
+
+            return ResponseEntity.ok(java.util.Map.of(
+                    "accessToken", newAccessToken,
+                    "refreshToken", newRefreshToken));
         } catch (Exception e) {
             return ResponseEntity.status(401).body("토큰 갱신에 실패했습니다.");
         }

@@ -15,7 +15,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.Query;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -42,8 +41,7 @@ public class CommunityService {
         log.info("IsAdmin: {}", isAdmin);
 
         List<Post> posts;
-        
-        // V-20 (SQL Injection): 사용자 입력이 검증 없이 SQL 쿼리에 직접 포함됨
+
         if (keyword == null || keyword.isBlank()) {
             if (isAdmin) {
                 posts = postRepository.findAll();
@@ -51,29 +49,27 @@ public class CommunityService {
                 posts = postRepository.findByIsHidden("N");
             }
         } else {
-            // V-20: SQL Injection 취약점 - 사용자 입력을 직접 JPQL에 포함
+            String escapedKeyword = keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+            String likePattern = "%" + escapedKeyword + "%";
+
             String jpql;
             if (isAdmin) {
-                jpql = "SELECT p FROM Post p WHERE LOWER(p.title) LIKE LOWER('%" + keyword + "%') " +
-                       "OR p.content LIKE '%" + keyword + "%' " +
+                jpql = "SELECT p FROM Post p WHERE LOWER(p.title) LIKE LOWER(:pattern) ESCAPE '\\' " +
+                       "OR p.content LIKE :pattern ESCAPE '\\' " +
                        "ORDER BY CASE WHEN p.isNotice = 'Y' THEN 0 ELSE 1 END, p.createdAt DESC";
             } else {
-                jpql = "SELECT p FROM Post p WHERE (LOWER(p.title) LIKE LOWER('%" + keyword + "%') " +
-                       "OR p.content LIKE '%" + keyword + "%') " +
+                jpql = "SELECT p FROM Post p WHERE (LOWER(p.title) LIKE LOWER(:pattern) ESCAPE '\\' " +
+                       "OR p.content LIKE :pattern ESCAPE '\\') " +
                        "AND p.isHidden = 'N' " +
                        "ORDER BY CASE WHEN p.isNotice = 'Y' THEN 0 ELSE 1 END, p.createdAt DESC";
             }
-            
-            log.info("Constructed JPQL Query:");
-            log.info("{}", jpql);
-            
+
             try {
-                posts = entityManager.createQuery(jpql, Post.class).getResultList();
-                log.info("Query executed successfully. Found {} posts", posts.size());
+                posts = entityManager.createQuery(jpql, Post.class)
+                        .setParameter("pattern", likePattern)
+                        .getResultList();
             } catch (Exception e) {
                 log.error("QUERY ERROR: {}", e.getMessage());
-                log.error("Error cause: {}", e.getCause());
-                // SQL 오류 발생시 빈 목록 반환
                 posts = List.of();
             }
         }
@@ -128,8 +124,10 @@ public class CommunityService {
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new IllegalArgumentException("Post not found"));
 
-        // V-IDOR: 게시글 소유자 확인 없이 postId만 알면 수정 가능 (Insecure Direct Object Reference)
-        // 공격자가 URL의 postId를 변경하여 타인의 게시글을 수정할 수 있음
+        if (!canManagePost(post, member)) {
+            throw new IllegalArgumentException("No permission");
+        }
+
         if (request.isNotice() && !hasCommunitySuperRole(member)) {
             throw new IllegalArgumentException("Only admin can set notice");
         }
@@ -343,11 +341,11 @@ public class CommunityService {
     }
 
     private boolean isAdmin(Member member) {
-        return member.getRole() == Member.Role.ADMIN;
+        return member.getRole() == Member.Role.VCESYS_CORE;
     }
 
     private boolean hasCommunitySuperRole(Member member) {
-        return member.getRole() == Member.Role.ADMIN || member.getRole() == Member.Role.STAFF;
+        return member.getRole() == Member.Role.VCESYS_CORE || member.getRole() == Member.Role.VCESYS_EMP;
     }
 
     private String normalizeKeyword(String keyword) {

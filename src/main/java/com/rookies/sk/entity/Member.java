@@ -69,6 +69,10 @@ public class Member {
     @Builder.Default
     private Status status = Status.PENDING;
 
+    @Column(name = "LOGIN_FAIL_COUNT")
+    @Builder.Default
+    private int loginFailCount = 0;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "TIER_LEVEL")
     private FeeTier feeTier;
@@ -82,10 +86,10 @@ public class Member {
     private LocalDateTime updatedAt;
 
     public enum Role {
-        GUEST, USER, STAFF, MANAGER, ADMIN
+        GUEST, USER, VCESYS_EMP, VCESYS_MGMT, VCESYS_CORE
     }
 
     public enum Status {
-        PENDING, ACTIVE, LOCKED, WITHDRAWN
+        PENDING, ACTIVE, LOCKED, WITHDRAWN, AUTH_FAILED
     }
 }

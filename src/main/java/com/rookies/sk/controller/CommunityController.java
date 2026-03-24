@@ -4,6 +4,7 @@ import com.rookies.sk.dto.*;
 import com.rookies.sk.entity.Member;
 import com.rookies.sk.service.CommunityService;
 import com.rookies.sk.service.FileService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -41,7 +42,7 @@ public class CommunityController {
 
     @PostMapping("/posts")
     public ResponseEntity<PostResponseDto> createPost(
-            @RequestBody PostRequestDto request,
+            @Valid @RequestBody PostRequestDto request,
             @AuthenticationPrincipal UserDetails userDetails) {
         return ResponseEntity.ok(communityService.createPost(request, userDetails.getUsername()));
     }
@@ -49,7 +50,7 @@ public class CommunityController {
     @PutMapping("/posts/{postId}")
     public ResponseEntity<PostResponseDto> updatePost(
             @PathVariable Long postId,
-            @RequestBody PostRequestDto request,
+            @Valid @RequestBody PostRequestDto request,
             @AuthenticationPrincipal UserDetails userDetails) {
         return ResponseEntity.ok(communityService.updatePost(postId, request, userDetails.getUsername()));
     }
@@ -73,7 +74,7 @@ public class CommunityController {
     @PostMapping("/posts/{postId}/comments")
     public ResponseEntity<CommentResponseDto> addComment(
             @PathVariable Long postId,
-            @RequestBody CommentRequestDto request,
+            @Valid @RequestBody CommentRequestDto request,
             @AuthenticationPrincipal UserDetails userDetails) {
         return ResponseEntity.ok(communityService.addComment(postId, request, userDetails.getUsername()));
     }
@@ -81,7 +82,7 @@ public class CommunityController {
     @PutMapping("/comments/{commentId}")
     public ResponseEntity<CommentResponseDto> updateComment(
             @PathVariable Long commentId,
-            @RequestBody CommentRequestDto request,
+            @Valid @RequestBody CommentRequestDto request,
             @AuthenticationPrincipal UserDetails userDetails) {
         return ResponseEntity.ok(communityService.updateComment(commentId, request, userDetails.getUsername()));
     }

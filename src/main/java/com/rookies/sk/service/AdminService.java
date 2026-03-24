@@ -487,7 +487,7 @@ public class AdminService {
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getStaffMembers() {
         List<Member.Role> staffRoles = List.of(
-                Member.Role.ADMIN, Member.Role.MANAGER, Member.Role.STAFF);
+                Member.Role.VCESYS_CORE, Member.Role.VCESYS_MGMT, Member.Role.VCESYS_EMP);
         return memberRepository.findAll().stream()
                 .filter(m -> staffRoles.contains(m.getRole()))
                 .sorted(Comparator.comparing(
@@ -551,7 +551,7 @@ public class AdminService {
                         HttpStatus.NOT_FOUND, "직원 계정을 찾을 수 없습니다."));
 
         List<Member.Role> staffRoles = List.of(
-                Member.Role.ADMIN, Member.Role.MANAGER, Member.Role.STAFF);
+                Member.Role.VCESYS_CORE, Member.Role.VCESYS_MGMT, Member.Role.VCESYS_EMP);
         if (!staffRoles.contains(member.getRole())) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST, "직원 계정이 아닙니다.");

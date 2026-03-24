@@ -10,6 +10,8 @@ import com.rookies.sk.repository.AssetRepository;
 import com.rookies.sk.repository.MemberRepository;
 import com.rookies.sk.repository.OrderRepository;
 import com.rookies.sk.repository.TransactionRepository;
+
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -34,6 +36,7 @@ public class OrderService {
     private final TransactionRepository transactionRepository;
     private final MemberRepository memberRepository;
     private final AssetService assetService;
+    private final UpbitPriceService upbitPriceService;
 
     @Transactional
     public OrderResponseDto createOrder(String email, OrderRequestDto req) {
@@ -194,8 +197,15 @@ public class OrderService {
             BigDecimal price,
             BigDecimal amount
     ) {
+        // 시장가 주문은 클라이언트 price 무시, 서버에서 Upbit 현재가 조회
+        Map<String, BigDecimal> currentPrices = upbitPriceService.fetchCurrentPrices(List.of(assetType));
+        BigDecimal serverPrice = currentPrices.get(assetType.toUpperCase());
+        if (serverPrice == null || serverPrice.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "현재가 조회에 실패했습니다. 잠시 후 다시 시도해 주세요.");
+        }
+
         BigDecimal feeRate = getMemberFeeRate(member);
-        BigDecimal totalValue = totalValue(price, amount);
+        BigDecimal totalValue = totalValue(serverPrice, amount);
         BigDecimal fee = feeAmount(totalValue, feeRate);
 
         if ("BUY".equals(orderType)) {
@@ -223,7 +233,7 @@ public class OrderService {
                 BigDecimal gap = amount.subtract(available);
                 if (gap.compareTo(TRADE_EPSILON) <= 0) {
                     amount = available;
-                    totalValue = totalValue(price, amount);
+                    totalValue = totalValue(serverPrice, amount);
                     fee = feeAmount(totalValue, feeRate);
                 } else {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, assetType + " 잔고가 부족합니다.");
@@ -246,14 +256,14 @@ public class OrderService {
                 .orderType(orderType)
                 .priceType("MARKET")
                 .assetType(assetType)
-                .price(price)
+                .price(serverPrice)
                 .amount(amount)
                 .filledAmount(amount)
                 .status("FILLED")
                 .build();
         orderRepository.save(order);
 
-        saveTransaction(member, order, orderType, assetType, amount, price, totalValue, fee);
+        saveTransaction(member, order, orderType, assetType, amount, serverPrice, totalValue, fee);
         return toDto(order);
     }
 

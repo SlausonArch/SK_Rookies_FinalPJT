@@ -3,6 +3,7 @@ package com.rookies.sk.security;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -16,17 +17,13 @@ import java.util.UUID;
 @Component
 public class JwtTokenProvider {
 
-    // V-02: Weak Secret Key (Intentional Vulnerability)
-    // Using a simple string instead of a secure random key
-    private static final String SECRET_KEY = "vce_secret_key_for_educational_purpose_only_do_not_use_in_production";
     private static final long ACCESS_TOKEN_EXPIRE_TIME = 1000 * 60 * 30; // 30 mins
     private static final long REFRESH_TOKEN_EXPIRE_TIME = 1000 * 60 * 60 * 24 * 7; // 7 days
 
     private final Key key;
 
-    public JwtTokenProvider() {
-        // V-02: Using HS256 with a known weak secret
-        this.key = Keys.hmacShaKeyFor(SECRET_KEY.getBytes(StandardCharsets.UTF_8));
+    public JwtTokenProvider(@Value("${jwt.secret}") String secretKey) {
+        this.key = Keys.hmacShaKeyFor(secretKey.getBytes(StandardCharsets.UTF_8));
     }
 
     public String createAccessToken(String email, String role, Long memberId) {

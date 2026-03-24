@@ -4,15 +4,19 @@ import com.rookies.sk.entity.Faq;
 import com.rookies.sk.entity.Inquiry;
 import com.rookies.sk.service.FileService;
 import com.rookies.sk.service.SupportService;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
+@Validated
 @RestController
 @RequestMapping("/api/support")
 @RequiredArgsConstructor
@@ -40,8 +44,8 @@ public class SupportController {
     @PostMapping(value = "/inquiries", consumes = "multipart/form-data")
     public ResponseEntity<Inquiry> createInquiry(
             @AuthenticationPrincipal UserDetails userDetails,
-            @RequestParam("title") String title,
-            @RequestParam("content") String content,
+            @NotBlank @Size(max = 200) @RequestParam("title") String title,
+            @NotBlank @Size(max = 5000) @RequestParam("content") String content,
             @RequestPart(value = "file", required = false) MultipartFile file) {
 
         if (userDetails == null) {

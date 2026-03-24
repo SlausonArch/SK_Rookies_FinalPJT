@@ -1,20 +1,26 @@
 package com.rookies.sk.security;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.security.oauth2.client.web.AuthorizationRequestRepository;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 import org.springframework.stereotype.Component;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.HashMap;
+import java.util.Map;
 
+@Slf4j
 @Component
 public class HttpCookieOAuth2AuthorizationRequestRepository
         implements AuthorizationRequestRepository<OAuth2AuthorizationRequest> {
@@ -23,13 +29,24 @@ public class HttpCookieOAuth2AuthorizationRequestRepository
     public static final String REDIRECT_URI_PARAM_COOKIE_NAME = "frontend_url";
     private static final int COOKIE_EXPIRE_SECONDS = 180;
 
+    private final ObjectMapper objectMapper;
+    private final String hmacSecret;
+
+    public HttpCookieOAuth2AuthorizationRequestRepository(
+            ObjectMapper objectMapper,
+            @Value("${jwt.secret}") String jwtSecret) {
+        this.objectMapper = objectMapper;
+        // JWT Secret을 HMAC 키로 재사용
+        this.hmacSecret = jwtSecret;
+    }
+
     @Override
     public OAuth2AuthorizationRequest loadAuthorizationRequest(HttpServletRequest request) {
         Cookie[] cookies = request.getCookies();
         if (cookies != null) {
             for (Cookie cookie : cookies) {
                 if (OAUTH2_AUTHORIZATION_REQUEST_COOKIE_NAME.equals(cookie.getName())) {
-                    return deserialize(cookie.getValue(), OAuth2AuthorizationRequest.class);
+                    return deserialize(cookie.getValue());
                 }
             }
         }
@@ -87,25 +104,87 @@ public class HttpCookieOAuth2AuthorizationRequestRepository
         }
     }
 
-    private String serialize(Object object) {
+    /**
+     * OAuth2AuthorizationRequest를 JSON으로 직렬화 후 HMAC-SHA256 서명 추가
+     * 형식: Base64(JSON).Base64(HMAC)
+     */
+    private String serialize(OAuth2AuthorizationRequest request) {
         try {
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            ObjectOutputStream oos = new ObjectOutputStream(baos);
-            oos.writeObject(object);
-            return Base64.getUrlEncoder().encodeToString(baos.toByteArray());
+            Map<String, Object> data = new HashMap<>();
+            data.put("authorizationUri", request.getAuthorizationUri());
+            data.put("clientId", request.getClientId());
+            data.put("redirectUri", request.getRedirectUri());
+            data.put("state", request.getState());
+            data.put("scopes", request.getScopes());
+            data.put("grantType", request.getGrantType().getValue());
+            data.put("additionalParameters", request.getAdditionalParameters());
+            data.put("attributes", request.getAttributes());
+
+            String json = objectMapper.writeValueAsString(data);
+            String encodedJson = Base64.getUrlEncoder().encodeToString(json.getBytes(StandardCharsets.UTF_8));
+            String signature = computeHmac(encodedJson);
+            return encodedJson + "." + signature;
         } catch (Exception e) {
-            throw new RuntimeException("Serialization failed", e);
+            throw new RuntimeException("OAuth2 request serialization failed", e);
         }
     }
 
-    private <T> T deserialize(String cookieValue, Class<T> cls) {
+    /**
+     * HMAC 서명 검증 후 역직렬화
+     */
+    private OAuth2AuthorizationRequest deserialize(String value) {
         try {
-            byte[] data = Base64.getUrlDecoder().decode(cookieValue);
-            ByteArrayInputStream bais = new ByteArrayInputStream(data);
-            ObjectInputStream ois = new ObjectInputStream(bais);
-            return cls.cast(ois.readObject());
+            String[] parts = value.split("\\.", 2);
+            if (parts.length != 2) {
+                log.warn("Invalid OAuth2 cookie format");
+                return null;
+            }
+            String encodedJson = parts[0];
+            String signature = parts[1];
+
+            // 서명 검증
+            String expectedSignature = computeHmac(encodedJson);
+            if (!expectedSignature.equals(signature)) {
+                log.warn("OAuth2 cookie signature mismatch - possible tampering detected");
+                return null;
+            }
+
+            String json = new String(Base64.getUrlDecoder().decode(encodedJson), StandardCharsets.UTF_8);
+            Map<String, Object> data = objectMapper.readValue(json, new TypeReference<>() {});
+
+            @SuppressWarnings("unchecked")
+            java.util.Set<String> scopes = new java.util.LinkedHashSet<>(
+                    (java.util.List<String>) data.getOrDefault("scopes", java.util.List.of()));
+            @SuppressWarnings("unchecked")
+            Map<String, Object> additionalParams = (Map<String, Object>) data.getOrDefault("additionalParameters", Map.of());
+            @SuppressWarnings("unchecked")
+            Map<String, Object> attributes = (Map<String, Object>) data.getOrDefault("attributes", Map.of());
+
+            return OAuth2AuthorizationRequest.authorizationCode()
+                    .authorizationUri((String) data.get("authorizationUri"))
+                    .clientId((String) data.get("clientId"))
+                    .redirectUri((String) data.get("redirectUri"))
+                    .state((String) data.get("state"))
+                    .scopes(scopes)
+                    .additionalParameters(additionalParams)
+                    .attributes(attributes)
+                    .build();
         } catch (Exception e) {
+            log.warn("OAuth2 cookie deserialization failed: {}", e.getMessage());
             return null;
+        }
+    }
+
+    private String computeHmac(String data) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            SecretKeySpec keySpec = new SecretKeySpec(
+                    hmacSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+            mac.init(keySpec);
+            byte[] hash = mac.doFinal(data.getBytes(StandardCharsets.UTF_8));
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(hash);
+        } catch (Exception e) {
+            throw new RuntimeException("HMAC computation failed", e);
         }
     }
 }

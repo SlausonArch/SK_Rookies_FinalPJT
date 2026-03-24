@@ -28,13 +28,13 @@ public class AdminController {
     private final AdminService adminService;
 
     @GetMapping("/members")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('VCESYS_CORE', 'VCESYS_MGMT')")
     public ResponseEntity<List<Map<String, Object>>> getAllMembers() {
         return ResponseEntity.ok(adminService.getAllMembers());
     }
 
     @GetMapping("/members/search")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('VCESYS_CORE', 'VCESYS_MGMT')")
     public ResponseEntity<Map<String, Object>> searchMembers(
             @RequestParam(required = false) String q,
             @RequestParam(required = false) String role,
@@ -45,7 +45,7 @@ public class AdminController {
     }
 
     @GetMapping("/members/{memberId}/unmask")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('VCESYS_CORE')")
     public ResponseEntity<Map<String, Object>> getUnmaskedMemberInfo(
             @PathVariable Long memberId,
             HttpServletRequest request) {
@@ -53,13 +53,13 @@ public class AdminController {
     }
 
     @GetMapping("/members/{memberId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'STAFF')")
+    @PreAuthorize("hasAnyRole('VCESYS_CORE', 'VCESYS_MGMT', 'VCESYS_EMP')")
     public ResponseEntity<Map<String, Object>> getMemberDetails(@PathVariable Long memberId) {
         return ResponseEntity.ok(adminService.getMemberDetails(memberId));
     }
 
     @PatchMapping("/members/{memberId}/status")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('VCESYS_CORE')")
     public ResponseEntity<Map<String, Object>> updateMemberStatus(
             @PathVariable Long memberId,
             @RequestBody Map<String, String> body) {
@@ -68,13 +68,13 @@ public class AdminController {
     }
 
     @PatchMapping("/members/{memberId}/approve-id")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('VCESYS_CORE', 'VCESYS_MGMT')")
     public ResponseEntity<Map<String, Object>> approveMemberIdentity(@PathVariable Long memberId) {
         return ResponseEntity.ok(adminService.approveMemberIdentity(memberId));
     }
 
     @PatchMapping("/members/{memberId}/assets/reclaim")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('VCESYS_CORE')")
     public ResponseEntity<Map<String, Object>> reclaimMemberAsset(
             @PathVariable Long memberId,
             @RequestBody AdminAssetReclaimRequestDto body) {
@@ -87,31 +87,31 @@ public class AdminController {
     }
 
     @GetMapping("/orders")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('VCESYS_CORE', 'VCESYS_MGMT')")
     public ResponseEntity<List<Map<String, Object>>> getAllOrders() {
         return ResponseEntity.ok(adminService.getAllOrders());
     }
 
     @GetMapping("/assets")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('VCESYS_CORE', 'VCESYS_MGMT')")
     public ResponseEntity<List<Map<String, Object>>> getAllAssets() {
         return ResponseEntity.ok(adminService.getAllAssets());
     }
 
     @GetMapping("/transactions")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('VCESYS_CORE', 'VCESYS_MGMT')")
     public ResponseEntity<List<Map<String, Object>>> getAllTransactions() {
         return ResponseEntity.ok(adminService.getAllTransactions());
     }
 
     @GetMapping("/stats")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'STAFF')")
+    @PreAuthorize("hasAnyRole('VCESYS_CORE', 'VCESYS_MGMT', 'VCESYS_EMP')")
     public ResponseEntity<Map<String, Object>> getStats() {
         return ResponseEntity.ok(adminService.getStats());
     }
 
     @GetMapping("/transactions/search")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('VCESYS_CORE', 'VCESYS_MGMT')")
     public ResponseEntity<Map<String, Object>> searchTransactions(
             @RequestParam(required = false) String memberEmail,
             @RequestParam(required = false) String assetType,
@@ -132,13 +132,13 @@ public class AdminController {
     }
 
     @GetMapping("/inquiries")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'STAFF')")
+    @PreAuthorize("hasAnyRole('VCESYS_CORE', 'VCESYS_MGMT', 'VCESYS_EMP')")
     public ResponseEntity<List<Map<String, Object>>> getAllInquiries() {
         return ResponseEntity.ok(adminService.getAllInquiries());
     }
 
     @PatchMapping("/inquiries/{inquiryId}/reply")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'STAFF')")
+    @PreAuthorize("hasAnyRole('VCESYS_CORE', 'VCESYS_MGMT', 'VCESYS_EMP')")
     public ResponseEntity<Map<String, Object>> replyToInquiry(
             @PathVariable Long inquiryId,
             @RequestBody Map<String, String> body) {
@@ -150,13 +150,13 @@ public class AdminController {
     // ── 직원(Staff) 관리 ──────────────────────────────────────────────
 
     @GetMapping("/staff")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('VCESYS_CORE')")
     public ResponseEntity<List<Map<String, Object>>> getStaffMembers() {
         return ResponseEntity.ok(adminService.getStaffMembers());
     }
 
     @PostMapping("/staff")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('VCESYS_CORE')")
     public ResponseEntity<Map<String, Object>> createStaffMember(
             @RequestBody Map<String, String> body) {
         return ResponseEntity.ok(adminService.createStaffMember(
@@ -167,7 +167,7 @@ public class AdminController {
     }
 
     @DeleteMapping("/staff/{memberId}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('VCESYS_CORE')")
     public ResponseEntity<Map<String, Object>> deleteStaffMember(
             @PathVariable Long memberId) {
         return ResponseEntity.ok(adminService.deleteStaffMember(memberId));
@@ -177,7 +177,7 @@ public class AdminController {
     // filePath 파라미터에 대한 시큐어 코딩(검증 및 상위 디렉터리 접근 제한)이 누락되어 있습니다.
     // 이는 공격자가 임의의 시스템 파일에 접근하게 돕는 의도적 취약점 코드입니다.
     @GetMapping("/files/download")
-    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('VCESYS_CORE', 'VCESYS_MGMT')")
     public ResponseEntity<Resource> downloadFile(@RequestParam String filePath) {
         try {
             Path path;

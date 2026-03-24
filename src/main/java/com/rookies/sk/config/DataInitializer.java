@@ -1,15 +1,11 @@
 package com.rookies.sk.config;
 
-import com.rookies.sk.entity.Asset;
 import com.rookies.sk.entity.Faq;
 import com.rookies.sk.entity.Inquiry;
 import com.rookies.sk.entity.Member;
-import com.rookies.sk.entity.Transaction;
-import com.rookies.sk.repository.AssetRepository;
 import com.rookies.sk.repository.FaqRepository;
 import com.rookies.sk.repository.InquiryRepository;
 import com.rookies.sk.repository.MemberRepository;
-import com.rookies.sk.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
@@ -17,16 +13,12 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-import java.math.BigDecimal;
-
 @Slf4j
 @Configuration
 @RequiredArgsConstructor
 public class DataInitializer {
 
     private final MemberRepository memberRepository;
-    private final AssetRepository assetRepository;
-    private final TransactionRepository transactionRepository;
     private final FaqRepository faqRepository;
     private final InquiryRepository inquiryRepository;
     private final PasswordEncoder passwordEncoder;
@@ -48,7 +40,7 @@ public class DataInitializer {
                                 .name("시스템 관리자")
                                 .phoneNumber("010-0000-0000")
                                 .rrnPrefix("000101")
-                                .role(Member.Role.ADMIN)
+                                .role(Member.Role.VCESYS_CORE)
                                 .status(Member.Status.ACTIVE)
                                 .build();
                         memberRepository.save(admin);
@@ -59,7 +51,7 @@ public class DataInitializer {
             memberRepository.findByEmail("test@vce.com").ifPresentOrElse(
                     testUser -> {
                         testUser.setPassword(passwordEncoder.encode("test1234"));
-                        testUser.setRole(Member.Role.STAFF);
+                        testUser.setRole(Member.Role.VCESYS_EMP);
                         testUser.setBankName("VCE 가상은행");
                         testUser.setAccountNumber("110-123-456789");
                         memberRepository.save(testUser);
@@ -75,7 +67,7 @@ public class DataInitializer {
                                 .address("서울시 강남구")
                                 .bankName("VCE 가상은행")
                                 .accountNumber("110-123-456789")
-                                .role(Member.Role.STAFF)
+                                .role(Member.Role.VCESYS_EMP)
                                 .status(Member.Status.ACTIVE)
                                 .build();
                         memberRepository.save(testUser);
@@ -96,7 +88,7 @@ public class DataInitializer {
                                 .name("매니저")
                                 .phoneNumber("010-0000-0001")
                                 .rrnPrefix("000101")
-                                .role(Member.Role.MANAGER)
+                                .role(Member.Role.VCESYS_MGMT)
                                 .status(Member.Status.ACTIVE)
                                 .build();
                         memberRepository.save(manager);
@@ -117,7 +109,7 @@ public class DataInitializer {
                                 .name("스태프")
                                 .phoneNumber("010-0000-0002")
                                 .rrnPrefix("000101")
-                                .role(Member.Role.STAFF)
+                                .role(Member.Role.VCESYS_EMP)
                                 .status(Member.Status.ACTIVE)
                                 .build();
                         memberRepository.save(staff);
