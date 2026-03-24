@@ -1,32 +1,92 @@
--- Oracle 19c Database Seed Data
+-- Oracle Database Seed Data
 -- Purpose: DML only (no CREATE TABLE/INDEX/TRIGGER)
 
+-- 수수료 등급 기초 데이터
 MERGE INTO FEE_TIERS T
 USING (
-    SELECT 1 AS TIER_LEVEL, 'Bronze' AS TIER_NAME, 0 AS MIN_VOLUME, 1000000 AS MAX_VOLUME, 0.0020 AS FEE_RATE FROM DUAL
+    SELECT 1 AS TIER_LEVEL, 'Bronze' AS TIER_NAME, 0 AS MIN_VOLUME, 100000000 AS MAX_VOLUME, 0.0020 AS FEE_RATE FROM DUAL
     UNION ALL
-    SELECT 2, 'Silver', 1000001, 10000000, 0.0015 FROM DUAL
+    SELECT 2, 'Silver', 100000001, 2000000000, 0.0015 FROM DUAL
     UNION ALL
-    SELECT 3, 'Gold', 10000001, NULL, 0.0010 FROM DUAL
+    SELECT 3, 'Gold',   2000000001, 20000000000, 0.0010 FROM DUAL
+    UNION ALL
+    SELECT 4, 'VIP',   20000000001, NULL, 0.0005 FROM DUAL
 ) S
 ON (T.TIER_LEVEL = S.TIER_LEVEL)
 WHEN NOT MATCHED THEN
     INSERT (TIER_LEVEL, TIER_NAME, MIN_VOLUME, MAX_VOLUME, FEE_RATE)
     VALUES (S.TIER_LEVEL, S.TIER_NAME, S.MIN_VOLUME, S.MAX_VOLUME, S.FEE_RATE);
 
+-- 초기 관리자 계정 (비밀번호: admin1234)
 MERGE INTO MEMBERS M
 USING (SELECT 'admin@vce.com' AS EMAIL FROM DUAL) S
 ON (M.EMAIL = S.EMAIL)
 WHEN NOT MATCHED THEN
-    INSERT (EMAIL, PASSWORD, NAME, ROLE, STATUS, RRN_PREFIX, PHONE_NUMBER)
+    INSERT (EMAIL, PASSWORD, NAME, ROLE, STATUS, RRN_PREFIX, PHONE_NUMBER, LOGIN_FAIL_COUNT)
     VALUES (
         'admin@vce.com',
         '$2a$10$8.UnVuG9HHgffUDAlk8qfOuVGkqRzgVymGe07NWqE2G.n7XN7S4Gi',
-        '관리자',
-        'ADMIN',
+        '시스템 관리자',
+        'VCESYS_CORE',
         'ACTIVE',
-        '0000000',
-        '010-0000-0000'
+        '000101',
+        '010-0000-0000',
+        0
+    );
+
+-- 매니저 계정 (비밀번호: manager1234)
+MERGE INTO MEMBERS M
+USING (SELECT 'manager@vce.com' AS EMAIL FROM DUAL) S
+ON (M.EMAIL = S.EMAIL)
+WHEN NOT MATCHED THEN
+    INSERT (EMAIL, PASSWORD, NAME, ROLE, STATUS, RRN_PREFIX, PHONE_NUMBER, LOGIN_FAIL_COUNT)
+    VALUES (
+        'manager@vce.com',
+        '$2a$10$8.UnVuG9HHgffUDAlk8qfOuVGkqRzgVymGe07NWqE2G.n7XN7S4Gi',
+        '매니저',
+        'VCESYS_MGMT',
+        'ACTIVE',
+        '000101',
+        '010-0000-0001',
+        0
+    );
+
+-- 스태프 계정 (비밀번호: staff1234)
+MERGE INTO MEMBERS M
+USING (SELECT 'staff@vce.com' AS EMAIL FROM DUAL) S
+ON (M.EMAIL = S.EMAIL)
+WHEN NOT MATCHED THEN
+    INSERT (EMAIL, PASSWORD, NAME, ROLE, STATUS, RRN_PREFIX, PHONE_NUMBER, LOGIN_FAIL_COUNT)
+    VALUES (
+        'staff@vce.com',
+        '$2a$10$8.UnVuG9HHgffUDAlk8qfOuVGkqRzgVymGe07NWqE2G.n7XN7S4Gi',
+        '스태프',
+        'VCESYS_EMP',
+        'ACTIVE',
+        '000101',
+        '010-0000-0002',
+        0
+    );
+
+-- 테스트 일반 유저 계정 (비밀번호: test1234)
+MERGE INTO MEMBERS M
+USING (SELECT 'test@vce.com' AS EMAIL FROM DUAL) S
+ON (M.EMAIL = S.EMAIL)
+WHEN NOT MATCHED THEN
+    INSERT (EMAIL, PASSWORD, NAME, ROLE, STATUS, RRN_PREFIX, PHONE_NUMBER,
+            ADDRESS, BANK_NAME, ACCOUNT_NUMBER, LOGIN_FAIL_COUNT)
+    VALUES (
+        'test@vce.com',
+        '$2a$10$8.UnVuG9HHgffUDAlk8qfOuVGkqRzgVymGe07NWqE2G.n7XN7S4Gi',
+        '테스트 사용자',
+        'VCESYS_EMP',
+        'ACTIVE',
+        '950101',
+        '010-1234-5678',
+        '서울시 강남구',
+        'VCE 가상은행',
+        '110-123-456789',
+        0
     );
 
 COMMIT;
