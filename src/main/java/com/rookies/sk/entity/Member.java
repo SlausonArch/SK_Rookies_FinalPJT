@@ -73,6 +73,10 @@ public class Member {
     @Builder.Default
     private int loginFailCount = 0;
 
+    @Column(name = "BANK_BALANCE", nullable = false, precision = 19, scale = 8)
+    @Builder.Default
+    private java.math.BigDecimal bankBalance = new java.math.BigDecimal("50000000");
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "TIER_LEVEL")
     private FeeTier feeTier;

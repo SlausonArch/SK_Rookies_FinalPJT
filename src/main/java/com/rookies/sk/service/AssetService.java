@@ -54,6 +54,11 @@ public class AssetService {
                 return toDto(asset);
         }
 
+        @Transactional(readOnly = true)
+        public java.math.BigDecimal getBankBalance(String email) {
+                return findMemberByEmail(email).getBankBalance();
+        }
+
         @Transactional
         public AssetResponseDto deposit(String email, DepositRequestDto req) {
                 Member member = findMemberByEmail(email);
@@ -61,6 +66,12 @@ public class AssetService {
                 validateBankAccount(member, req.getBankName(), req.getAccountNumber());
                 String assetType = "KRW";
                 Asset asset = findOrCreateAsset(member, assetType);
+
+                if (member.getBankBalance().compareTo(req.getAmount()) < 0) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "가상은행 잔고가 부족합니다.");
+                }
+                member.setBankBalance(member.getBankBalance().subtract(req.getAmount()));
+                memberRepository.save(member);
 
                 asset.setBalance(asset.getBalance().add(req.getAmount()));
                 assetRepository.save(asset);
@@ -95,6 +106,9 @@ public class AssetService {
 
                 asset.setBalance(asset.getBalance().subtract(req.getAmount()));
                 assetRepository.save(asset);
+
+                member.setBankBalance(member.getBankBalance().add(req.getAmount()));
+                memberRepository.save(member);
 
                 Transaction tx = Transaction.builder()
                                 .member(member)

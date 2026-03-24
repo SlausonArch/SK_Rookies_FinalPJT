@@ -244,33 +244,13 @@ const BankDashboard: React.FC = () => {
   const [registeredBankName, setRegisteredBankName] = useState<string>('');
   const [registeredAccountNumber, setRegisteredAccountNumber] = useState<string>('');
 
-  const getEmailFromToken = () => {
-    if (!token) return 'default';
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      return payload.sub || 'default';
-    } catch (e) {
-      return 'default';
-    }
-  };
-
-  const loadBankBalance = () => {
-    const email = getEmailFromToken();
-    const key = `mock_bank_balance_${email}`;
-    const saved = localStorage.getItem(key);
-    if (saved) {
-      setBalance(Number(saved));
-    } else {
-      const initial = 50000000; // 5천만원 기본 지급
-      setBalance(initial);
-      localStorage.setItem(key, String(initial));
-    }
-  };
-
-  const updateBankBalance = (newBalance: number) => {
-    setBalance(newBalance);
-    const email = getEmailFromToken();
-    localStorage.setItem(`mock_bank_balance_${email}`, String(newBalance));
+  const fetchBankBalance = () => {
+    if (!token) return;
+    axios.get(`${API_BASE}/api/assets/bank-balance`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(res => setBalance(Number(res.data.bankBalance || 0)))
+      .catch(() => {});
   };
 
   const fetchUserInfo = () => {
@@ -310,7 +290,7 @@ const BankDashboard: React.FC = () => {
 
   useEffect(() => {
     if (token) {
-      loadBankBalance();
+      fetchBankBalance();
       fetchUserInfo();
       fetchExchangeBalance();
       const interval = setInterval(fetchExchangeBalance, 3000);
@@ -352,11 +332,10 @@ const BankDashboard: React.FC = () => {
         headers: { Authorization: `Bearer ${token}` }
       });
 
+      fetchBankBalance();
       if (mode === 'deposit') {
-        updateBankBalance(balance - numAmount);
         setSuccess('성공적으로 거래소로 입금되었습니다.');
       } else {
-        updateBankBalance(balance + numAmount);
         setSuccess('성공적으로 나의 통장으로 출금되었습니다.');
       }
 
