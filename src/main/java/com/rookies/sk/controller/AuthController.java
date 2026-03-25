@@ -40,6 +40,7 @@ public class AuthController {
     private final TransactionRepository transactionRepository;
     private final TokenBlacklistService tokenBlacklistService;
     private final SignupTokenStore signupTokenStore;
+    private final com.rookies.sk.service.ActiveSessionService activeSessionService;
 
     private static final int MAX_LOGIN_FAIL = 5;
     private static final int MAX_ADMIN_LOGIN_FAIL = 3;
@@ -103,6 +104,7 @@ public class AuthController {
             String accessToken = jwtTokenProvider.createAccessToken(
                     member.getEmail(), member.getRole().name(), member.getMemberId());
             String refreshToken = jwtTokenProvider.createRefreshToken(member.getEmail());
+            activeSessionService.activate(member.getEmail(), jwtTokenProvider.getTokenId(accessToken));
 
             return ResponseEntity.ok(java.util.Map.of(
                     "accessToken", accessToken,
@@ -165,6 +167,7 @@ public class AuthController {
                     member.getRole().name(),
                     member.getMemberId(),
                     member.getName());
+            activeSessionService.activate(member.getEmail(), jwtTokenProvider.getTokenId(accessToken));
 
             AdminLoginResponse response = new AdminLoginResponse(
                     accessToken,
@@ -313,6 +316,7 @@ public class AuthController {
         // Issue new tokens
         String newAccessToken = jwtTokenProvider.createAccessToken(updatedMember.getEmail(),
                 updatedMember.getRole().name(), updatedMember.getMemberId());
+        activeSessionService.activate(updatedMember.getEmail(), jwtTokenProvider.getTokenId(newAccessToken));
 
         return ResponseEntity.ok(newAccessToken);
     }
@@ -343,6 +347,7 @@ public class AuthController {
             String newAccessToken = jwtTokenProvider.createAccessToken(
                     email, member.getRole().name(), member.getMemberId());
             String newRefreshToken = jwtTokenProvider.createRefreshToken(email);
+            activeSessionService.activate(email, jwtTokenProvider.getTokenId(newAccessToken));
 
             return ResponseEntity.ok(java.util.Map.of(
                     "accessToken", newAccessToken,
@@ -354,12 +359,16 @@ public class AuthController {
 
     @PostMapping("/logout")
     public ResponseEntity<?> logout(
+            @AuthenticationPrincipal UserDetails userDetails,
             @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
             @RequestBody(required = false) TokenRevokeRequestDto request) {
         tokenBlacklistService.revokeTokens(
                 resolveBearerToken(authorizationHeader),
                 request != null ? request.getRefreshToken() : null,
                 "LOGOUT");
+        if (userDetails != null) {
+            activeSessionService.invalidate(userDetails.getUsername());
+        }
         return ResponseEntity.ok(java.util.Map.of("message", "로그아웃이 완료되었습니다."));
     }
 
@@ -375,6 +384,7 @@ public class AuthController {
                     resolveBearerToken(authorizationHeader),
                     request != null ? request.getRefreshToken() : null,
                     "WITHDRAW");
+            activeSessionService.invalidate(userDetails.getUsername());
             return ResponseEntity.ok(java.util.Map.of("message", "회원 탈퇴가 완료되었습니다."));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(java.util.Map.of("message", "회원 탈퇴 실패: " + e.getMessage()));

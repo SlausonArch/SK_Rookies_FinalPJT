@@ -2,6 +2,7 @@ package com.rookies.sk.security;
 
 import com.rookies.sk.entity.Member;
 import com.rookies.sk.repository.MemberRepository;
+import com.rookies.sk.service.ActiveSessionService;
 import com.rookies.sk.service.TokenBlacklistService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -30,6 +31,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtTokenProvider tokenProvider;
     private final MemberRepository memberRepository;
     private final TokenBlacklistService tokenBlacklistService;
+    private final ActiveSessionService activeSessionService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -47,6 +49,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             String email = tokenProvider.getEmail(token);
             String role = tokenProvider.getRole(token);
+
+            // ACCESS 토큰인 경우 활성 세션(단일 로그인) 검증
+            if ("ACCESS".equals(tokenProvider.getTokenType(token))) {
+                String jti = tokenProvider.getTokenId(token);
+                if (!activeSessionService.isActive(email, jti)) {
+                    writeJsonError(response, HttpServletResponse.SC_UNAUTHORIZED, "DUPLICATE_LOGIN");
+                    return;
+                }
+            }
             log.info("Token Valid. Email: {}, Role: {}", email, role);
 
             Member member = memberRepository.findByEmail(email).orElse(null);

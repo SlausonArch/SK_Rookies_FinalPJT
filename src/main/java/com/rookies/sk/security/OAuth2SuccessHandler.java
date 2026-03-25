@@ -26,6 +26,7 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
     private final MemberRepository memberRepository;
     private final HttpCookieOAuth2AuthorizationRequestRepository httpCookieOAuth2AuthorizationRequestRepository;
     private final SignupTokenStore signupTokenStore;
+    private final com.rookies.sk.service.ActiveSessionService activeSessionService;
 
     @org.springframework.beans.factory.annotation.Value("${app.frontend-url}")
     private String frontendUrl;
@@ -95,6 +96,7 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
         String accessToken = tokenProvider.createAccessToken(member.getEmail(), member.getRole().name(),
                 member.getMemberId());
         String refreshToken = tokenProvider.createRefreshToken(member.getEmail());
+        activeSessionService.activate(member.getEmail(), tokenProvider.getTokenId(accessToken));
 
         String targetUrl;
         if (member.getRole() == Member.Role.GUEST) {

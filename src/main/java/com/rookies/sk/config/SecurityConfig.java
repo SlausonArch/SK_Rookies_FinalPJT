@@ -36,6 +36,7 @@ public class SecurityConfig {
         private final JwtTokenProvider jwtTokenProvider;
         private final MemberRepository memberRepository;
         private final TokenBlacklistService tokenBlacklistService;
+        private final com.rookies.sk.service.ActiveSessionService activeSessionService;
         private final com.rookies.sk.security.HttpCookieOAuth2AuthorizationRequestRepository cookieAuthorizationRequestRepository;
 
         @org.springframework.beans.factory.annotation.Value("${app.cors.allowed-origins}")
@@ -115,7 +116,7 @@ public class SecurityConfig {
                                                 .successHandler(oAuth2SuccessHandler))
                                 .addFilterBefore(
                                                 new JwtAuthenticationFilter(jwtTokenProvider, memberRepository,
-                                                                tokenBlacklistService),
+                                                                tokenBlacklistService, activeSessionService),
                                                 UsernamePasswordAuthenticationFilter.class)
                                 .exceptionHandling(exception -> exception
                                                 .defaultAuthenticationEntryPointFor(
