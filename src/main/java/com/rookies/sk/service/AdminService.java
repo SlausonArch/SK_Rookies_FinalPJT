@@ -446,7 +446,7 @@ public class AdminService {
                 Sort.by(Sort.Direction.DESC, "txDate"));
 
         Page<Transaction> result = transactionRepository.searchAdminTransactions(
-                isBlank(memberEmail) ? null : memberEmail.trim(),
+                isBlank(memberEmail) ? null : memberEmail.trim().replace("%", "").replace("_", ""),
                 isBlank(assetType) ? null : assetType.toUpperCase(),
                 isBlank(txType) ? null : txType.toUpperCase(),
                 fromDt,

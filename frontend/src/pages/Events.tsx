@@ -345,22 +345,25 @@ const Events: React.FC = () => {
 
   const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:18080';
 
-  const getTodayKey = () => new Date().toISOString().slice(0, 10);
-
   const getAuthHeader = () => {
     const token = localStorage.getItem('accessToken');
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
 
-  // 로컬 저장된 오늘 기록 불러오기
+  // 서버에서 오늘 이벤트 참여 현황 조회
   React.useEffect(() => {
-    const today = getTodayKey();
-    if (localStorage.getItem('attendance_date') === today) {
-      setAttendanceDone(true);
-    }
-    if (localStorage.getItem('ad_mission_date') === today) {
-      setAdMissionCount(parseInt(localStorage.getItem('ad_mission_count') || '0', 10));
-    }
+    const token = localStorage.getItem('accessToken');
+    if (!token) return;
+    axios
+      .get<{ attendanceDone: boolean; adMissionCount: number }>(
+        `${API_BASE}/api/events/status`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      .then(res => {
+        setAttendanceDone(res.data.attendanceDone);
+        setAdMissionCount(res.data.adMissionCount);
+      })
+      .catch(() => { /* 미로그인 상태 등 무시 */ });
   }, []);
 
   const handleAttendance = async () => {
@@ -370,38 +373,39 @@ const Events: React.FC = () => {
       window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
       return;
     }
-    const today = getTodayKey();
-    if (localStorage.getItem('attendance_date') === today) {
+    if (attendanceDone) {
       alert('오늘은 이미 출석 체크를 완료했습니다! 내일 다시 도전하세요 😊');
       return;
     }
     try {
       const res = await axios.post(`${API_BASE}/api/events/attendance`, {}, { headers: getAuthHeader() });
-      localStorage.setItem('attendance_date', today);
       setAttendanceDone(true);
       setAttendanceResult(res.data);
       setShowAttendanceModal(true);
-    } catch {
-      alert('출석 체크에 실패했습니다. 다시 시도해주세요.');
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err) && err.response?.status === 409) {
+        setAttendanceDone(true);
+        alert('오늘은 이미 출석 체크를 완료했습니다! 내일 다시 도전하세요 😊');
+      } else {
+        alert('출석 체크에 실패했습니다. 다시 시도해주세요.');
+      }
     }
   };
 
   const callAdMissionAPI = async () => {
     const token = localStorage.getItem('accessToken');
     if (!token) return;
-    const today = getTodayKey();
-    const currentCount = localStorage.getItem('ad_mission_date') === today
-      ? parseInt(localStorage.getItem('ad_mission_count') || '0', 10) : 0;
-    if (currentCount >= 3) return;
+    if (adMissionCount >= 3) return;
     try {
-      const res = await axios.post(`${API_BASE}/api/events/ad-mission`, {}, { headers: getAuthHeader() });
-      const newCount = currentCount + 1;
-      localStorage.setItem('ad_mission_date', today);
-      localStorage.setItem('ad_mission_count', String(newCount));
-      setAdMissionCount(newCount);
+      const res = await axios.post<{ message: string; adMissionCount: number }>(
+        `${API_BASE}/api/events/ad-mission`, {}, { headers: getAuthHeader() }
+      );
+      setAdMissionCount(res.data.adMissionCount);
       setAdMissionResult(res.data.message);
-    } catch {
-      // 조용히 실패
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err) && err.response?.status === 409) {
+        setAdMissionCount(3);
+      }
     }
   };
 
@@ -412,28 +416,15 @@ const Events: React.FC = () => {
       window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
       return;
     }
-    const today = getTodayKey();
-    const count = localStorage.getItem('ad_mission_date') === today
-      ? parseInt(localStorage.getItem('ad_mission_count') || '0', 10) : 0;
-    if (count >= 3) {
+    if (adMissionCount >= 3) {
       alert('오늘 광고 보기 미션을 모두 완료했습니다! (3/3)');
       return;
     }
-    // V-EVENT-02: 네이버로 이동 후 복귀 시 광고를 본 것으로 처리 (실제 시청 여부 무검증)
-    localStorage.setItem('ad_watching', 'true');
     window.open('https://www.naver.com/', '_blank');
+    void callAdMissionAPI();
   };
 
-  // 광고 탭에서 복귀 감지 → 포인트 자동 지급
-  React.useEffect(() => {
-    const handleFocus = () => {
-      if (localStorage.getItem('ad_watching') !== 'true') return;
-      localStorage.removeItem('ad_watching');
-      void callAdMissionAPI();
-    };
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-  }, []);
+  // 광고 탭 복귀 감지 제거 — 광고 버튼 클릭 즉시 서버 호출로 대체됨
 
   const handleCheckReferral = async () => {
     const token = localStorage.getItem('accessToken');

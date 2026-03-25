@@ -18,6 +18,8 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
 
     List<Transaction> findByMember_MemberIdAndTxType(Long memberId, String txType);
 
+    long countByMember_MemberIdAndTxTypeAndTxDateBetween(Long memberId, String txType, LocalDateTime from, LocalDateTime to);
+
     List<Transaction> findByMember_MemberIdAndTxTypeAndAssetType(Long memberId, String txType, String assetType);
 
     @org.springframework.data.jpa.repository.Query("SELECT COALESCE(SUM(t.totalValue), 0) FROM Transaction t WHERE t.member.memberId = :memberId AND t.txType IN ('BUY', 'SELL')")

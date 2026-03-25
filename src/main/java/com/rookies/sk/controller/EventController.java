@@ -17,6 +17,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -32,7 +34,10 @@ public class EventController {
     private final AssetRepository assetRepository;
     private final TransactionRepository transactionRepository;
 
-    // Upbit KRW 마켓에서 유효한 코인 목록 (시작 시 로드)
+    private static final String TX_ATTENDANCE = "ATTENDANCE_REWARD";
+    private static final String TX_AD_MISSION = "AD_MISSION_REWARD";
+    private static final int AD_MISSION_DAILY_LIMIT = 3;
+
     private static final String[] FALLBACK_COINS = {
             "BTC", "ETH", "XRP", "SOL", "ADA", "DOT", "AVAX", "LINK", "ATOM", "DOGE"
     };
@@ -69,31 +74,57 @@ public class EventController {
         return validCoins.get(RANDOM.nextInt(validCoins.size()));
     }
 
-    /**
-     * V-EVENT-01: 출석 체크 이벤트
-     * 취약점: 날짜/중복 검증 없이 호출할 때마다 코인 지급
-     * 공격자는 반복 호출로 무제한 코인 획득 가능
-     */
-    @PostMapping("/attendance")
-    @Transactional
-    public ResponseEntity<?> checkAttendance(
-            @AuthenticationPrincipal UserDetails userDetails) {
+    private LocalDateTime startOfToday() {
+        return LocalDate.now().atStartOfDay();
+    }
+
+    private LocalDateTime startOfTomorrow() {
+        return LocalDate.now().plusDays(1).atStartOfDay();
+    }
+
+    /** 오늘의 이벤트 참여 현황 조회 */
+    @GetMapping("/status")
+    public ResponseEntity<?> getEventStatus(@AuthenticationPrincipal UserDetails userDetails) {
         if (userDetails == null) {
             return ResponseEntity.status(401).body(Map.of("error", "로그인이 필요합니다."));
         }
-
-        String email = userDetails.getUsername();
-        Member member = memberRepository.findByEmail(email).orElse(null);
+        Member member = memberRepository.findByEmail(userDetails.getUsername()).orElse(null);
         if (member == null) {
             return ResponseEntity.status(404).body(Map.of("error", "사용자를 찾을 수 없습니다."));
+        }
+
+        long attendanceCount = transactionRepository.countByMember_MemberIdAndTxTypeAndTxDateBetween(
+                member.getMemberId(), TX_ATTENDANCE, startOfToday(), startOfTomorrow());
+        long adMissionCount = transactionRepository.countByMember_MemberIdAndTxTypeAndTxDateBetween(
+                member.getMemberId(), TX_AD_MISSION, startOfToday(), startOfTomorrow());
+
+        return ResponseEntity.ok(Map.of(
+                "attendanceDone", attendanceCount > 0,
+                "adMissionCount", (int) Math.min(adMissionCount, AD_MISSION_DAILY_LIMIT)
+        ));
+    }
+
+    /** 출석 체크 — 하루 1회 제한 */
+    @PostMapping("/attendance")
+    @Transactional
+    public ResponseEntity<?> checkAttendance(@AuthenticationPrincipal UserDetails userDetails) {
+        if (userDetails == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "로그인이 필요합니다."));
+        }
+        Member member = memberRepository.findByEmail(userDetails.getUsername()).orElse(null);
+        if (member == null) {
+            return ResponseEntity.status(404).body(Map.of("error", "사용자를 찾을 수 없습니다."));
+        }
+
+        long todayCount = transactionRepository.countByMember_MemberIdAndTxTypeAndTxDateBetween(
+                member.getMemberId(), TX_ATTENDANCE, startOfToday(), startOfTomorrow());
+        if (todayCount > 0) {
+            return ResponseEntity.status(409).body(Map.of("message", "오늘은 이미 출석 체크를 완료했습니다."));
         }
 
         String coin = pickRandomCoin();
         int amount = (RANDOM.nextInt(100) + 1) * 1000;
 
-        log.info("출석 체크 처리: email={}, coin={}, amount={}", email, coin, amount);
-
-        // V-EVENT-01: 중복 출석 체크 방지 로직 없음 - 매번 지급
         Asset asset = assetRepository.findByMember_MemberIdAndAssetType(member.getMemberId(), coin)
                 .orElseGet(() -> Asset.builder()
                         .member(member)
@@ -105,7 +136,7 @@ public class EventController {
 
         transactionRepository.save(Transaction.builder()
                 .member(member)
-                .txType("EVENT_REWARD")
+                .txType(TX_ATTENDANCE)
                 .assetType(coin)
                 .amount(BigDecimal.valueOf(amount))
                 .price(BigDecimal.ZERO)
@@ -113,6 +144,8 @@ public class EventController {
                 .fee(BigDecimal.ZERO)
                 .status("COMPLETED")
                 .build());
+
+        log.info("출석 체크 완료: email={}, coin={}, amount={}", member.getEmail(), coin, amount);
 
         return ResponseEntity.ok(Map.of(
                 "success", true,
@@ -122,28 +155,24 @@ public class EventController {
         ));
     }
 
-    /**
-     * V-EVENT-02: 광고 보기 미션
-     * 취약점: 광고를 실제로 시청하지 않아도 API 호출만으로 미션 성공 처리
-     * 페이지 방문 또는 API 직접 호출 시 즉시 보상 지급
-     */
+    /** 광고 보기 미션 — 하루 3회 제한 */
     @PostMapping("/ad-mission")
     @Transactional
-    public ResponseEntity<?> completeAdMission(
-            @AuthenticationPrincipal UserDetails userDetails) {
+    public ResponseEntity<?> completeAdMission(@AuthenticationPrincipal UserDetails userDetails) {
         if (userDetails == null) {
             return ResponseEntity.status(401).body(Map.of("error", "로그인이 필요합니다."));
         }
-
-        String email = userDetails.getUsername();
-        Member member = memberRepository.findByEmail(email).orElse(null);
+        Member member = memberRepository.findByEmail(userDetails.getUsername()).orElse(null);
         if (member == null) {
             return ResponseEntity.status(404).body(Map.of("error", "사용자를 찾을 수 없습니다."));
         }
 
-        log.info("광고 미션 완료 처리: email={}", email);
+        long todayCount = transactionRepository.countByMember_MemberIdAndTxTypeAndTxDateBetween(
+                member.getMemberId(), TX_AD_MISSION, startOfToday(), startOfTomorrow());
+        if (todayCount >= AD_MISSION_DAILY_LIMIT) {
+            return ResponseEntity.status(409).body(Map.of("message", "오늘 광고 보기 미션을 모두 완료했습니다. (3/3)"));
+        }
 
-        // V-EVENT-02: 실제 광고 시청 여부 검증 없음 - KRW 포인트로 적립
         Asset krwAsset = assetRepository.findByMember_MemberIdAndAssetType(member.getMemberId(), "KRW")
                 .orElseGet(() -> Asset.builder()
                         .member(member)
@@ -155,7 +184,7 @@ public class EventController {
 
         transactionRepository.save(Transaction.builder()
                 .member(member)
-                .txType("EVENT_REWARD")
+                .txType(TX_AD_MISSION)
                 .assetType("KRW")
                 .amount(BigDecimal.valueOf(5000))
                 .price(BigDecimal.ZERO)
@@ -164,9 +193,13 @@ public class EventController {
                 .status("COMPLETED")
                 .build());
 
+        int newCount = (int) (todayCount + 1);
+        log.info("광고 미션 완료: email={}, count={}/{}", member.getEmail(), newCount, AD_MISSION_DAILY_LIMIT);
+
         return ResponseEntity.ok(Map.of(
                 "success", true,
                 "reward", 5000,
+                "adMissionCount", newCount,
                 "message", "광고 시청 미션 완료! 5,000 KRW가 지급되었습니다."
         ));
     }

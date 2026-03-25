@@ -164,7 +164,7 @@ function CommunityWrite() {
       const formData = new FormData();
       formData.append('file', file);
       const response = await axios.post<{ attachmentUrl: string }>(`${API_BASE}/api/community/uploads`, formData, {
-        headers: { ...authHeaders, 'Content-Type': 'multipart/form-data' }
+        headers: { ...authHeaders }
       });
       setAttachmentUrl(response.data.attachmentUrl);
     } catch {

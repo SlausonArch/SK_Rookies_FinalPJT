@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -26,6 +27,7 @@ import java.util.List;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
 
@@ -85,13 +87,15 @@ public class SecurityConfig {
                                                                 "/api/auth/logout")
                                                 .authenticated()
                                                 .requestMatchers("/", "/login/**", "/oauth2/**", "/api/auth/**",
-                                                                "/error")
+                                                                "/error", "/uploads/**")
                                                 .permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/api/community/posts/**").permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/api/news").permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/api/market/**").permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/api/support/faqs").permitAll()
                                                 .requestMatchers("/api/auth/signup/complete").hasRole("GUEST")
+                                                .requestMatchers("/api/files/id-photo/**")
+                                                .hasAnyRole("VCESYS_CORE", "VCESYS_MGMT", "VCESYS_EMP")
                                                 .requestMatchers("/api/admin/**")
                                                 .hasAnyRole("VCESYS_CORE", "VCESYS_MGMT", "VCESYS_EMP")
                                                 .anyRequest().authenticated())
