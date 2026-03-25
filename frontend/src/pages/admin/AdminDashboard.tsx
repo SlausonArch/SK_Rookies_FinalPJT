@@ -1031,14 +1031,21 @@ const AdminDashboard = () => {
 
   // 마운트 시 인증 확인 + 다른 탭 로그아웃 감지
   useEffect(() => {
+    const isAllowedRole = (r: string | null) =>
+      r === 'VCESYS_CORE' || r === 'VCESYS_MGMT' || r === 'VCESYS_EMP';
+
     const checkAuth = () => {
       const currentToken = getAdminAccessToken();
       const r = getAdminRole();
-      if (!currentToken || r !== 'VCESYS_CORE') {
+      if (!currentToken || !isAllowedRole(r)) {
         navigate('/admin/login', { replace: true });
         return;
       }
       setToken(currentToken);
+      // EMP는 접근 가능한 첫 메뉴(community)로 기본 진입
+      if (r === 'VCESYS_EMP') {
+        setActiveMenu('community');
+      }
     };
 
     checkAuth();
@@ -1059,7 +1066,7 @@ const AdminDashboard = () => {
         return;
       }
       const r = getAdminRole();
-      if (r === 'VCESYS_CORE') {
+      if (isAllowedRole(r)) {
         setToken(currentToken);
       }
     };
