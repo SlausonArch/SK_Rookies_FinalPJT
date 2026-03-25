@@ -19,6 +19,7 @@ import {
   getAdminAccessToken,
   getAdminName,
   getAdminRole,
+  ADMIN_ACCESS_TOKEN_KEY,
 } from '../../utils/auth';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
@@ -1041,8 +1042,30 @@ const AdminDashboard = () => {
     };
 
     checkAuth();
-    window.addEventListener('storage', checkAuth);
-    return () => window.removeEventListener('storage', checkAuth);
+
+    const handleStorage = (e: Event) => {
+      if (e instanceof StorageEvent) {
+        // 다른 탭에서 발생한 네이티브 이벤트: admin 토큰 키 변경 시에만 인증 확인
+        if (e.key === null || e.key === ADMIN_ACCESS_TOKEN_KEY) {
+          checkAuth();
+        }
+        return;
+      }
+      // dispatchAuthChange()가 발생시킨 합성 이벤트:
+      // 토큰이 실제로 없을 때만 로그인으로 이동 (토큰 동기화 중 오탐 방지)
+      const currentToken = getAdminAccessToken();
+      if (!currentToken) {
+        navigate('/admin/login', { replace: true });
+        return;
+      }
+      const r = getAdminRole();
+      if (r === 'VCESYS_CORE') {
+        setToken(currentToken);
+      }
+    };
+
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
   }, [navigate]);
 
   // 30분 유휴 시 자동 로그아웃
