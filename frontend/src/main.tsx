@@ -4,9 +4,11 @@ import axios from 'axios'
 import './index.css'
 import App from './App.tsx'
 
-// JWT는 localStorage에 저장 후 Authorization 헤더로 전송하므로 CSRF 불필요
-// 쿠키 기반 인증(세션)이 아니기 때문에 CSRF 공격 벡터 자체가 존재하지 않음
+// CSRF: Spring CookieCsrfTokenRepository가 발급하는 XSRF-TOKEN 쿠키를
+// 모든 상태 변경 요청(POST/PUT/PATCH/DELETE)의 X-XSRF-TOKEN 헤더로 자동 첨부
 axios.defaults.withCredentials = true;
+axios.defaults.xsrfCookieName = 'XSRF-TOKEN';
+axios.defaults.xsrfHeaderName = 'X-XSRF-TOKEN';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
