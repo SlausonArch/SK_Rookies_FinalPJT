@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import axios from 'axios';
 import { useSearchParams, useNavigate } from 'react-router-dom';
@@ -197,17 +197,20 @@ const SignupComplete: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   const [token, setToken] = useState<string | null>(null);
+  const exchangeAttempted = useRef(false);
 
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 
   useEffect(() => {
+    if (exchangeAttempted.current) return;
+    exchangeAttempted.current = true;
+
     const code = searchParams.get('code');
     if (!code) {
       alert('유효하지 않은 접근입니다.');
       navigate('/login');
       return;
     }
-    // code를 즉시 URL에서 제거
     window.history.replaceState(null, '', window.location.pathname);
 
     axios.get(`${API_BASE_URL}/api/auth/signup/token`, { params: { code } })
