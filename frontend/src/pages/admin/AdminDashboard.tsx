@@ -1357,7 +1357,7 @@ const AdminDashboard = () => {
       const formData = new FormData();
       formData.append('file', file);
       const response = await axios.post<{ attachmentUrl: string }>(`${API_BASE}/api/community/uploads`, formData, {
-        headers: { ...headers, 'Content-Type': 'multipart/form-data' },
+        headers: { ...headers },
       });
 
       setNoticeForm(prev => ({ ...prev, attachmentUrl: response.data.attachmentUrl }));

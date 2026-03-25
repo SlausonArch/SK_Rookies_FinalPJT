@@ -487,7 +487,6 @@ const Support: React.FC = () => {
       await axios.post(`${API_BASE}/api/support/inquiries`, formData, {
         headers: {
           Authorization: `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data'
         }
       });
       alert('문의가 등록되었습니다.');
