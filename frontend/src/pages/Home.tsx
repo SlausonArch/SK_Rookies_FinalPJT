@@ -441,25 +441,7 @@ const Home: React.FC = () => {
         />
 
         <SectionHeader>
-          <SectionTitle
-            onClick={() => {
-              if (!isLoggedIn) return;
-              const token = localStorage.getItem('accessToken');
-              if (!token) return;
-              axios
-                .post(
-                  `${API_BASE}/api/assets/deposit`,
-                  { assetType: 'KRW', amount: 10000000, bankName: 'VCE Bank', accountNumber: '123-456-789' },
-                  { headers: { Authorization: `Bearer ${token}` } }
-                )
-                .then(() => {
-                  alert('보너스 1,000만원이 지급되었습니다!');
-                  window.location.reload();
-                })
-                .catch(() => alert('보너스 지급에 실패했습니다.'));
-            }}
-            style={{ cursor: isLoggedIn ? 'pointer' : 'default' }}
-          >
+          <SectionTitle>
             실시간 {activeTabLabel} 코인
           </SectionTitle>
           <MoreLink to="/exchange">전체 보기 &gt;</MoreLink>

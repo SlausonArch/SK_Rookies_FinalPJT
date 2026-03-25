@@ -1012,10 +1012,6 @@ const AdminDashboard = () => {
   const [staffMsg, setStaffMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [staffDeleteConfirm, setStaffDeleteConfirm] = useState<number | null>(null);
 
-  // 일반 회원 목록 상태 (시스템 설정 탭)
-  const [regularMembers, setRegularMembers] = useState<MemberRow[]>([]);
-  const [regularMembersLoading, setRegularMembersLoading] = useState(false);
-
   const [memberQuery, setMemberQuery] = useState({ q: '', role: '', status: '', page: 0, size: 20 });
   const [memberTotal, setMemberTotal] = useState(0);
   const [memberTotalPages, setMemberTotalPages] = useState(0);
@@ -1171,15 +1167,6 @@ const AdminDashboard = () => {
         .catch(() => { })
         .finally(() => setStaffLoading(false));
 
-      setRegularMembersLoading(true);
-      axios
-        .get<{ content: MemberRow[] }>(`${API_BASE}/api/admin/members/search`, {
-          headers: h,
-          params: { role: 'USER', size: 200, page: 0 },
-        })
-        .then(r => setRegularMembers(r.data.content || []))
-        .catch(() => { })
-        .finally(() => setRegularMembersLoading(false));
     }
   }, [activeMenu, token, txQuery, memberQuery]);
 
@@ -2125,45 +2112,6 @@ const AdminDashboard = () => {
                   비밀번호 변경
                 </PrimaryButton>
               </div>
-            </Card>
-
-            {/* ── 일반 회원 목록 ── */}
-            <Card style={{ marginTop: 14 }}>
-              <CardTitle>일반 회원 목록</CardTitle>
-              {regularMembersLoading ? (
-                <p style={{ color: '#888', fontSize: 13 }}>로딩 중…</p>
-              ) : regularMembers.length === 0 ? (
-                <p style={{ color: '#888', fontSize: 13 }}>일반 회원이 없습니다.</p>
-              ) : (
-                <Table>
-                  <thead>
-                    <tr>
-                      <th>ID</th>
-                      <th>이메일</th>
-                      <th>이름</th>
-                      <th>전화번호</th>
-                      <th>상태</th>
-                      <th>가입일</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {regularMembers.map(m => (
-                      <tr key={m.memberId}>
-                        <td>{m.memberId}</td>
-                        <td>{m.email}</td>
-                        <td>{m.name}</td>
-                        <td>{m.phoneNumber ?? '-'}</td>
-                        <td>
-                          <Badge $tone={m.status === 'ACTIVE' ? 'success' : m.status === 'SUSPENDED' ? 'danger' : 'neutral'}>
-                            {m.status}
-                          </Badge>
-                        </td>
-                        <td>{m.createdAt ? m.createdAt.slice(0, 10) : '-'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </Table>
-              )}
             </Card>
 
             {/* ── 직원(Admin/Manager/Staff) 관리 — ADMIN 전용 ── */}

@@ -176,10 +176,15 @@ public class AdminService {
         Member.Status statusEnum = isBlank(status) ? null : Member.Status.valueOf(status.toUpperCase());
 
         String sanitizedQ = isBlank(q) ? null : escapeLikeWildcards(q.trim());
+
+        // 직원 역할은 회원 검색에서 항상 제외 (직원 관리는 /api/admin/staff 별도 제공)
+        List<Member.Role> staffRoles = List.of(
+                Member.Role.VCESYS_CORE, Member.Role.VCESYS_MGMT, Member.Role.VCESYS_EMP);
         Page<Member> result = memberRepository.searchMembers(
                 sanitizedQ,
                 roleEnum,
                 statusEnum,
+                staffRoles,
                 pageable);
 
         List<Map<String, Object>> content = result.getContent().stream().map(m -> {
