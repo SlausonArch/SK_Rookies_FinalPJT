@@ -121,7 +121,7 @@ public class AuthController {
 
     @PostMapping("/admin/login")
     public ResponseEntity<?> adminLogin(@RequestBody AdminLoginRequest request) {
-        log.info("Admin login request received for email: {}", request.getEmail());
+        log.debug("Admin login request received");
         try {
             Member member = memberService.findByEmailForLogin(request.getEmail());
 
@@ -171,11 +171,7 @@ public class AuthController {
             activeSessionService.activate(member.getEmail(), jwtTokenProvider.getTokenId(accessToken),
                     jwtTokenProvider.getExpiration(accessToken).toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime());
 
-            AdminLoginResponse response = new AdminLoginResponse(
-                    accessToken,
-                    member.getRole().name(),
-                    member.getEmail(),
-                    member.getName());
+            AdminLoginResponse response = new AdminLoginResponse(accessToken);
 
             return ResponseEntity.ok(response);
         } catch (Exception e) {

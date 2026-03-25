@@ -42,13 +42,17 @@ public class AdminService {
     private final AuditLogRepository auditLogRepository;
     private final PasswordEncoder passwordEncoder;
 
+    /**
+     * VCESYS_CORE 이외의 역할(MGMT, EMP 등)이거나 인증 정보가 없으면 true 반환.
+     * true 일 때 금융 원본값(잔고, 거래금액 등)을 0 또는 빈 값으로 마스킹.
+     */
     private boolean isManager() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null)
-            return false;
+            return true; // 인증 정보 없으면 안전하게 마스킹
         return authentication.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
-                .anyMatch(role -> role.equals("ROLE_MANAGER"));
+                .noneMatch(role -> role.equals("ROLE_VCESYS_CORE"));
     }
 
     private String maskEmail(String email) {
@@ -242,8 +246,8 @@ public class AdminService {
 
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("memberId", member.getMemberId());
-        map.put("email", member.getEmail());
-        map.put("name", member.getName());
+        map.put("email", maskEmail(member.getEmail()));
+        map.put("name", maskName(member.getName()));
         map.put("status", member.getStatus().name());
         return map;
     }
@@ -506,10 +510,6 @@ public class AdminService {
                     map.put("role", m.getRole().name());
                     map.put("status", m.getStatus().name());
                     map.put("createdAt", m.getCreatedAt());
-                    // BCrypt 해시는 $2a$ 또는 $2b$로 시작 → 비밀번호 정책 미준수 경고
-                    boolean needsUpdate = m.getPassword() != null &&
-                            (m.getPassword().startsWith("$2a$") || m.getPassword().startsWith("$2b$"));
-                    map.put("passwordNeedsUpdate", needsUpdate);
                     return map;
                 }).collect(Collectors.toList());
     }
