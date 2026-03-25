@@ -70,7 +70,7 @@ public class AuthController {
 
     @PostMapping("/test/login")
     public ResponseEntity<?> testLogin(@RequestBody AdminLoginRequest request) {
-        log.info("Test login request received for email: {}", request.getEmail());
+        log.debug("Test login request received");
         try {
             Member member = memberService.findByEmailForLogin(request.getEmail());
 
@@ -109,10 +109,7 @@ public class AuthController {
 
             return ResponseEntity.ok(java.util.Map.of(
                     "accessToken", accessToken,
-                    "refreshToken", refreshToken,
-                    "role", member.getRole().name(),
-                    "email", member.getEmail(),
-                    "name", member.getName()));
+                    "refreshToken", refreshToken));
         } catch (Exception e) {
             log.error("Test login failed", e);
             return ResponseEntity.status(401).body("로그인 실패");
@@ -125,12 +122,9 @@ public class AuthController {
         try {
             Member member = memberService.findByEmailForLogin(request.getEmail());
 
-            if (member.getStatus() == Member.Status.WITHDRAWN) {
-                return ResponseEntity.status(403).body(WITHDRAWN_ACCOUNT_MESSAGE);
-            }
-
-            if (member.getStatus() == Member.Status.AUTH_FAILED) {
-                return ResponseEntity.status(403).body("인증 실패로 계정이 잠겼습니다.");
+            if (member.getStatus() == Member.Status.WITHDRAWN
+                    || member.getStatus() == Member.Status.AUTH_FAILED) {
+                return ResponseEntity.status(401).body("로그인에 실패했습니다.");
             }
 
             boolean passwordMatch = false;
@@ -148,18 +142,16 @@ public class AuthController {
                 member.setLoginFailCount(failCount);
                 if (failCount >= MAX_ADMIN_LOGIN_FAIL) {
                     member.setStatus(Member.Status.AUTH_FAILED);
-                    memberService.saveMember(member);
-                    return ResponseEntity.status(403).body("인증 실패 횟수(" + MAX_ADMIN_LOGIN_FAIL + "회)를 초과하여 계정이 잠겼습니다.");
                 }
                 memberService.saveMember(member);
-                return ResponseEntity.status(401).body("Invalid credentials (" + failCount + "/" + MAX_ADMIN_LOGIN_FAIL + ")");
+                return ResponseEntity.status(401).body("로그인에 실패했습니다.");
             }
 
             // 관리자 권한 확인 (VCESYS_CORE, VCESYS_MGMT, VCESYS_EMP 허용)
             if (member.getRole() != Member.Role.VCESYS_CORE
                     && member.getRole() != Member.Role.VCESYS_MGMT
                     && member.getRole() != Member.Role.VCESYS_EMP) {
-                return ResponseEntity.status(403).body("Access denied");
+                return ResponseEntity.status(401).body("로그인에 실패했습니다.");
             }
 
             member.setLoginFailCount(0);

@@ -298,15 +298,7 @@ public class AdminService {
         transactionRepository.save(tx);
 
         Map<String, Object> map = new LinkedHashMap<>();
-        boolean manager = isManager();
-        map.put("memberId", member.getMemberId());
-        map.put("memberEmail", maskEmail(member.getEmail()));
         map.put("assetType", normalizedAssetType);
-        map.put("reclaimedAmount", reclaimAmount);
-        map.put("balance", manager ? BigDecimal.ZERO : asset.getBalance());
-        map.put("lockedBalance", manager ? BigDecimal.ZERO : lockedBalance);
-        map.put("availableBalance", nonNegative(asset.getBalance().subtract(lockedBalance)));
-        map.put("reason", reason != null ? reason.trim() : "");
         map.put("message", "자산 회수가 완료되었습니다.");
         return map;
     }
@@ -505,8 +497,8 @@ public class AdminService {
                 .map(m -> {
                     Map<String, Object> map = new LinkedHashMap<>();
                     map.put("memberId", m.getMemberId());
-                    map.put("email", m.getEmail());
-                    map.put("name", m.getName());
+                    map.put("email", maskEmail(m.getEmail()));
+                    map.put("name", maskName(m.getName()));
                     map.put("role", m.getRole().name());
                     map.put("status", m.getStatus().name());
                     map.put("createdAt", m.getCreatedAt());
@@ -547,11 +539,9 @@ public class AdminService {
         memberRepository.save(member);
 
         Map<String, Object> map = new LinkedHashMap<>();
-        map.put("memberId", member.getMemberId());
-        map.put("email", member.getEmail());
-        map.put("name", member.getName());
+        map.put("email", maskEmail(member.getEmail()));
+        map.put("name", maskName(member.getName()));
         map.put("role", member.getRole().name());
-        map.put("status", member.getStatus().name());
         map.put("message", "직원 계정이 생성되었습니다.");
         return map;
     }

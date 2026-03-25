@@ -169,8 +169,8 @@ const AdminLogin = () => {
       setAdminSession(accessToken);
 
       navigate('/admin/dashboard', { replace: true });
-    } catch (err: any) {
-      setError(err.response?.data || '로그인에 실패했습니다.');
+    } catch {
+      setError('아이디 또는 비밀번호를 확인해 주세요.');
     } finally {
       setLoading(false);
     }

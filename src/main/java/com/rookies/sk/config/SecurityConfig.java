@@ -84,6 +84,10 @@ public class SecurityConfig {
                                                                                                          // here.
                                 .authorizeHttpRequests(auth -> auth
                                                 .requestMatchers(HttpMethod.TRACE, "/**").denyAll()
+                                                // 관리자 API: 실제 사용하지 않는 취약 메소드 차단
+                                                .requestMatchers(HttpMethod.HEAD, "/api/admin/**").denyAll()
+                                                .requestMatchers(HttpMethod.PUT, "/api/admin/**").denyAll()
+                                                .requestMatchers(HttpMethod.HEAD, "/api/auth/admin/**").denyAll()
                                                 // 인증 필요 엔드포인트 (permitAll 규칙보다 먼저 배치)
                                                 .requestMatchers(HttpMethod.PUT, "/api/auth/me").authenticated()
                                                 .requestMatchers(HttpMethod.PATCH, "/api/auth/me").authenticated()

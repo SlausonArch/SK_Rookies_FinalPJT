@@ -76,3 +76,8 @@ server:
   forward-headers-strategy: framework
   tomcat:
     max-http-form-post-size: 10MB
+  error:
+    include-message: never
+    include-binding-errors: never
+    include-stacktrace: never
+    include-exception: false
