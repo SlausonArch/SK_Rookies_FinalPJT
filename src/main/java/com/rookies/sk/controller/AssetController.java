@@ -4,6 +4,7 @@ import com.rookies.sk.dto.AssetResponseDto;
 import com.rookies.sk.dto.AssetSummaryDto;
 import com.rookies.sk.dto.DepositRequestDto;
 import com.rookies.sk.service.AssetService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -42,14 +43,14 @@ public class AssetController {
 
     @PostMapping("/deposit")
     public ResponseEntity<AssetResponseDto> deposit(
-            @RequestBody DepositRequestDto request,
+            @Valid @RequestBody DepositRequestDto request,
             @AuthenticationPrincipal UserDetails userDetails) {
         return ResponseEntity.ok(assetService.deposit(userDetails.getUsername(), request));
     }
 
     @PostMapping("/withdraw")
     public ResponseEntity<AssetResponseDto> withdraw(
-            @RequestBody DepositRequestDto request,
+            @Valid @RequestBody DepositRequestDto request,
             @AuthenticationPrincipal UserDetails userDetails) {
         return ResponseEntity.ok(assetService.withdraw(userDetails.getUsername(), request));
     }

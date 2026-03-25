@@ -72,17 +72,19 @@ public class AssetService {
                 String assetType = "KRW";
                 Asset asset = findOrCreateAsset(member, assetType);
 
+                // 검증을 save 전에 모두 완료
                 java.math.BigDecimal newBankBalance = member.getBankBalance().subtract(req.getAmount());
                 if (newBankBalance.compareTo(java.math.BigDecimal.ZERO) < 0) {
                         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "가상은행 잔고가 부족합니다.");
                 }
-                member.setBankBalance(newBankBalance);
-                memberRepository.save(member);
-
                 java.math.BigDecimal newAssetBalance = asset.getBalance().add(req.getAmount());
                 if (newAssetBalance.compareTo(java.math.BigDecimal.ZERO) < 0) {
                         throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "잔고 계산 오류가 발생했습니다.");
                 }
+
+                // 검증 완료 후 일괄 저장
+                member.setBankBalance(newBankBalance);
+                memberRepository.save(member);
                 asset.setBalance(newAssetBalance);
                 assetRepository.save(asset);
 
@@ -116,20 +118,22 @@ public class AssetService {
 
                 BigDecimal available = asset.getBalance().subtract(asset.getLockedBalance());
                 if (available.compareTo(req.getAmount()) < 0) {
-                        throw new RuntimeException("출금 가능 잔고가 부족합니다.");
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "출금 가능 잔고가 부족합니다.");
                 }
 
+                // 검증을 save 전에 모두 완료
                 BigDecimal newAssetBalance = asset.getBalance().subtract(req.getAmount());
                 if (newAssetBalance.compareTo(BigDecimal.ZERO) < 0) {
                         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "출금 가능 잔고가 부족합니다.");
                 }
-                asset.setBalance(newAssetBalance);
-                assetRepository.save(asset);
-
                 BigDecimal newBankBalance = member.getBankBalance().add(req.getAmount());
                 if (newBankBalance.compareTo(BigDecimal.ZERO) < 0) {
                         throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "잔고 계산 오류가 발생했습니다.");
                 }
+
+                // 검증 완료 후 일괄 저장
+                asset.setBalance(newAssetBalance);
+                assetRepository.save(asset);
                 member.setBankBalance(newBankBalance);
                 memberRepository.save(member);
 
