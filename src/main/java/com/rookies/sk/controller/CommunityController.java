@@ -5,6 +5,8 @@ import com.rookies.sk.entity.Member;
 import com.rookies.sk.service.CommunityService;
 import com.rookies.sk.service.FileService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Size;
+import org.springframework.validation.annotation.Validated;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -16,6 +18,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 import java.util.Map;
 
+@Validated
 @RestController
 @RequestMapping("/api/community")
 @RequiredArgsConstructor
@@ -26,7 +29,7 @@ public class CommunityController {
 
     @GetMapping("/posts")
     public ResponseEntity<List<PostResponseDto>> getPosts(
-            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) @Size(max = 100) String keyword,
             @AuthenticationPrincipal UserDetails userDetails) {
         String email = userDetails != null ? userDetails.getUsername() : null;
         return ResponseEntity.ok(communityService.getPosts(keyword, email));

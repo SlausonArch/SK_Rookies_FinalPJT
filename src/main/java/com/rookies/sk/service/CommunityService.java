@@ -15,6 +15,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.persistence.EntityManager;
+import org.jsoup.Jsoup;
+import org.jsoup.safety.Safelist;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -36,9 +38,11 @@ public class CommunityService {
         boolean isAdmin = currentMember != null && hasCommunitySuperRole(currentMember);
         Long currentMemberId = currentMember != null ? currentMember.getMemberId() : null;
 
-        log.info("=== Community Search ===");
-        log.info("Keyword: {}", keyword);
-        log.info("IsAdmin: {}", isAdmin);
+        // 로그 인젝션 방지: CRLF 제거 후 DEBUG 레벨로만 기록 (CWE-117)
+        if (log.isDebugEnabled()) {
+            String safeKeyword = keyword == null ? "" : keyword.replaceAll("[\r\n\t]", " ");
+            log.debug("Community search keyword: [{}]", safeKeyword);
+        }
 
         List<Post> posts;
 
@@ -107,8 +111,8 @@ public class CommunityService {
 
         Post post = Post.builder()
                 .member(member)
-                .title(request.getTitle())
-                .content(request.getContent())
+                .title(sanitizeText(request.getTitle()))
+                .content(sanitizeText(request.getContent()))
                 .attachmentUrl(request.getAttachmentUrl())
                 .isNotice(request.isNotice() ? "Y" : "N")
                 .isHidden("N")
@@ -132,8 +136,8 @@ public class CommunityService {
             throw new IllegalArgumentException("Only admin can set notice");
         }
 
-        post.setTitle(request.getTitle());
-        post.setContent(request.getContent());
+        post.setTitle(sanitizeText(request.getTitle()));
+        post.setContent(sanitizeText(request.getContent()));
         post.setAttachmentUrl(request.getAttachmentUrl());
         post.setIsNotice(request.isNotice() ? "Y" : "N");
 
@@ -181,7 +185,7 @@ public class CommunityService {
         Comment comment = Comment.builder()
                 .post(post)
                 .member(member)
-                .content(request.getContent())
+                .content(sanitizeText(request.getContent()))
                 .isHidden(isHidden)
                 .build();
 
@@ -202,7 +206,7 @@ public class CommunityService {
             throw new IllegalArgumentException("No permission");
         }
 
-        comment.setContent(request.getContent());
+        comment.setContent(sanitizeText(request.getContent()));
         Long postAuthorId = comment.getPost() != null && comment.getPost().getMember() != null
                 ? comment.getPost().getMember().getMemberId() : null;
         return toCommentResponse(comment, member.getMemberId(), postAuthorId, hasCommunitySuperRole(member));
@@ -346,6 +350,12 @@ public class CommunityService {
 
     private boolean hasCommunitySuperRole(Member member) {
         return member.getRole() == Member.Role.VCESYS_CORE;
+    }
+
+    /** HTML 태그 전체 제거 — Stored XSS 방지 */
+    private String sanitizeText(String input) {
+        if (input == null) return null;
+        return Jsoup.clean(input, Safelist.none());
     }
 
     private String normalizeKeyword(String keyword) {
