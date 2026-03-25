@@ -54,6 +54,21 @@ public class TokenBlacklistService {
                 .build());
     }
 
+    /** 토큰 문자열 없이 JTI만으로 블랙리스트 등록 (새 로그인 시 이전 토큰 무효화용) */
+    @Transactional
+    public void revokeByJti(String jti, String email, LocalDateTime expiresAt, String reason) {
+        if (!StringUtils.hasText(jti) || !StringUtils.hasText(email)) return;
+        if (revokedTokenRepository.existsById(jti)) return;
+        revokedTokenRepository.save(RevokedToken.builder()
+                .tokenId(jti)
+                .memberEmail(email)
+                .tokenType("ACCESS")
+                .revokedReason(reason)
+                .expiresAt(expiresAt)
+                .revokedAt(LocalDateTime.now())
+                .build());
+    }
+
     @Transactional
     public void revokeTokens(String accessToken, String refreshToken, String reason) {
         revokeToken(accessToken, reason);

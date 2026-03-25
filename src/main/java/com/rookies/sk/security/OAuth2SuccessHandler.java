@@ -6,7 +6,6 @@ import com.rookies.sk.repository.MemberRepository;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import jakarta.servlet.http.Cookie;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
@@ -96,7 +95,8 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
         String accessToken = tokenProvider.createAccessToken(member.getEmail(), member.getRole().name(),
                 member.getMemberId());
         String refreshToken = tokenProvider.createRefreshToken(member.getEmail());
-        activeSessionService.activate(member.getEmail(), tokenProvider.getTokenId(accessToken));
+        activeSessionService.activate(member.getEmail(), tokenProvider.getTokenId(accessToken),
+                tokenProvider.getExpiration(accessToken).toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime());
 
         String targetUrl;
         if (member.getRole() == Member.Role.GUEST) {

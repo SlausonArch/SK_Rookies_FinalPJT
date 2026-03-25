@@ -104,7 +104,8 @@ public class AuthController {
             String accessToken = jwtTokenProvider.createAccessToken(
                     member.getEmail(), member.getRole().name(), member.getMemberId());
             String refreshToken = jwtTokenProvider.createRefreshToken(member.getEmail());
-            activeSessionService.activate(member.getEmail(), jwtTokenProvider.getTokenId(accessToken));
+            activeSessionService.activate(member.getEmail(), jwtTokenProvider.getTokenId(accessToken),
+                    jwtTokenProvider.getExpiration(accessToken).toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime());
 
             return ResponseEntity.ok(java.util.Map.of(
                     "accessToken", accessToken,
@@ -167,7 +168,8 @@ public class AuthController {
                     member.getRole().name(),
                     member.getMemberId(),
                     member.getName());
-            activeSessionService.activate(member.getEmail(), jwtTokenProvider.getTokenId(accessToken));
+            activeSessionService.activate(member.getEmail(), jwtTokenProvider.getTokenId(accessToken),
+                    jwtTokenProvider.getExpiration(accessToken).toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime());
 
             AdminLoginResponse response = new AdminLoginResponse(
                     accessToken,
@@ -316,7 +318,8 @@ public class AuthController {
         // Issue new tokens
         String newAccessToken = jwtTokenProvider.createAccessToken(updatedMember.getEmail(),
                 updatedMember.getRole().name(), updatedMember.getMemberId());
-        activeSessionService.activate(updatedMember.getEmail(), jwtTokenProvider.getTokenId(newAccessToken));
+        activeSessionService.activate(updatedMember.getEmail(), jwtTokenProvider.getTokenId(newAccessToken),
+                jwtTokenProvider.getExpiration(newAccessToken).toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime());
 
         return ResponseEntity.ok(newAccessToken);
     }
@@ -347,7 +350,8 @@ public class AuthController {
             String newAccessToken = jwtTokenProvider.createAccessToken(
                     email, member.getRole().name(), member.getMemberId());
             String newRefreshToken = jwtTokenProvider.createRefreshToken(email);
-            activeSessionService.activate(email, jwtTokenProvider.getTokenId(newAccessToken));
+            activeSessionService.activate(email, jwtTokenProvider.getTokenId(newAccessToken),
+                    jwtTokenProvider.getExpiration(newAccessToken).toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime());
 
             return ResponseEntity.ok(java.util.Map.of(
                     "accessToken", newAccessToken,
