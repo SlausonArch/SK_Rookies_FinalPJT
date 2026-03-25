@@ -1,13 +1,47 @@
-import React, { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import axios from 'axios';
-import styled from 'styled-components';
+import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import styled from 'styled-components';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+const PRIVACY_POLICY_CONTENT = `## 제1조 (개인정보의 처리 목적)
+
+본 서비스는 다음의 목적을 위하여 개인정보를 처리합니다. 처리하고 있는 개인정보는 다음의 목적 이외의 용도로는 이용되지 않으며, 이용 목적이 변경되는 경우에는 별도의 동의를 받는 등 필요한 조치를 이행할 예정입니다.
+
+1. 회원 가입 및 관리
+2. 금융 서비스 제공 (가상자산 거래)
+3. 서비스 개선 및 신규 서비스 개발
+
+## 제2조 (처리하는 개인정보 항목)
+
+- 이름, 이메일 주소, 전화번호
+- 주소
+- 은행 계좌 정보 (은행명, 계좌번호, 예금주)
+- 신분증 사본 (본인 인증 목적)
+- 서비스 이용 기록, 접속 로그, IP 정보
+
+## 제3조 (개인정보의 처리 및 보유 기간)
+
+회원 탈퇴 시까지 보유하며, 관련 법령에 따라 일정 기간 보존이 필요한 경우 해당 기간 동안 보관합니다.
+
+## 제4조 (개인정보의 제3자 제공)
+
+본 서비스는 이용자의 개인정보를 원칙적으로 외부에 제공하지 않습니다. 다만, 법령의 규정에 의거하거나 수사 기관의 요청이 있는 경우는 예외로 합니다.
+
+## 제5조 (개인정보 보호책임자)
+
+개인정보 보호에 관한 업무를 총괄해서 책임지는 개인정보 보호책임자를 다음과 같이 지정하고 있습니다.
+
+- 이름: 개인정보보호 담당자
+- 이메일: privacy@example.com
+
+## 제6조 (정보주체의 권리·의무)
+
+이용자는 개인정보주체로서 언제든지 개인정보 열람·정정·삭제·처리정지 요구 등의 권리를 행사할 수 있습니다.
+
+본 방침은 2024년 1월 1일부터 시행됩니다.
+`;
 
 const Container = styled.div`
   min-height: 100vh;
@@ -94,57 +128,18 @@ const MarkdownBody = styled.div`
   }
 `;
 
-const LoadingText = styled.p`
-  color: #6b7280;
-  font-size: 14px;
-`;
-
-const ErrorMsg = styled.div`
-  color: #b91c1c;
-  padding: 20px;
-  text-align: center;
-`;
-
 const PrivacyPolicy: React.FC = () => {
-  const [searchParams] = useSearchParams();
-  // V-04 (Path Traversal): doc 파라미터를 검증 없이 서버 API에 전달
-  // 공격 예시:
-  //   /privacy-policy?doc=../deployment-env.md
-  //   /privacy-policy?doc=system_architecture_analysis.md
-  //   /privacy-policy?doc=../../etc/passwd
-  const doc = searchParams.get('doc') || 'privacy_policy.md';
-
-  const [content, setContent] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-    axios
-      .get<string>(`${API_BASE}/api/files`, {
-        params: { path: doc },
-        responseType: 'text',
-        transformResponse: (data: string) => data,
-      })
-      .then(res => setContent(res.data))
-      .catch(() => setError(`문서를 불러올 수 없습니다: ${doc}`))
-      .finally(() => setLoading(false));
-  }, [doc]);
-
   return (
     <Container>
       <Header />
       <Main>
         <Card>
           <Title>개인정보처리방침</Title>
-          {loading && <LoadingText>불러오는 중...</LoadingText>}
-          {error && <ErrorMsg>{error}</ErrorMsg>}
-          {!loading && !error && content && (
-            <MarkdownBody>
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
-            </MarkdownBody>
-          )}
+          <MarkdownBody>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {PRIVACY_POLICY_CONTENT}
+            </ReactMarkdown>
+          </MarkdownBody>
         </Card>
       </Main>
       <Footer />
