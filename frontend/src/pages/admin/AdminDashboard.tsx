@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, type ElementType } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, type ElementType } from 'react';
 import styled, { createGlobalStyle } from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -913,6 +913,14 @@ function toneFromRole(r: string): 'info' | 'neutral' {
 function toneFromOrderType(t: string): 'danger' | 'info' {
   return t === 'BUY' ? 'danger' : 'info';
 }
+// /uploads/uuid.jpg → /api/files/id-photo/uuid.jpg (인증 필요 엔드포인트)
+function toIdPhotoUrl(raw: string): string {
+  if (!raw) return '';
+  if (raw.startsWith('http')) return raw;
+  const filename = raw.split('/').pop() ?? '';
+  return `${API_BASE}/api/files/id-photo/${filename}`;
+}
+
 function toneFromTxType(t: string): 'success' | 'danger' | 'warn' | 'info' | 'neutral' {
   if (t === 'BUY') return 'danger';
   if (t === 'SELL') return 'info';
@@ -950,6 +958,33 @@ const AdminDashboard = () => {
   const [selectedInquiry, setSelectedInquiry] = useState<InquiryRow | null>(null);
   const [replyContent, setReplyContent] = useState('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const currentBlobUrl = useRef<string | null>(null);
+
+  const openIdPhoto = useCallback(async (raw: string) => {
+    const url = toIdPhotoUrl(raw);
+    if (!url) return;
+    try {
+      const token = getAdminAccessToken();
+      const res = await axios.get(url, {
+        responseType: 'blob',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (currentBlobUrl.current) URL.revokeObjectURL(currentBlobUrl.current);
+      const blobUrl = URL.createObjectURL(res.data);
+      currentBlobUrl.current = blobUrl;
+      setSelectedImage(blobUrl);
+    } catch {
+      alert('이미지를 불러올 수 없습니다.');
+    }
+  }, []);
+
+  const closeIdPhoto = useCallback(() => {
+    if (currentBlobUrl.current) {
+      URL.revokeObjectURL(currentBlobUrl.current);
+      currentBlobUrl.current = null;
+    }
+    setSelectedImage(null);
+  }, []);
   const [reclaimTarget, setReclaimTarget] = useState<AssetRow | null>(null);
   const [reclaimAmount, setReclaimAmount] = useState('');
   const [reclaimReason, setReclaimReason] = useState('');
@@ -1529,7 +1564,7 @@ const AdminDashboard = () => {
                         </td>
                         <td>
                           {m.hasIdPhoto ? (
-                            <GhostButton style={{ height: '28px', fontSize: '11px', padding: '0 8px' }} onClick={() => setSelectedImage(m.idPhotoUrl!.startsWith('http') ? m.idPhotoUrl! : `${API_BASE}${m.idPhotoUrl!}`)}>
+                            <GhostButton style={{ height: '28px', fontSize: '11px', padding: '0 8px' }} onClick={() => openIdPhoto(m.idPhotoUrl!)}>
                               보기
                             </GhostButton>
                           ) : (
@@ -1624,7 +1659,7 @@ const AdminDashboard = () => {
                       <td>
                         {m.idPhotoUrl ? (
                           <span
-                            onClick={() => setSelectedImage(m.idPhotoUrl!.startsWith('http') ? m.idPhotoUrl! : `${API_BASE}${m.idPhotoUrl!}`)}
+                            onClick={() => openIdPhoto(m.idPhotoUrl!)}
                             style={{ color: COLORS.primary, textDecoration: 'underline', fontWeight: 900, cursor: 'pointer' }}
                           >
                             원본 보기
@@ -2661,9 +2696,9 @@ const AdminDashboard = () => {
       </Shell>
 
       {selectedImage && (
-        <ImageModalOverlay onClick={() => setSelectedImage(null)}>
+        <ImageModalOverlay onClick={closeIdPhoto}>
           <ImageModalContent onClick={e => e.stopPropagation()}>
-            <CloseButton onClick={() => setSelectedImage(null)}>
+            <CloseButton onClick={closeIdPhoto}>
               X
             </CloseButton>
             <img src={selectedImage} alt="ID Card Original" />

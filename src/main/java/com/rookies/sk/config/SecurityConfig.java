@@ -85,7 +85,7 @@ public class SecurityConfig {
                                                                 "/api/auth/logout")
                                                 .authenticated()
                                                 .requestMatchers("/", "/login/**", "/oauth2/**", "/api/auth/**",
-                                                                "/error", "/uploads/**", "/api/files/privacy-policy")
+                                                                "/error", "/api/files/privacy-policy")
                                                 .permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/api/community/posts/**").permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/api/news").permitAll()

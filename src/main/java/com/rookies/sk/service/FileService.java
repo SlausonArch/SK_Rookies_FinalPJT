@@ -21,6 +21,7 @@ public class FileService {
     private final String UPLOAD_DIR;
 
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of("jpg", "jpeg", "png");
+    private static final long MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
     // 확장자별 Magic Byte (파일 시그니처)
     private static final Map<String, byte[]> MAGIC_BYTES = Map.of(
@@ -46,6 +47,10 @@ public class FileService {
     public String storeFile(MultipartFile file) {
         if (file.isEmpty()) {
             throw new RuntimeException("빈 파일은 업로드할 수 없습니다.");
+        }
+
+        if (file.getSize() > MAX_FILE_SIZE) {
+            throw new RuntimeException("파일 크기는 10MB를 초과할 수 없습니다.");
         }
 
         String originalFilename = file.getOriginalFilename();

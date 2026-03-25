@@ -360,6 +360,13 @@ public class CommunityService {
             return "탈퇴회원";
         }
 
+        // 관리자 역할은 실제 이름 노출 방지
+        if (member.getRole() == Member.Role.VCESYS_CORE
+                || member.getRole() == Member.Role.VCESYS_MGMT
+                || member.getRole() == Member.Role.VCESYS_EMP) {
+            return "관리자";
+        }
+
         String name = member.getName();
         if (name != null && !name.isBlank() && !name.replace("?", "").isBlank()) {
             return name;
