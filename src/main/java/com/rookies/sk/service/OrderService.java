@@ -51,8 +51,8 @@ public class OrderService {
             priceType = "LIMIT";
         }
 
-        if (assetType.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "자산 코드를 확인해 주세요.");
+        if (assetType.isBlank() || !assetType.matches("^[A-Z0-9]{2,10}$") || assetType.equals("KRW")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "유효하지 않은 자산 코드입니다.");
         }
         if (!"BUY".equals(orderType) && !"SELL".equals(orderType)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "주문 유형은 BUY 또는 SELL이어야 합니다.");
@@ -231,7 +231,7 @@ public class OrderService {
             assetRepository.save(coinAsset);
         } else {
             Asset coinAsset = assetRepository.findWithLockByMember_MemberIdAndAssetType(member.getMemberId(), assetType)
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, assetType + " 잔고가 없습니다."));
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "코인 잔고가 없습니다."));
 
             BigDecimal available = coinAsset.getBalance().subtract(coinAsset.getLockedBalance());
             if (available.compareTo(amount) < 0) {
@@ -241,7 +241,7 @@ public class OrderService {
                     totalValue = totalValue(serverPrice, amount);
                     fee = feeAmount(totalValue, feeRate);
                 } else {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, assetType + " 잔고가 부족합니다.");
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "코인 잔고가 부족합니다.");
                 }
             }
 
@@ -293,14 +293,14 @@ public class OrderService {
             assetRepository.save(krwAsset);
         } else {
             Asset coinAsset = assetRepository.findWithLockByMember_MemberIdAndAssetType(member.getMemberId(), assetType)
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, assetType + " 잔고가 없습니다."));
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "코인 잔고가 없습니다."));
             BigDecimal available = coinAsset.getBalance().subtract(coinAsset.getLockedBalance());
             if (available.compareTo(amount) < 0) {
                 BigDecimal gap = amount.subtract(available);
                 if (gap.compareTo(TRADE_EPSILON) <= 0) {
                     amount = normalizeAmount(available);
                 } else {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, assetType + " 잔고가 부족합니다.");
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "코인 잔고가 부족합니다.");
                 }
             }
             coinAsset.setLockedBalance(coinAsset.getLockedBalance().add(amount));
@@ -401,7 +401,7 @@ public class OrderService {
         assetRepository.save(buyerCoin);
 
         Asset sellerCoin = assetRepository.findWithLockByMember_MemberIdAndAssetType(sellMember.getMemberId(), assetType)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, assetType + " 잔고가 없습니다."));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "코인 잔고가 없습니다."));
         sellerCoin.setLockedBalance(nonNegative(sellerCoin.getLockedBalance().subtract(tradeAmount)));
         sellerCoin.setBalance(nonNegative(sellerCoin.getBalance().subtract(tradeAmount)));
         if (sellerCoin.getLockedBalance().abs().compareTo(TRADE_EPSILON) <= 0) {
@@ -501,7 +501,7 @@ public class OrderService {
         BigDecimal fee = feeAmount(tradeValue, getMemberFeeRate(seller));
 
         Asset sellerCoin = assetRepository.findWithLockByMember_MemberIdAndAssetType(seller.getMemberId(), assetType)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, assetType + " 잔고가 없습니다."));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "코인 잔고가 없습니다."));
 
         if (sellerCoin.getLockedBalance().compareTo(tradeAmount) < 0) {
             BigDecimal gap = tradeAmount.subtract(sellerCoin.getLockedBalance());
