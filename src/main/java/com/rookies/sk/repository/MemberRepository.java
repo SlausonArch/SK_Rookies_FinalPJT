@@ -19,13 +19,14 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
 
     @Query("""
     select m from Member m
-    where (:q is null or :q = '' or lower(m.email) like lower(concat('%', :q, '%')) escape '!' or lower(m.name) like lower(concat('%', :q, '%')) escape '!')
+    where (:pattern is null or lower(m.email) like lower(:pattern) escape '!'
+                             or lower(m.name)  like lower(:pattern) escape '!')
       and (:role is null or m.role = :role)
       and (:status is null or m.status = :status)
       and m.role not in :excludeRoles
     """)
     Page<Member> searchMembers(
-            @Param("q") String q,
+            @Param("pattern") String pattern,
             @Param("role") Member.Role role,
             @Param("status") Member.Status status,
             @Param("excludeRoles") List<Member.Role> excludeRoles,

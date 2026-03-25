@@ -175,13 +175,14 @@ public class AdminService {
         Member.Role roleEnum = isBlank(role) ? null : Member.Role.valueOf(role.toUpperCase());
         Member.Status statusEnum = isBlank(status) ? null : Member.Status.valueOf(status.toUpperCase());
 
-        String sanitizedQ = isBlank(q) ? null : escapeLikeWildcards(q.trim());
+        // %·_ 와일드카드 이스케이프 후 % 래핑을 Java에서 완성 (JPQL concat 제거로 인젝션 경로 차단)
+        String pattern = isBlank(q) ? null : "%" + escapeLikeWildcards(q.trim()) + "%";
 
         // 직원 역할은 회원 검색에서 항상 제외 (직원 관리는 /api/admin/staff 별도 제공)
         List<Member.Role> staffRoles = List.of(
                 Member.Role.VCESYS_CORE, Member.Role.VCESYS_MGMT, Member.Role.VCESYS_EMP);
         Page<Member> result = memberRepository.searchMembers(
-                sanitizedQ,
+                pattern,
                 roleEnum,
                 statusEnum,
                 staffRoles,
@@ -450,8 +451,9 @@ public class AdminService {
                 Math.max(1, Math.min(size, 200)),
                 Sort.by(Sort.Direction.DESC, "txDate"));
 
+        String emailPattern = isBlank(memberEmail) ? null : "%" + escapeLikeWildcards(memberEmail.trim()) + "%";
         Page<Transaction> result = transactionRepository.searchAdminTransactions(
-                isBlank(memberEmail) ? null : escapeLikeWildcards(memberEmail.trim()),
+                emailPattern,
                 isBlank(assetType) ? null : assetType.toUpperCase(),
                 isBlank(txType) ? null : txType.toUpperCase(),
                 fromDt,

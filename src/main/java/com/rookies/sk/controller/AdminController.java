@@ -2,8 +2,10 @@ package com.rookies.sk.controller;
 
 import com.rookies.sk.dto.AdminAssetReclaimRequestDto;
 import com.rookies.sk.service.AdminService;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.access.prepost.PreAuthorize;
 import jakarta.servlet.http.HttpServletRequest;
@@ -11,6 +13,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import java.util.Map;
 
+@Validated
 @RestController
 @RequestMapping("/api/admin")
 @RequiredArgsConstructor
@@ -27,7 +30,7 @@ public class AdminController {
     @GetMapping("/members/search")
     @PreAuthorize("hasAnyRole('VCESYS_CORE', 'VCESYS_MGMT')")
     public ResponseEntity<Map<String, Object>> searchMembers(
-            @RequestParam(required = false) String q,
+            @RequestParam(required = false) @Size(max = 100) String q,
             @RequestParam(required = false) String role,
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "0") int page,
