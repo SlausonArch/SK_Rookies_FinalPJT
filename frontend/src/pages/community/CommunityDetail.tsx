@@ -292,8 +292,13 @@ function CommunityDetail() {
 
   const onDeleteComment = async (commentId: number) => {
     if (!post || !token) return;
-    await axios.delete(`${API_BASE}/api/community/comments/${commentId}`, { headers: authHeaders });
-    await loadDetail();
+    if (!window.confirm('댓글을 삭제하시겠습니까?')) return;
+    try {
+      await axios.delete(`${API_BASE}/api/community/comments/${commentId}`, { headers: authHeaders });
+      await loadDetail();
+    } catch {
+      alert('댓글 삭제에 실패했습니다.');
+    }
   };
 
   const onStartEditComment = (comment: Comment) => {

@@ -6,6 +6,7 @@ import com.rookies.sk.dto.SignupRequestDto;
 import com.rookies.sk.dto.TokenRevokeRequestDto;
 import com.rookies.sk.entity.Member;
 import com.rookies.sk.security.JwtTokenProvider;
+import com.rookies.sk.security.SignupTokenStore;
 import com.rookies.sk.service.FileService;
 import com.rookies.sk.service.MemberService;
 import com.rookies.sk.service.TokenBlacklistService;
@@ -38,6 +39,7 @@ public class AuthController {
     private final PasswordEncoder passwordEncoder;
     private final TransactionRepository transactionRepository;
     private final TokenBlacklistService tokenBlacklistService;
+    private final SignupTokenStore signupTokenStore;
 
     private static final int MAX_LOGIN_FAIL = 5;
     private static final int MAX_ADMIN_LOGIN_FAIL = 3;
@@ -52,6 +54,17 @@ public class AuthController {
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException("SHA-256 not available", e);
         }
+    }
+
+    @GetMapping("/signup/token")
+    public ResponseEntity<?> exchangeSignupCode(@org.springframework.web.bind.annotation.RequestParam String code) {
+        SignupTokenStore.TokenInfo info = signupTokenStore.consume(code);
+        if (info == null) {
+            return ResponseEntity.status(400).body("유효하지 않거나 만료된 코드입니다.");
+        }
+        return ResponseEntity.ok(java.util.Map.of(
+                "accessToken", info.accessToken(),
+                "email", info.email()));
     }
 
     @PostMapping("/test/login")

@@ -345,7 +345,7 @@ public class CommunityService {
     }
 
     private boolean hasCommunitySuperRole(Member member) {
-        return member.getRole() == Member.Role.VCESYS_CORE || member.getRole() == Member.Role.VCESYS_EMP;
+        return member.getRole() == Member.Role.VCESYS_CORE;
     }
 
     private String normalizeKeyword(String keyword) {

@@ -64,16 +64,26 @@ public class AssetService {
                 Member member = findMemberByEmail(email);
                 validateTradePermission(member);
                 validateBankAccount(member, req.getBankName(), req.getAccountNumber());
+
+                if (req.getAmount() == null || req.getAmount().compareTo(java.math.BigDecimal.ZERO) <= 0) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "입금 금액은 0보다 커야 합니다.");
+                }
+
                 String assetType = "KRW";
                 Asset asset = findOrCreateAsset(member, assetType);
 
-                if (member.getBankBalance().compareTo(req.getAmount()) < 0) {
+                java.math.BigDecimal newBankBalance = member.getBankBalance().subtract(req.getAmount());
+                if (newBankBalance.compareTo(java.math.BigDecimal.ZERO) < 0) {
                         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "가상은행 잔고가 부족합니다.");
                 }
-                member.setBankBalance(member.getBankBalance().subtract(req.getAmount()));
+                member.setBankBalance(newBankBalance);
                 memberRepository.save(member);
 
-                asset.setBalance(asset.getBalance().add(req.getAmount()));
+                java.math.BigDecimal newAssetBalance = asset.getBalance().add(req.getAmount());
+                if (newAssetBalance.compareTo(java.math.BigDecimal.ZERO) < 0) {
+                        throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "잔고 계산 오류가 발생했습니다.");
+                }
+                asset.setBalance(newAssetBalance);
                 assetRepository.save(asset);
 
                 Transaction tx = Transaction.builder()
@@ -95,6 +105,11 @@ public class AssetService {
                 Member member = findMemberByEmail(email);
                 validateTradePermission(member);
                 validateBankAccount(member, req.getBankName(), req.getAccountNumber());
+
+                if (req.getAmount() == null || req.getAmount().compareTo(java.math.BigDecimal.ZERO) <= 0) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "출금 금액은 0보다 커야 합니다.");
+                }
+
                 String assetType = "KRW";
                 Asset asset = assetRepository.findWithLockByMember_MemberIdAndAssetType(member.getMemberId(), assetType)
                                 .orElseThrow(() -> new RuntimeException("자산이 없습니다."));
@@ -104,10 +119,18 @@ public class AssetService {
                         throw new RuntimeException("출금 가능 잔고가 부족합니다.");
                 }
 
-                asset.setBalance(asset.getBalance().subtract(req.getAmount()));
+                BigDecimal newAssetBalance = asset.getBalance().subtract(req.getAmount());
+                if (newAssetBalance.compareTo(BigDecimal.ZERO) < 0) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "출금 가능 잔고가 부족합니다.");
+                }
+                asset.setBalance(newAssetBalance);
                 assetRepository.save(asset);
 
-                member.setBankBalance(member.getBankBalance().add(req.getAmount()));
+                BigDecimal newBankBalance = member.getBankBalance().add(req.getAmount());
+                if (newBankBalance.compareTo(BigDecimal.ZERO) < 0) {
+                        throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "잔고 계산 오류가 발생했습니다.");
+                }
+                member.setBankBalance(newBankBalance);
                 memberRepository.save(member);
 
                 Transaction tx = Transaction.builder()

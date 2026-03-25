@@ -27,11 +27,13 @@ public class Asset {
     @Column(name = "ASSET_TYPE", nullable = false, length = 20)
     private String assetType;
 
-    @Column(name = "BALANCE", precision = 19, scale = 8)
+    @Column(name = "BALANCE", precision = 19, scale = 8,
+            columnDefinition = "DECIMAL(19,8) DEFAULT 0 CHECK (BALANCE >= 0)")
     @Builder.Default
     private BigDecimal balance = BigDecimal.ZERO;
 
-    @Column(name = "LOCKED_BALANCE", precision = 19, scale = 8)
+    @Column(name = "LOCKED_BALANCE", precision = 19, scale = 8,
+            columnDefinition = "DECIMAL(19,8) DEFAULT 0 CHECK (LOCKED_BALANCE >= 0)")
     @Builder.Default
     private BigDecimal lockedBalance = BigDecimal.ZERO;
 

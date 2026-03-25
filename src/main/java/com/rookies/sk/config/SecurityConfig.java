@@ -83,7 +83,14 @@ public class SecurityConfig {
                                                                                                          // here.
                                 .authorizeHttpRequests(auth -> auth
                                                 .requestMatchers(HttpMethod.TRACE, "/**").denyAll()
-                                                .requestMatchers("/api/auth/me/**", "/api/auth/withdraw",
+                                                // 인증 필요 엔드포인트 (permitAll 규칙보다 먼저 배치)
+                                                .requestMatchers(HttpMethod.PUT, "/api/auth/me").authenticated()
+                                                .requestMatchers(HttpMethod.PATCH, "/api/auth/me").authenticated()
+                                                .requestMatchers(HttpMethod.PUT, "/api/community/comments/**").authenticated()
+                                                .requestMatchers(HttpMethod.DELETE, "/api/community/comments/**").authenticated()
+                                                .requestMatchers(HttpMethod.PUT, "/api/community/posts/**").authenticated()
+                                                .requestMatchers(HttpMethod.DELETE, "/api/community/posts/**").authenticated()
+                                                .requestMatchers("/api/auth/me", "/api/auth/me/**", "/api/auth/withdraw",
                                                                 "/api/auth/logout")
                                                 .authenticated()
                                                 .requestMatchers("/", "/login/**", "/oauth2/**", "/api/auth/**",

@@ -410,6 +410,7 @@ const BankDashboard: React.FC = () => {
               <Label>금액 (KRW)</Label>
               <StyledInput
                 type="number"
+                min="1"
                 placeholder={mode === 'deposit' ? "거래소로 입금할 금액" : "나의 통장으로 출금할 금액"}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}

@@ -25,6 +25,7 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
     private final JwtTokenProvider tokenProvider;
     private final MemberRepository memberRepository;
     private final HttpCookieOAuth2AuthorizationRequestRepository httpCookieOAuth2AuthorizationRequestRepository;
+    private final SignupTokenStore signupTokenStore;
 
     @org.springframework.beans.factory.annotation.Value("${app.frontend-url}")
     private String frontendUrl;
@@ -97,9 +98,9 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
 
         String targetUrl;
         if (member.getRole() == Member.Role.GUEST) {
+            String code = signupTokenStore.store(accessToken, socialEmail != null ? socialEmail : "");
             targetUrl = UriComponentsBuilder.fromUriString(targetFrontendUrl + "/signup/complete")
-                    .queryParam("token", accessToken)
-                    .queryParam("email", socialEmail != null ? socialEmail : "")
+                    .queryParam("code", code)
                     .build().toUriString();
         } else {
             targetUrl = UriComponentsBuilder.fromUriString(targetFrontendUrl + "/oauth/callback")

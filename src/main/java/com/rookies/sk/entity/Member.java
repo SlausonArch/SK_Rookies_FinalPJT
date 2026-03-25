@@ -73,7 +73,8 @@ public class Member {
     @Builder.Default
     private int loginFailCount = 0;
 
-    @Column(name = "BANK_BALANCE", nullable = false, precision = 19, scale = 8)
+    @Column(name = "BANK_BALANCE", nullable = false, precision = 19, scale = 8,
+            columnDefinition = "DECIMAL(19,8) DEFAULT 50000000 CHECK (BANK_BALANCE >= 0)")
     @Builder.Default
     private java.math.BigDecimal bankBalance = new java.math.BigDecimal("50000000");
 

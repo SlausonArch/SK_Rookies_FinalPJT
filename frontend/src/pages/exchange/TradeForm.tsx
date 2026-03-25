@@ -318,14 +318,32 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
   const handleSubmit = async (isMarket: boolean) => {
     if (!token || loading) return;
 
-    // 시장가 주문 시에는 무조건 currentPrice 사용, 지정가는 입력된 price 사용
-    const p = floorToScale(isMarket ? currentPrice : parseNumber(price), 8);
+    setLoading(true);
+    setMessage(null);
+
+    // 시장가 주문 시 WebSocket 가격이 없으면 백엔드 API로 현재가 조회
+    let marketPrice = currentPrice;
+    if (isMarket && (!marketPrice || marketPrice <= 0)) {
+      try {
+        const res = await axios.get(`${API_BASE}/api/market/ticker`, { params: { markets: market } });
+        const ticker = Array.isArray(res.data) ? res.data[0] : null;
+        if (ticker?.trade_price > 0) {
+          marketPrice = ticker.trade_price;
+        }
+      } catch {
+        // 조회 실패 시 백엔드가 직접 가격 조회
+      }
+    }
+
+    // 시장가 주문 시에는 현재가 사용, 지정가는 입력된 price 사용
+    const p = floorToScale(isMarket ? marketPrice : parseNumber(price), 8);
 
     // 수량 계산
     let a = floorToScale(parseNumber(amount), COIN_SCALE);
 
     if (!p || p <= 0) {
-      setMessage({ text: '가격 정보가 올바르지 않습니다.', success: false });
+      setMessage({ text: '가격 정보가 올바르지 않습니다. 잠시 후 다시 시도해 주세요.', success: false });
+      setLoading(false);
       return;
     }
 
@@ -341,12 +359,10 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
       }
       if (a > available + ORDER_EPSILON) {
         setMessage({ text: `${assetType} 주문 가능 수량을 초과했습니다.`, success: false });
+        setLoading(false);
         return;
       }
     }
-
-    setLoading(true);
-    setMessage(null);
 
     try {
       const { data } = await axios.post(`${API_BASE}/api/orders`, {
