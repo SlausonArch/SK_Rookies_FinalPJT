@@ -1033,7 +1033,7 @@ const AdminDashboard = () => {
     const checkAuth = () => {
       const currentToken = getAdminAccessToken();
       const r = getAdminRole();
-      if (!currentToken || !r) {
+      if (!currentToken || r !== 'VCESYS_CORE') {
         navigate('/admin/login', { replace: true });
         return;
       }
@@ -1045,9 +1045,9 @@ const AdminDashboard = () => {
     return () => window.removeEventListener('storage', checkAuth);
   }, [navigate]);
 
-  // 1분 유휴 시 자동 로그아웃
+  // 30분 유휴 시 자동 로그아웃
   useEffect(() => {
-    const IDLE_MS = 60 * 1000;
+    const IDLE_MS = 30 * 60 * 1000;
     let timer: ReturnType<typeof setTimeout>;
 
     const reset = () => {
@@ -1068,14 +1068,6 @@ const AdminDashboard = () => {
     };
   }, [navigate]);
 
-  // STAFF 권한 탭 보정 (마운트 시 1회)
-  useEffect(() => {
-    const r = getAdminRole();
-    if (r === 'VCESYS_EMP' && !['community', 'inquiries'].includes(activeMenu)) {
-      setActiveMenu('community');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
 

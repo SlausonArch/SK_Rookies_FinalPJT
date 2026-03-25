@@ -139,10 +139,8 @@ public class AuthController {
                 return ResponseEntity.status(401).body("Invalid credentials (" + failCount + "/" + MAX_ADMIN_LOGIN_FAIL + ")");
             }
 
-            // 관리자 권한 확인 (VCESYS_CORE, VCESYS_MGMT, VCESYS_EMP 허용)
-            if (member.getRole() != Member.Role.VCESYS_CORE &&
-                    member.getRole() != Member.Role.VCESYS_MGMT &&
-                    member.getRole() != Member.Role.VCESYS_EMP) {
+            // 관리자 권한 확인 (VCESYS_CORE만 허용)
+            if (member.getRole() != Member.Role.VCESYS_CORE) {
                 return ResponseEntity.status(403).body("Access denied");
             }
 
