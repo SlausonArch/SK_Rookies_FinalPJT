@@ -26,8 +26,9 @@ public class SignupRequestDto {
     private String bankName;
 
     @Size(max = 50, message = "계좌번호는 50자 이내로 입력해 주세요.")
+    @Pattern(regexp = "^$|^\\d+$", message = "계좌번호는 숫자만 입력 가능합니다.")
     private String accountNumber;
 
-    @Size(max = 20, message = "추천인 코드는 20자 이내로 입력해 주세요.")
+    @Pattern(regexp = "^$|^[A-Za-z0-9]{8}$", message = "추천인 코드는 영문·숫자 8자리입니다.")
     private String referredByCode;
 }

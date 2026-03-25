@@ -242,8 +242,13 @@ public class AuthController {
                 member.setAddress(body.get("address"));
             if (body.containsKey("bankName"))
                 member.setBankName(body.get("bankName"));
-            if (body.containsKey("accountNumber"))
-                member.setAccountNumber(body.get("accountNumber"));
+            if (body.containsKey("accountNumber")) {
+                String acct = body.get("accountNumber");
+                if (acct != null && !acct.isEmpty() && !acct.matches("^\\d+$")) {
+                    return ResponseEntity.status(400).body("계좌번호는 숫자만 입력 가능합니다.");
+                }
+                member.setAccountNumber(acct);
+            }
             if (body.containsKey("accountHolder"))
                 member.setAccountHolder(body.get("accountHolder"));
             memberService.saveMember(member);
