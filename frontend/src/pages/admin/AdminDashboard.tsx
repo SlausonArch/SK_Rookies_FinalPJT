@@ -2182,7 +2182,16 @@ const AdminDashboard = () => {
                         value={staffForm.email}
                         onChange={e => setStaffForm(f => ({ ...f, email: e.target.value }))}
                         placeholder="staff@example.com"
+                        style={{
+                          borderColor: staffForm.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(staffForm.email)
+                            ? COLORS.danger : undefined
+                        }}
                       />
+                      {staffForm.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(staffForm.email) && (
+                        <span style={{ fontSize: '11px', color: COLORS.danger, marginTop: '3px' }}>
+                          올바른 이메일 형식이 아닙니다.
+                        </span>
+                      )}
                     </FieldLabel>
                     <FieldLabel>
                       비밀번호
@@ -2226,7 +2235,13 @@ const AdminDashboard = () => {
 
                   <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                     <PrimaryButton
-                      disabled={!staffForm.email || !staffForm.password || !staffForm.name || !/^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[!@#$%^&*()\-_=+\[\]{};':"\\|,.<>/?]).{8,}$/.test(staffForm.password)}
+                      disabled={
+                        !staffForm.email ||
+                        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(staffForm.email) ||
+                        !staffForm.password ||
+                        !/^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[!@#$%^&*()\-_=+\[\]{};':"\\|,.<>/?]).{8,}$/.test(staffForm.password) ||
+                        !staffForm.name
+                      }
                       onClick={async () => {
                         setStaffMsg(null);
                         try {
