@@ -13,6 +13,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -20,10 +22,14 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class WalletService {
 
+    private static final java.util.regex.Pattern ASSET_TYPE_PATTERN = java.util.regex.Pattern.compile("^[A-Z0-9]{2,10}$");
+    private static final java.util.regex.Pattern WALLET_ADDRESS_PATTERN = java.util.regex.Pattern.compile("^VCE-[a-f0-9]{30}$");
+
     private final WalletRepository walletRepository;
     private final MemberRepository memberRepository;
     private final AssetRepository assetRepository;
     private final TransactionRepository transactionRepository;
+    private final UpbitPriceService upbitPriceService;
 
     /**
      * 특정 코인에 대한 유저의 지갑(입금 주소)을 반환하거나, 없으면 새로 생성합니다.
@@ -55,14 +61,24 @@ public class WalletService {
      * 시스템 내부 지갑 주소 간 이체를 수행합니다.
      */
     @Transactional
-    public void internalTransfer(String senderEmail, String assetType, String toAddress, BigDecimal amount,
-            BigDecimal currentPrice) {
-        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+    public void internalTransfer(String senderEmail, String assetType, String toAddress, BigDecimal amount) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("출금 수량은 0보다 커야 합니다.");
         }
 
+        if (assetType == null || assetType.isBlank()) {
+            throw new IllegalArgumentException("자산 타입이 필요합니다.");
+        }
+        String assetUpper = assetType.trim().toUpperCase();
+        if (!ASSET_TYPE_PATTERN.matcher(assetUpper).matches() || assetUpper.equals("KRW")) {
+            throw new IllegalArgumentException("유효하지 않은 자산 타입입니다.");
+        }
+
+        if (toAddress == null || !WALLET_ADDRESS_PATTERN.matcher(toAddress).matches()) {
+            throw new IllegalArgumentException("유효하지 않은 지갑 주소 형식입니다.");
+        }
+
         Member sender = findMemberByEmail(senderEmail);
-        String assetUpper = assetType.toUpperCase();
 
         // 수신자 지갑 확인
         Wallet recipientWallet = walletRepository.findByDepositAddress(toAddress)
@@ -106,8 +122,10 @@ public class WalletService {
         BigDecimal oldAvgPrice = recipientAsset.getAverageBuyPrice() != null ? recipientAsset.getAverageBuyPrice()
                 : BigDecimal.ZERO;
         BigDecimal newBalance = oldBalance.add(amount);
-        BigDecimal marketPrice = currentPrice != null && currentPrice.compareTo(BigDecimal.ZERO) > 0 ? currentPrice
-                : BigDecimal.ZERO;
+
+        // 현재 시세는 서버에서 직접 조회 (클라이언트 값 신뢰 금지)
+        Map<String, BigDecimal> prices = upbitPriceService.fetchCurrentPrices(List.of(assetUpper));
+        BigDecimal marketPrice = prices.getOrDefault(assetUpper, BigDecimal.ZERO);
 
         // 새로운 평단가 계산: ((기존 잔고 * 기존 평단가) + (입금 수량 * 현재 시세)) / 새로운 잔고
         // 이렇게 하면 입금 시점의 평가손익이 0이 되어, 코인 이체로 인한 인위적인 수익률 왜곡이 발생하지 않습니다.

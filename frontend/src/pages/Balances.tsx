@@ -413,8 +413,7 @@ const Balances = () => {
         {
           assetType: selectedWithdrawCoin,
           toAddress: withdrawAddress,
-          amount: parseFloat(transferAmount),
-          currentPrice: coinPrices[selectedWithdrawCoin as keyof typeof coinPrices] || 0
+          amount: parseFloat(transferAmount)
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );

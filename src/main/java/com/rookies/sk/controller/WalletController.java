@@ -35,8 +35,7 @@ public class WalletController {
                     userDetails.getUsername(),
                     request.getAssetType(),
                     request.getToAddress(),
-                    request.getAmount(),
-                    request.getCurrentPrice());
+                    request.getAmount());
             return ResponseEntity.ok(Map.of("message", "이체가 성공적으로 완료되었습니다."));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
@@ -48,6 +47,5 @@ public class WalletController {
         private String assetType;
         private String toAddress;
         private BigDecimal amount;
-        private BigDecimal currentPrice;
     }
 }
