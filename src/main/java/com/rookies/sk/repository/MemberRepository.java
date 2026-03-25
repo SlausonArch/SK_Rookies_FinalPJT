@@ -18,7 +18,7 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
 
     @Query("""
     select m from Member m
-    where (:q is null or :q = '' or lower(m.email) like lower(concat('%', :q, '%')) or lower(m.name) like lower(concat('%', :q, '%')))
+    where (:q is null or :q = '' or lower(m.email) like lower(concat('%', :q, '%')) escape '!' or lower(m.name) like lower(concat('%', :q, '%')) escape '!')
       and (:role is null or m.role = :role)
       and (:status is null or m.status = :status)
     """)

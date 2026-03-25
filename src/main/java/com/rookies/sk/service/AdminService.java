@@ -175,7 +175,7 @@ public class AdminService {
         Member.Role roleEnum = isBlank(role) ? null : Member.Role.valueOf(role.toUpperCase());
         Member.Status statusEnum = isBlank(status) ? null : Member.Status.valueOf(status.toUpperCase());
 
-        String sanitizedQ = isBlank(q) ? null : q.trim().replace("%", "").replace("_", "");
+        String sanitizedQ = isBlank(q) ? null : escapeLikeWildcards(q.trim());
         Page<Member> result = memberRepository.searchMembers(
                 sanitizedQ,
                 roleEnum,
@@ -446,7 +446,7 @@ public class AdminService {
                 Sort.by(Sort.Direction.DESC, "txDate"));
 
         Page<Transaction> result = transactionRepository.searchAdminTransactions(
-                isBlank(memberEmail) ? null : memberEmail.trim().replace("%", "").replace("_", ""),
+                isBlank(memberEmail) ? null : escapeLikeWildcards(memberEmail.trim()),
                 isBlank(assetType) ? null : assetType.toUpperCase(),
                 isBlank(txType) ? null : txType.toUpperCase(),
                 fromDt,
@@ -594,6 +594,13 @@ public class AdminService {
 
     private boolean isBlank(String s) {
         return s == null || s.isBlank();
+    }
+
+    /** LIKE 와일드카드(%, _)와 이스케이프 문자(!)를 리터럴로 처리 */
+    private String escapeLikeWildcards(String s) {
+        return s.replace("!", "!!")
+                .replace("%", "!%")
+                .replace("_", "!_");
     }
 
     private String normalizeAssetType(String assetType) {

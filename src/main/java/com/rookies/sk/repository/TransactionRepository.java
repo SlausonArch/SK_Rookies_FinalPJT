@@ -30,7 +30,7 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
     @Query("""
     select tx from Transaction tx
     where (:memberEmail is null or :memberEmail = '' 
-           or lower(tx.member.email) like lower(concat('%', :memberEmail, '%')))
+           or lower(tx.member.email) like lower(concat('%', :memberEmail, '%')) escape '!')
       and (:assetType is null or :assetType = '' or tx.assetType = :assetType)
       and (:txType is null or :txType = '' or tx.txType = :txType)
       and (:from is null or tx.txDate >= :from)
