@@ -1,5 +1,6 @@
 package com.rookies.sk.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -9,6 +10,7 @@ import java.time.LocalDateTime;
 @Builder
 public class CommentResponseDto {
     private Long commentId;
+    @JsonIgnore
     private Long memberId;
     private String authorName;
     private String content;

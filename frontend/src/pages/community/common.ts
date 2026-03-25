@@ -2,7 +2,6 @@ import { getUserAccessToken } from '../../utils/auth';
 
 export interface Post {
   postId: number;
-  memberId: number | null;
   authorName: string;
   title: string;
   content: string;
@@ -21,7 +20,6 @@ export interface Post {
 
 export interface Comment {
   commentId: number;
-  memberId: number | null;
   authorName: string;
   content: string;
   createdAt: string | null;

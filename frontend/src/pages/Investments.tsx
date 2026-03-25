@@ -492,7 +492,6 @@ interface Transaction {
 }
 
 interface Asset {
-  assetId: number;
   assetType: string;
   balance: number;
   lockedBalance: number;
@@ -625,7 +624,6 @@ const Investments = () => {
 
         const assetsData = Array.isArray(balanceResponse.data) ? balanceResponse.data : [];
         const normalizedAssets: Asset[] = assetsData.map((a: any) => ({
-          assetId: toNumber(a.assetId),
           assetType: String(a.assetType ?? ''),
           balance: toNumber(a.balance),
           lockedBalance: toNumber(a.lockedBalance),
