@@ -78,6 +78,8 @@ const ContentArea = styled.div`
   color: #24395e;
   line-height: 1.65;
   min-height: 220px;
+  white-space: pre-wrap;
+  word-break: break-word;
 `;
 
 const AttachBox = styled.div`
@@ -344,7 +346,7 @@ function CommunityDetail() {
                 </Meta>
               </HeaderArea>
               <ContentArea>
-                <div dangerouslySetInnerHTML={{ __html: post.content }} />
+                <div>{post.content}</div>
                 {attachmentHref && (
                   <AttachBox>
                     첨부파일:

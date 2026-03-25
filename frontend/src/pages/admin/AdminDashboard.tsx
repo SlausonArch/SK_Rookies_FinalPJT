@@ -2553,14 +2553,12 @@ const AdminDashboard = () => {
                   </div>
                 )}
 
-                {/* V-05: dangerouslySetInnerHTML — Stored XSS 취약점. HTML이 그대로 렌더링됩니다.
-                    악성 사용자가 <script>, <img onerror=...> 등을 본문에 삽입하면 어드민 브라우저에서 실행됩니다. */}
                 <div
-                  style={{ padding: '10px 0', borderBottom: `1px solid ${COLORS.border}`, minHeight: 60 }}
-                  dangerouslySetInnerHTML={{ __html: selectedPost.content }}
-                />
+                  style={{ padding: '10px 0', borderBottom: `1px solid ${COLORS.border}`, minHeight: 60, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                >
+                  {selectedPost.content}
+                </div>
 
-                {/* 댓글 목록 – V-05: 댓글 내용도 dangerouslySetInnerHTML로 출력 */}
                 <div style={{ marginTop: 16 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: COLORS.muted }}>
                     댓글 ({postComments.length})
@@ -2571,8 +2569,7 @@ const AdminDashboard = () => {
                     postComments.map((c: any) => (
                       <div key={c.commentId} style={{ padding: '6px 0', borderBottom: `1px solid ${COLORS.border}` }}>
                         <span style={{ fontSize: 11, color: COLORS.muted, marginRight: 8 }}>{c.authorName}</span>
-                        {/* V-05: 댓글 내용도 dangerouslySetInnerHTML → Stored XSS 가능 */}
-                        <span dangerouslySetInnerHTML={{ __html: c.content }} />
+                        <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{c.content}</span>
                       </div>
                     ))
                   )}
@@ -2609,11 +2606,11 @@ const AdminDashboard = () => {
                   요청자: {selectedInquiry.memberName} ({selectedInquiry.memberEmail}) | 작성일: {fmtDate(selectedInquiry.createdAt)}
                 </ModalMeta>
 
-                {/* V-05: 문의 본문도 dangerouslySetInnerHTML로 출력 → Stored XSS 가능 */}
                 <div
-                  style={{ maxHeight: '160px', overflowY: 'auto', padding: '8px 0', borderBottom: `1px solid ${COLORS.border}` }}
-                  dangerouslySetInnerHTML={{ __html: selectedInquiry.content }}
-                />
+                  style={{ maxHeight: '160px', overflowY: 'auto', padding: '8px 0', borderBottom: `1px solid ${COLORS.border}`, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                >
+                  {selectedInquiry.content}
+                </div>
 
                 {selectedInquiry.attachmentUrl && (
                   <div style={{ marginBottom: 12, fontSize: 12, fontWeight: 900 }}>
