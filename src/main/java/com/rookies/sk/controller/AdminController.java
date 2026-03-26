@@ -100,7 +100,7 @@ public class AdminController {
     }
 
     @GetMapping("/stats")
-    @PreAuthorize("hasAnyRole('VCESYS_CORE', 'VCESYS_MGMT', 'VCESYS_EMP')")
+    @PreAuthorize("hasAnyRole('VCESYS_CORE', 'VCESYS_MGMT')")
     public ResponseEntity<Map<String, Object>> getStats() {
         return ResponseEntity.ok(adminService.getStats());
     }
