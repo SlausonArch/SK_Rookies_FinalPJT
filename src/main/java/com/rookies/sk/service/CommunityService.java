@@ -11,6 +11,7 @@ import com.rookies.sk.repository.MemberRepository;
 import com.rookies.sk.repository.PostRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -230,7 +231,9 @@ public class CommunityService {
     @Transactional
     public long likePost(Long postId, String currentEmail) {
         Member member = findCurrentMember(currentEmail);
-        Post post = postRepository.findById(postId)
+
+        // 비관적 잠금(SELECT FOR UPDATE): 같은 게시글에 동시 요청이 오면 직렬 처리
+        Post post = postRepository.findWithLockById(postId)
                 .orElseThrow(() -> new IllegalArgumentException("Post not found"));
 
         boolean exists = communityLikeRepository.existsByTargetTypeAndTargetIdAndMember_MemberId(
@@ -239,12 +242,17 @@ public class CommunityService {
             communityLikeRepository.deleteByTargetTypeAndTargetIdAndMember_MemberId(
                     "POST", postId, member.getMemberId());
         } else {
-            CommunityLike like = CommunityLike.builder()
-                    .targetType("POST")
-                    .targetId(postId)
-                    .member(member)
-                    .build();
-            communityLikeRepository.save(like);
+            try {
+                CommunityLike like = CommunityLike.builder()
+                        .targetType("POST")
+                        .targetId(postId)
+                        .member(member)
+                        .build();
+                communityLikeRepository.saveAndFlush(like);
+            } catch (DataIntegrityViolationException e) {
+                // DB 유니크 제약(UQ_LIKES_TARGET)에 의한 중복 차단 — 이미 좋아요 처리된 것으로 간주
+                log.debug("좋아요 중복 삽입 차단 (postId={}, memberId={})", postId, member.getMemberId());
+            }
         }
 
         long count = communityLikeRepository.countByTargetTypeAndTargetId("POST", postId);
