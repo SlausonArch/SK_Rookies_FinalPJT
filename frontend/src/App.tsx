@@ -21,19 +21,25 @@ import WithdrawalComplete from './pages/WithdrawalComplete';
 import Events from './pages/Events';
 import Support from './pages/Support';
 import PrivacyPolicy from './pages/PrivacyPolicy';
-import { syncAuthState, setUserSession, getUserRefreshToken } from './utils/auth';
+import { syncUserAuthState, syncAdminAuthState, setUserSession, getUserRefreshToken } from './utils/auth';
 
-const mode = import.meta.env.VITE_APP_MODE || 'exchange'; // 'bank' or 'exchange'
+const mode = import.meta.env.VITE_APP_MODE || 'exchange'; // 'bank' or 'exchange' or 'admin'
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:18080';
 
-syncAuthState();
+// 모드별로 해당 토큰만 초기 동기화 (관리자 토큰이 거래소/은행에 노출되지 않도록 분리)
+if (mode === 'admin') {
+  syncAdminAuthState();
+} else {
+  syncUserAuthState();
+}
 
 function App() {
   const lastActivityRef = useRef<number>(Date.now());
 
   useEffect(() => {
-    syncAuthState();
-    const interval = setInterval(syncAuthState, 5000);
+    const syncFn = mode === 'admin' ? syncAdminAuthState : syncUserAuthState;
+    syncFn();
+    const interval = setInterval(syncFn, 5000);
     return () => clearInterval(interval);
   }, []);
 

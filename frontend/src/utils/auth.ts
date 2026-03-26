@@ -30,7 +30,7 @@ export function getCookie(name: string): string | null {
 }
 
 function setCookie(name: string, value: string) {
-  document.cookie = `${name}=${value}; ${COOKIE_PATH}; ${COOKIE_MAX_AGE}`;
+  document.cookie = `${name}=${value}; ${COOKIE_PATH}; ${COOKIE_MAX_AGE}; SameSite=Strict`;
 }
 
 function clearCookie(name: string) {
@@ -125,10 +125,21 @@ function migrateLegacyAdminSession() {
   clearStorageKeys(LEGACY_KEYS);
 }
 
-export function syncAuthState() {
-  migrateLegacyAdminSession();
+/** 거래소/은행 전용: 일반 사용자 토큰만 동기화 (관리자 토큰 접근 불가) */
+export function syncUserAuthState() {
   syncTokenPair(USER_TOKEN_COOKIE, USER_ACCESS_TOKEN_KEY, USER_LOGGED_OUT_SENTINEL, [USER_REFRESH_TOKEN_KEY]);
+}
+
+/** 관리자 패널 전용: 관리자 토큰만 동기화 (사용자 토큰 접근 불가) */
+export function syncAdminAuthState() {
+  migrateLegacyAdminSession();
   syncTokenPair(ADMIN_TOKEN_COOKIE, ADMIN_ACCESS_TOKEN_KEY, ADMIN_LOGGED_OUT_SENTINEL);
+}
+
+/** @deprecated 모드 구분 없이 모두 동기화. App.tsx에서는 사용 금지. */
+export function syncAuthState() {
+  syncUserAuthState();
+  syncAdminAuthState();
 }
 
 export function getUserAccessToken(): string | null {
