@@ -1,5 +1,6 @@
 package com.rookies.sk.exception;
 
+import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -25,6 +26,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, String>> handleValidationException(MethodArgumentNotValidException ex) {
         log.debug("Validation failed: {}", ex.getBindingResult().getAllErrors());
+        return ResponseEntity.badRequest().body(Map.of("message", "잘못된 요청입니다."));
+    }
+
+    // @RequestParam/@PathVariable @Pattern/@Size 등 제약 위반 (ConstraintViolationException)
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<Map<String, String>> handleConstraintViolation(ConstraintViolationException ex) {
+        log.debug("Constraint violation: {}", ex.getMessage());
         return ResponseEntity.badRequest().body(Map.of("message", "잘못된 요청입니다."));
     }
 

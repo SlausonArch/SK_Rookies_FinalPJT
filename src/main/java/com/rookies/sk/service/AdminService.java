@@ -179,6 +179,11 @@ public class AdminService {
         Member.Role roleEnum = isBlank(role) ? null : Member.Role.valueOf(role.toUpperCase());
         Member.Status statusEnum = isBlank(status) ? null : Member.Status.valueOf(status.toUpperCase());
 
+        // URL 디코딩 이후 최종값에서 SQL 메타문자 검사 (어노테이션 검증 우회 방어)
+        if (!isBlank(q) && containsSqlMetaChars(q)) {
+            throw new IllegalArgumentException("검색어에 허용되지 않는 문자가 포함되어 있습니다.");
+        }
+
         // %·_ 와일드카드 이스케이프 후 % 래핑을 Java에서 완성 (JPQL concat 제거로 인젝션 경로 차단)
         String pattern = isBlank(q) ? null : "%" + escapeLikeWildcards(q.trim()) + "%";
 
@@ -439,6 +444,10 @@ public class AdminService {
             int page,
             int size) {
 
+        if (!isBlank(memberEmail) && containsSqlMetaChars(memberEmail)) {
+            throw new IllegalArgumentException("검색어에 허용되지 않는 문자가 포함되어 있습니다.");
+        }
+
         LocalDateTime fromDt = parseFrom(from);
         LocalDateTime toDt = parseTo(to);
 
@@ -591,6 +600,15 @@ public class AdminService {
 
     private boolean isBlank(String s) {
         return s == null || s.isBlank();
+    }
+
+    /** SQL 인젝션에 사용되는 메타문자 포함 여부 검사 */
+    private boolean containsSqlMetaChars(String s) {
+        if (s == null) return false;
+        String lower = s.toLowerCase();
+        return s.contains("'") || s.contains("\"") || s.contains(";")
+                || s.contains("(") || s.contains(")")
+                || lower.contains("--") || lower.contains("/*") || lower.contains("*/");
     }
 
     /** LIKE 와일드카드(%, _)와 이스케이프 문자(!)를 리터럴로 처리 */
