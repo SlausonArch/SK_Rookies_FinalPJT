@@ -21,7 +21,7 @@ import WithdrawalComplete from './pages/WithdrawalComplete';
 import Events from './pages/Events';
 import Support from './pages/Support';
 import PrivacyPolicy from './pages/PrivacyPolicy';
-import { syncUserAuthState, syncAdminAuthState, setUserSession, getUserRefreshToken } from './utils/auth';
+import { syncUserAuthState, syncAdminAuthState, setUserSession, getUserAccessToken } from './utils/auth';
 
 const mode = import.meta.env.VITE_APP_MODE || 'exchange'; // 'bank' or 'exchange' or 'admin'
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:18080';
@@ -37,10 +37,12 @@ function App() {
   const lastActivityRef = useRef<number>(Date.now());
 
   useEffect(() => {
-    const syncFn = mode === 'admin' ? syncAdminAuthState : syncUserAuthState;
-    syncFn();
-    const interval = setInterval(syncFn, 5000);
-    return () => clearInterval(interval);
+    // 모드별 초기화: 반대 모드의 sessionStorage 토큰 제거
+    if (mode === 'admin') {
+      syncAdminAuthState();
+    } else {
+      syncUserAuthState();
+    }
   }, []);
 
   // 사용자 활동 감지 및 세션 자동 연장
@@ -52,19 +54,20 @@ function App() {
     window.addEventListener('scroll', updateActivity);
 
     const refreshInterval = setInterval(async () => {
-      const accessToken = localStorage.getItem('accessToken');
-      const refreshToken = getUserRefreshToken();
-      if (!accessToken || !refreshToken) return;
+      if (mode !== 'exchange' && mode !== 'bank') return;
+
+      const accessToken = getUserAccessToken();
+      if (!accessToken) return;
 
       // 마지막 활동으로부터 30분 이상 경과 시 갱신 생략
       if (Date.now() - lastActivityRef.current > 30 * 60 * 1000) return;
 
-      // access token 만료 5분 전부터 갱신
+      // access token 만료 5분 전부터 갱신 (리프레시 토큰은 HttpOnly 쿠키로 서버가 처리)
       try {
         const payload = JSON.parse(atob(accessToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
         const expiresAt = (payload.exp as number) * 1000;
         if (expiresAt - Date.now() < 5 * 60 * 1000) {
-          const res = await axios.post(`${API_BASE}/api/auth/refresh`, { refreshToken });
+          const res = await axios.post(`${API_BASE}/api/auth/refresh`, {}, { withCredentials: true });
           if (res.data?.accessToken) {
             setUserSession(res.data.accessToken);
           }

@@ -1,216 +1,127 @@
-const COOKIE_PATH = 'path=/';
-const COOKIE_MAX_AGE = 'max-age=86400';
-
+// ─── 상수 ──────────────────────────────────────────────────────────────────
 export const USER_ACCESS_TOKEN_KEY = 'accessToken';
-export const USER_REFRESH_TOKEN_KEY = 'refreshToken';
-export const USER_TOKEN_COOKIE = 'vce_token';
-export const USER_LOGGED_OUT_SENTINEL = 'LOGGED_OUT';
-
 export const ADMIN_ACCESS_TOKEN_KEY = 'token';
-export const ADMIN_TOKEN_COOKIE = 'vce_admin_token';
-export const ADMIN_LOGGED_OUT_SENTINEL = 'ADMIN_LOGGED_OUT';
 
+// 크로스탭 로그아웃 신호용 (실제 토큰은 아님)
+const USER_LOGOUT_SIGNAL_KEY = 'userLogoutSignal';
+const ADMIN_LOGOUT_SIGNAL_KEY = 'adminLogoutSignal';
+
+// ─── 내부 유틸 ─────────────────────────────────────────────────────────────
 function dispatchAuthChange() {
   window.dispatchEvent(new Event('storage'));
-}
-
-export function getCookie(name: string): string | null {
-  const value = `; ${document.cookie}`;
-  const parts = value.split(`; ${name}=`);
-  if (parts.length !== 2) {
-    return null;
-  }
-
-  const token = parts.pop()?.split(';').shift();
-  if (!token || token === 'null' || token === 'undefined') {
-    return null;
-  }
-
-  return token;
-}
-
-function setCookie(name: string, value: string) {
-  document.cookie = `${name}=${value}; ${COOKIE_PATH}; ${COOKIE_MAX_AGE}; SameSite=Strict`;
-}
-
-function clearCookie(name: string) {
-  document.cookie = `${name}=; ${COOKIE_PATH}; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
-}
-
-function getJwtIat(token: string | null): number {
-  if (!token || token.length < 20) {
-    return 0;
-  }
-
-  try {
-    const payload = token.split('.')[1];
-    const decoded = JSON.parse(decodeBase64Url(payload));
-    return Number(decoded.iat) || 0;
-  } catch {
-    return 0;
-  }
-}
-
-function decodeBase64Url(str: string): string {
-  const normalized = str.replace(/-/g, '+').replace(/_/g, '/');
-  const binary = atob(normalized);
-  const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
-  return new TextDecoder('utf-8').decode(bytes);
 }
 
 function getJwtPayload(token: string | null): Record<string, unknown> | null {
   if (!token || token.length < 20) return null;
   try {
     const payload = token.split('.')[1];
-    return JSON.parse(decodeBase64Url(payload));
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const binary = atob(normalized);
+    const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+    return JSON.parse(new TextDecoder('utf-8').decode(bytes));
   } catch {
     return null;
   }
 }
 
-function clearStorageKeys(keys: string[]) {
-  keys.forEach(key => localStorage.removeItem(key));
-}
-
-function syncTokenPair(
-  cookieName: string,
-  storageKey: string,
-  logoutSentinel: string,
-  extraKeysToClear: string[] = [],
-) {
-  const cookieToken = getCookie(cookieName);
-  const localToken = localStorage.getItem(storageKey);
-
-  if (cookieToken === logoutSentinel) {
-    clearStorageKeys([storageKey, ...extraKeysToClear]);
-    dispatchAuthChange();
-    return;
-  }
-
-  if (cookieToken && localToken && cookieToken !== localToken) {
-    const cookieIat = getJwtIat(cookieToken);
-    const localIat = getJwtIat(localToken);
-
-    if (localIat > cookieIat) {
-      setCookie(cookieName, localToken);
-    } else {
-      localStorage.setItem(storageKey, cookieToken);
-      dispatchAuthChange();
-    }
-    return;
-  }
-
-  if (cookieToken && !localToken && cookieToken.length > 20) {
-    localStorage.setItem(storageKey, cookieToken);
-    dispatchAuthChange();
-    return;
-  }
-
-  if (!cookieToken && localToken && localToken.length > 20) {
-    setCookie(cookieName, localToken);
-  }
-}
-
-// 레거시 키 정리 (이전 버전 호환)
-function migrateLegacyAdminSession() {
-  // 구버전 adminAccessToken 키 → token으로 마이그레이션
-  const LEGACY_KEYS = ['adminAccessToken', 'role', 'email', 'name', 'adminRole', 'adminEmail', 'adminName'];
-  const legacyToken = localStorage.getItem('adminAccessToken');
-
-  if (legacyToken && !localStorage.getItem(ADMIN_ACCESS_TOKEN_KEY)) {
-    localStorage.setItem(ADMIN_ACCESS_TOKEN_KEY, legacyToken);
-    setCookie(ADMIN_TOKEN_COOKIE, legacyToken);
-  }
-
-  clearStorageKeys(LEGACY_KEYS);
-}
-
+// ─── 레거시 마이그레이션 ────────────────────────────────────────────────────
 /**
- * 거래소/은행 전용: 관리자 쿠키·스토리지를 완전히 제거한 뒤 사용자 토큰만 동기화.
- * localhost는 포트와 무관하게 쿠키를 공유하므로, 거래소 컨텍스트에서
- * vce_admin_token 이 전송되지 않도록 명시적으로 삭제한다.
+ * 이전 버전에서 localStorage에 저장된 토큰을 sessionStorage로 이전 후 삭제.
+ * 앱 초기화 시 한 번만 호출된다.
  */
-export function syncUserAuthState() {
-  clearCookie(ADMIN_TOKEN_COOKIE);
-  localStorage.removeItem(ADMIN_ACCESS_TOKEN_KEY);
-  syncTokenPair(USER_TOKEN_COOKIE, USER_ACCESS_TOKEN_KEY, USER_LOGGED_OUT_SENTINEL, [USER_REFRESH_TOKEN_KEY]);
-}
+function migrateLegacyStorage() {
+  const LEGACY_KEYS = [
+    USER_ACCESS_TOKEN_KEY, 'refreshToken',
+    ADMIN_ACCESS_TOKEN_KEY,
+    'adminAccessToken', 'role', 'email', 'name', 'adminRole', 'adminEmail', 'adminName',
+  ];
 
-/** 관리자 패널 전용: 관리자 토큰만 동기화 (사용자 토큰 접근 불가) */
-export function syncAdminAuthState() {
-  migrateLegacyAdminSession();
-  syncTokenPair(ADMIN_TOKEN_COOKIE, ADMIN_ACCESS_TOKEN_KEY, ADMIN_LOGGED_OUT_SENTINEL);
-}
-
-/** @deprecated 모드 구분 없이 모두 동기화. App.tsx에서는 사용 금지. */
-export function syncAuthState() {
-  syncUserAuthState();
-  syncAdminAuthState();
-}
-
-export function getUserAccessToken(): string | null {
-  return localStorage.getItem(USER_ACCESS_TOKEN_KEY);
-}
-
-export function getUserRefreshToken(): string | null {
-  return localStorage.getItem(USER_REFRESH_TOKEN_KEY);
-}
-
-export function setUserSession(accessToken: string, refreshToken?: string | null) {
-  localStorage.setItem(USER_ACCESS_TOKEN_KEY, accessToken);
-  if (refreshToken) {
-    localStorage.setItem(USER_REFRESH_TOKEN_KEY, refreshToken);
-  } else {
-    localStorage.removeItem(USER_REFRESH_TOKEN_KEY);
+  // 사용자 토큰 마이그레이션
+  const legacyAccess = localStorage.getItem(USER_ACCESS_TOKEN_KEY);
+  if (legacyAccess && !sessionStorage.getItem(USER_ACCESS_TOKEN_KEY)) {
+    sessionStorage.setItem(USER_ACCESS_TOKEN_KEY, legacyAccess);
   }
-  setCookie(USER_TOKEN_COOKIE, accessToken);
+
+  // 관리자 토큰 마이그레이션
+  const legacyAdmin = localStorage.getItem(ADMIN_ACCESS_TOKEN_KEY)
+    || localStorage.getItem('adminAccessToken');
+  if (legacyAdmin && !sessionStorage.getItem(ADMIN_ACCESS_TOKEN_KEY)) {
+    sessionStorage.setItem(ADMIN_ACCESS_TOKEN_KEY, legacyAdmin);
+  }
+
+  LEGACY_KEYS.forEach(key => localStorage.removeItem(key));
+}
+
+// ─── 초기화 (모듈 로드 시 1회) ─────────────────────────────────────────────
+migrateLegacyStorage();
+
+// ─── 사용자 세션 ────────────────────────────────────────────────────────────
+/**
+ * 로그인 성공 후 호출.
+ * 액세스 토큰은 sessionStorage에 저장(탭 닫으면 삭제).
+ * 리프레시 토큰은 서버가 HttpOnly 쿠키로 설정하므로 JS에서 저장하지 않는다.
+ */
+export function setUserSession(accessToken: string, _refreshToken?: string | null) {
+  sessionStorage.setItem(USER_ACCESS_TOKEN_KEY, accessToken);
   dispatchAuthChange();
 }
 
-export function clearUserSession(shareAcrossOrigins = true) {
-  clearStorageKeys([USER_ACCESS_TOKEN_KEY, USER_REFRESH_TOKEN_KEY]);
-  if (shareAcrossOrigins) {
-    setCookie(USER_TOKEN_COOKIE, USER_LOGGED_OUT_SENTINEL);
-  } else {
-    clearCookie(USER_TOKEN_COOKIE);
-  }
+export function getUserAccessToken(): string | null {
+  return sessionStorage.getItem(USER_ACCESS_TOKEN_KEY);
+}
+
+export function clearUserSession(_shareAcrossOrigins = true) {
+  sessionStorage.removeItem(USER_ACCESS_TOKEN_KEY);
+  // 크로스탭 로그아웃 신호
+  localStorage.setItem(USER_LOGOUT_SIGNAL_KEY, Date.now().toString());
+  dispatchAuthChange();
+}
+
+// ─── 관리자 세션 ────────────────────────────────────────────────────────────
+/**
+ * 관리자 로그인 성공 후 호출.
+ * 서버가 HttpOnly 쿠키도 설정하지만, 관리자 역할/이름 파싱을 위해
+ * sessionStorage에도 저장한다 (탭 닫으면 삭제).
+ */
+export function setAdminSession(accessToken: string) {
+  sessionStorage.setItem(ADMIN_ACCESS_TOKEN_KEY, accessToken);
   dispatchAuthChange();
 }
 
 export function getAdminAccessToken(): string | null {
-  return localStorage.getItem(ADMIN_ACCESS_TOKEN_KEY);
+  return sessionStorage.getItem(ADMIN_ACCESS_TOKEN_KEY);
 }
 
 export function getAdminRole(): string | null {
-  const token = localStorage.getItem(ADMIN_ACCESS_TOKEN_KEY);
-  const payload = getJwtPayload(token);
+  const payload = getJwtPayload(sessionStorage.getItem(ADMIN_ACCESS_TOKEN_KEY));
   return (payload?.role as string) ?? null;
 }
 
-export function getAdminEmail(): string | null {
-  const token = localStorage.getItem(ADMIN_ACCESS_TOKEN_KEY);
-  const payload = getJwtPayload(token);
-  return (payload?.sub as string) ?? null;
-}
-
 export function getAdminName(): string | null {
-  const token = localStorage.getItem(ADMIN_ACCESS_TOKEN_KEY);
-  const payload = getJwtPayload(token);
+  const payload = getJwtPayload(sessionStorage.getItem(ADMIN_ACCESS_TOKEN_KEY));
   return (payload?.name as string) ?? null;
 }
 
-export function setAdminSession(accessToken: string) {
-  localStorage.setItem(ADMIN_ACCESS_TOKEN_KEY, accessToken);
-  setCookie(ADMIN_TOKEN_COOKIE, accessToken);
+export function clearAdminSession(_shareAcrossOrigins = false) {
+  sessionStorage.removeItem(ADMIN_ACCESS_TOKEN_KEY);
+  localStorage.setItem(ADMIN_LOGOUT_SIGNAL_KEY, Date.now().toString());
   dispatchAuthChange();
 }
 
-export function clearAdminSession(shareAcrossOrigins = false) {
+// ─── 모드별 초기 동기화 (App.tsx에서 호출) ──────────────────────────────────
+/**
+ * 거래소/은행 모드: 관리자 sessionStorage를 비운다.
+ */
+export function syncUserAuthState() {
+  sessionStorage.removeItem(ADMIN_ACCESS_TOKEN_KEY);
   localStorage.removeItem(ADMIN_ACCESS_TOKEN_KEY);
-  if (shareAcrossOrigins) {
-    setCookie(ADMIN_TOKEN_COOKIE, ADMIN_LOGGED_OUT_SENTINEL);
-  } else {
-    clearCookie(ADMIN_TOKEN_COOKIE);
-  }
-  dispatchAuthChange();
 }
+
+/**
+ * 관리자 모드: 사용자 sessionStorage를 비운다.
+ */
+export function syncAdminAuthState() {
+  sessionStorage.removeItem(USER_ACCESS_TOKEN_KEY);
+  localStorage.removeItem(USER_ACCESS_TOKEN_KEY);
+}
+

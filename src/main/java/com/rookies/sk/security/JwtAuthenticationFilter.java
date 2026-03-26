@@ -6,6 +6,7 @@ import com.rookies.sk.service.ActiveSessionService;
 import com.rookies.sk.service.TokenBlacklistService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -99,6 +100,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String bearerToken = request.getHeader("Authorization");
         if (StringUtils.hasText(bearerToken) && bearerToken.startsWith("Bearer ")) {
             return bearerToken.substring(7);
+        }
+        Cookie[] cookies = request.getCookies();
+        if (cookies != null) {
+            for (Cookie cookie : cookies) {
+                String name = cookie.getName();
+                if ("vce_token".equals(name) || "vce_admin_token".equals(name)) {
+                    String value = cookie.getValue();
+                    if (StringUtils.hasText(value)) return value;
+                }
+            }
         }
         return null;
     }

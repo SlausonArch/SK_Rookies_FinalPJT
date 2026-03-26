@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import axios from 'axios';
-import { clearUserSession, getUserAccessToken, getUserRefreshToken } from '../utils/auth';
+import { clearUserSession, getUserAccessToken } from '../utils/auth';
 
 const mode = import.meta.env.VITE_APP_MODE || 'exchange';
 const exchangeUrl = import.meta.env.VITE_EXCHANGE_FRONTEND_URL || `${window.location.protocol}//${window.location.hostname}:15173`;
@@ -197,14 +197,13 @@ const Header: React.FC = () => {
 
   const handleLogout = async () => {
     const token = getUserAccessToken();
-    const refreshToken = getUserRefreshToken();
 
     if (token) {
       try {
         await axios.post(
           `${API_BASE}/api/auth/logout`,
-          { refreshToken },
-          { headers: { Authorization: `Bearer ${token}` } },
+          {},
+          { headers: { Authorization: `Bearer ${token}` }, withCredentials: true },
         );
       } catch {
         // Clear the client session even if server-side logout fails.

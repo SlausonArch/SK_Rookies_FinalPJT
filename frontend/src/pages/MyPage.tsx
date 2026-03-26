@@ -5,7 +5,7 @@ import axios from 'axios';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import TierModal from '../components/TierModal';
-import { clearUserSession, getUserAccessToken, getUserRefreshToken } from '../utils/auth';
+import { clearUserSession, getUserAccessToken } from '../utils/auth';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 
@@ -507,10 +507,8 @@ const MyPage: React.FC = () => {
     try {
       await axios.post(
         `${API_BASE}/api/auth/withdraw`,
-        { refreshToken: getUserRefreshToken() },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
+        {},
+        { headers: { Authorization: `Bearer ${token}` }, withCredentials: true },
       );
       clearUserSession(true);
       navigate('/withdrawal-complete', { replace: true });

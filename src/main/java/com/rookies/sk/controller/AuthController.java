@@ -20,6 +20,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -74,7 +77,7 @@ public class AuthController {
     }
 
     @PostMapping("/test/login")
-    public ResponseEntity<?> testLogin(@RequestBody AdminLoginRequest request) {
+    public ResponseEntity<?> testLogin(@RequestBody AdminLoginRequest request, HttpServletResponse httpResponse) {
         log.debug("Test login request received");
         try {
             Member member = memberService.findByEmailForLogin(request.getEmail());
@@ -112,6 +115,8 @@ public class AuthController {
             activeSessionService.activate(member.getEmail(), jwtTokenProvider.getTokenId(accessToken),
                     jwtTokenProvider.getExpiration(accessToken).toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime());
 
+            setTokenCookie(httpResponse, "vce_token", accessToken, 30 * 60);
+            setTokenCookie(httpResponse, "vce_refresh_token", refreshToken, 7 * 24 * 60 * 60);
             return ResponseEntity.ok(java.util.Map.of(
                     "accessToken", accessToken,
                     "refreshToken", refreshToken));
@@ -122,7 +127,7 @@ public class AuthController {
     }
 
     @PostMapping("/admin/login")
-    public ResponseEntity<?> adminLogin(@RequestBody AdminLoginRequest request) {
+    public ResponseEntity<?> adminLogin(@RequestBody AdminLoginRequest request, HttpServletResponse httpResponse) {
         log.debug("Admin login request received");
         try {
             // 존재하지 않는 이메일: in-memory 카운터로 3회 실패 시 잠금 메시지 반환
@@ -185,6 +190,7 @@ public class AuthController {
             activeSessionService.activate(member.getEmail(), jwtTokenProvider.getTokenId(accessToken),
                     jwtTokenProvider.getExpiration(accessToken).toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime());
 
+            setTokenCookie(httpResponse, "vce_admin_token", accessToken, 30 * 60);
             AdminLoginResponse response = new AdminLoginResponse(accessToken);
 
             return ResponseEntity.ok(response);
@@ -340,8 +346,14 @@ public class AuthController {
     }
 
     @PostMapping("/refresh")
-    public ResponseEntity<?> refreshToken(@RequestBody(required = false) java.util.Map<String, String> body) {
+    public ResponseEntity<?> refreshToken(
+            @RequestBody(required = false) java.util.Map<String, String> body,
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse) {
         String refreshToken = body != null ? body.get("refreshToken") : null;
+        if (refreshToken == null || refreshToken.isBlank()) {
+            refreshToken = getCookieValue(httpRequest, "vce_refresh_token");
+        }
         if (refreshToken == null || refreshToken.isBlank()) {
             return ResponseEntity.status(400).body("refreshToken이 필요합니다.");
         }
@@ -368,6 +380,8 @@ public class AuthController {
             activeSessionService.activate(email, jwtTokenProvider.getTokenId(newAccessToken),
                     jwtTokenProvider.getExpiration(newAccessToken).toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime());
 
+            setTokenCookie(httpResponse, "vce_token", newAccessToken, 30 * 60);
+            setTokenCookie(httpResponse, "vce_refresh_token", newRefreshToken, 7 * 24 * 60 * 60);
             return ResponseEntity.ok(java.util.Map.of(
                     "accessToken", newAccessToken,
                     "refreshToken", newRefreshToken));
@@ -380,7 +394,9 @@ public class AuthController {
     public ResponseEntity<?> logout(
             @AuthenticationPrincipal UserDetails userDetails,
             @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
-            @RequestBody(required = false) TokenRevokeRequestDto request) {
+            @RequestBody(required = false) TokenRevokeRequestDto request,
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse) {
         tokenBlacklistService.revokeTokens(
                 resolveBearerToken(authorizationHeader),
                 request != null ? request.getRefreshToken() : null,
@@ -388,6 +404,9 @@ public class AuthController {
         if (userDetails != null) {
             activeSessionService.invalidate(userDetails.getUsername());
         }
+        clearTokenCookie(httpResponse, "vce_token");
+        clearTokenCookie(httpResponse, "vce_refresh_token");
+        clearTokenCookie(httpResponse, "vce_admin_token");
         return ResponseEntity.ok(java.util.Map.of("message", "로그아웃이 완료되었습니다."));
     }
 
@@ -415,5 +434,26 @@ public class AuthController {
             return null;
         }
         return authorizationHeader.substring(7);
+    }
+
+    private void setTokenCookie(HttpServletResponse response, String name, String value, int maxAgeSeconds) {
+        response.addHeader("Set-Cookie",
+                name + "=" + value
+                + "; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=" + maxAgeSeconds);
+    }
+
+    private void clearTokenCookie(HttpServletResponse response, String name) {
+        response.addHeader("Set-Cookie",
+                name + "=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0");
+    }
+
+    private String getCookieValue(HttpServletRequest request, String name) {
+        Cookie[] cookies = request.getCookies();
+        if (cookies != null) {
+            for (Cookie cookie : cookies) {
+                if (name.equals(cookie.getName())) return cookie.getValue();
+            }
+        }
+        return null;
     }
 }

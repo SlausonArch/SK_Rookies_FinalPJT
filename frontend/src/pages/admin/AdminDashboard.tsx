@@ -935,8 +935,19 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
   const [activeMenu, setActiveMenu] = useState<
     'dashboard' | 'members' | 'idApprovals' | 'orders' | 'assets' | 'deposits' | 'community' | 'inquiries' | 'settings'
-  >('dashboard');
+  >(() => {
+    const saved = sessionStorage.getItem('adminActiveMenu') as
+      | 'dashboard' | 'members' | 'idApprovals' | 'orders' | 'assets' | 'deposits' | 'community' | 'inquiries' | 'settings'
+      | null;
+    if (saved) return saved;
+    const role = getAdminRole();
+    return role === 'VCESYS_EMP' ? 'community' : 'dashboard';
+  });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  useEffect(() => {
+    sessionStorage.setItem('adminActiveMenu', activeMenu);
+  }, [activeMenu]);
 
   const userName = getAdminName() || '관리자';
   const [token, setToken] = useState<string | null>(getAdminAccessToken);
@@ -1042,10 +1053,6 @@ const AdminDashboard = () => {
         return;
       }
       setToken(currentToken);
-      // EMP는 접근 가능한 첫 메뉴(community)로 기본 진입
-      if (r === 'VCESYS_EMP') {
-        setActiveMenu('community');
-      }
     };
 
     checkAuth();
