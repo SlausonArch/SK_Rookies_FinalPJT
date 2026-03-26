@@ -125,8 +125,14 @@ function migrateLegacyAdminSession() {
   clearStorageKeys(LEGACY_KEYS);
 }
 
-/** 거래소/은행 전용: 일반 사용자 토큰만 동기화 (관리자 토큰 접근 불가) */
+/**
+ * 거래소/은행 전용: 관리자 쿠키·스토리지를 완전히 제거한 뒤 사용자 토큰만 동기화.
+ * localhost는 포트와 무관하게 쿠키를 공유하므로, 거래소 컨텍스트에서
+ * vce_admin_token 이 전송되지 않도록 명시적으로 삭제한다.
+ */
 export function syncUserAuthState() {
+  clearCookie(ADMIN_TOKEN_COOKIE);
+  localStorage.removeItem(ADMIN_ACCESS_TOKEN_KEY);
   syncTokenPair(USER_TOKEN_COOKIE, USER_ACCESS_TOKEN_KEY, USER_LOGGED_OUT_SENTINEL, [USER_REFRESH_TOKEN_KEY]);
 }
 
