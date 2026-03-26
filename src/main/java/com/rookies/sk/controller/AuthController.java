@@ -24,6 +24,8 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 @RestController
@@ -44,6 +46,9 @@ public class AuthController {
 
     private static final int MAX_LOGIN_FAIL = 5;
     private static final int MAX_ADMIN_LOGIN_FAIL = 3;
+
+    /** 존재하지 않는 이메일에 대한 관리자 로그인 실패 횟수 추적 (재시작 시 초기화) */
+    private static final ConcurrentHashMap<String, AtomicInteger> ghostEmailAttempts = new ConcurrentHashMap<>();
 
     private static String sha256Hex(String input) {
         try {
@@ -120,11 +125,24 @@ public class AuthController {
     public ResponseEntity<?> adminLogin(@RequestBody AdminLoginRequest request) {
         log.debug("Admin login request received");
         try {
-            Member member = memberService.findByEmailForLogin(request.getEmail());
-
-            if (member.getStatus() == Member.Status.WITHDRAWN
-                    || member.getStatus() == Member.Status.AUTH_FAILED) {
+            // 존재하지 않는 이메일: in-memory 카운터로 3회 실패 시 잠금 메시지 반환
+            Member member = memberService.findByEmailForLoginOrNull(request.getEmail());
+            if (member == null) {
+                String key = request.getEmail().toLowerCase();
+                int count = ghostEmailAttempts
+                        .computeIfAbsent(key, k -> new AtomicInteger(0))
+                        .incrementAndGet();
+                if (count >= MAX_ADMIN_LOGIN_FAIL) {
+                    return ResponseEntity.status(401).body("계정이 잠겼습니다. 운영팀에게 문의하세요.");
+                }
                 return ResponseEntity.status(401).body("로그인에 실패했습니다.");
+            }
+
+            if (member.getStatus() == Member.Status.WITHDRAWN) {
+                return ResponseEntity.status(401).body("로그인에 실패했습니다.");
+            }
+            if (member.getStatus() == Member.Status.AUTH_FAILED) {
+                return ResponseEntity.status(401).body("계정이 잠겼습니다. 운영팀에게 문의하세요.");
             }
 
             boolean passwordMatch = false;
@@ -142,6 +160,8 @@ public class AuthController {
                 member.setLoginFailCount(failCount);
                 if (failCount >= MAX_ADMIN_LOGIN_FAIL) {
                     member.setStatus(Member.Status.AUTH_FAILED);
+                    memberService.saveMember(member);
+                    return ResponseEntity.status(401).body("계정이 잠겼습니다. 운영팀에게 문의하세요.");
                 }
                 memberService.saveMember(member);
                 return ResponseEntity.status(401).body("로그인에 실패했습니다.");
@@ -170,7 +190,7 @@ public class AuthController {
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("Admin login failed", e);
-            return ResponseEntity.status(401).body("Login failed");
+            return ResponseEntity.status(401).body("로그인에 실패했습니다.");
         }
     }
 

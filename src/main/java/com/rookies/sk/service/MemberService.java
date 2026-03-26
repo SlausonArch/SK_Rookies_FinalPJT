@@ -145,6 +145,10 @@ public class MemberService {
                 .orElseThrow(() -> new RuntimeException("Member not found"));
     }
 
+    public Member findByEmailForLoginOrNull(String email) {
+        return memberRepository.findByEmail(email).orElse(null);
+    }
+
     @Transactional
     public Member saveMember(Member member) {
         return memberRepository.save(member);
