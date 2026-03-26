@@ -11,7 +11,6 @@ import com.rookies.sk.repository.MemberRepository;
 import com.rookies.sk.repository.PostRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -242,17 +241,13 @@ public class CommunityService {
             communityLikeRepository.deleteByTargetTypeAndTargetIdAndMember_MemberId(
                     "POST", postId, member.getMemberId());
         } else {
-            try {
-                CommunityLike like = CommunityLike.builder()
-                        .targetType("POST")
-                        .targetId(postId)
-                        .member(member)
-                        .build();
-                communityLikeRepository.saveAndFlush(like);
-            } catch (DataIntegrityViolationException e) {
-                // DB 유니크 제약(UQ_LIKES_TARGET)에 의한 중복 차단 — 이미 좋아요 처리된 것으로 간주
-                log.debug("좋아요 중복 삽입 차단 (postId={}, memberId={})", postId, member.getMemberId());
-            }
+            // PESSIMISTIC_WRITE 잠금이 직렬화를 보장하므로 중복 INSERT 불가
+            CommunityLike like = CommunityLike.builder()
+                    .targetType("POST")
+                    .targetId(postId)
+                    .member(member)
+                    .build();
+            communityLikeRepository.save(like);
         }
 
         long count = communityLikeRepository.countByTargetTypeAndTargetId("POST", postId);
