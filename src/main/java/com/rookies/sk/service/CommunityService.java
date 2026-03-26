@@ -348,11 +348,15 @@ public class CommunityService {
     }
 
     private boolean isAdmin(Member member) {
-        return member.getRole() == Member.Role.VCESYS_CORE;
+        return member.getRole() == Member.Role.VCESYS_CORE
+                || member.getRole() == Member.Role.VCESYS_MGMT
+                || member.getRole() == Member.Role.VCESYS_EMP;
     }
 
     private boolean hasCommunitySuperRole(Member member) {
-        return member.getRole() == Member.Role.VCESYS_CORE;
+        return member.getRole() == Member.Role.VCESYS_CORE
+                || member.getRole() == Member.Role.VCESYS_MGMT
+                || member.getRole() == Member.Role.VCESYS_EMP;
     }
 
     /** HTML 태그 전체 제거 — Stored XSS 방지 */
