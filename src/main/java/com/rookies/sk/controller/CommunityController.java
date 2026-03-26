@@ -50,7 +50,7 @@ public class CommunityController {
         return ResponseEntity.ok(communityService.createPost(request, userDetails.getUsername()));
     }
 
-    @PutMapping("/posts/{postId}")
+    @PatchMapping("/posts/{postId}")
     public ResponseEntity<PostResponseDto> updatePost(
             @PathVariable Long postId,
             @Valid @RequestBody PostRequestDto request,
@@ -58,7 +58,7 @@ public class CommunityController {
         return ResponseEntity.ok(communityService.updatePost(postId, request, userDetails.getUsername()));
     }
 
-    @DeleteMapping("/posts/{postId}")
+    @PostMapping("/posts/{postId}/delete")
     public ResponseEntity<Void> deletePost(
             @PathVariable Long postId,
             @AuthenticationPrincipal UserDetails userDetails) {
@@ -82,7 +82,7 @@ public class CommunityController {
         return ResponseEntity.ok(communityService.addComment(postId, request, userDetails.getUsername()));
     }
 
-    @PutMapping("/comments/{commentId}")
+    @PatchMapping("/comments/{commentId}")
     public ResponseEntity<CommentResponseDto> updateComment(
             @PathVariable Long commentId,
             @Valid @RequestBody CommentRequestDto request,
@@ -90,7 +90,7 @@ public class CommunityController {
         return ResponseEntity.ok(communityService.updateComment(commentId, request, userDetails.getUsername()));
     }
 
-    @DeleteMapping("/comments/{commentId}")
+    @PostMapping("/comments/{commentId}/delete")
     public ResponseEntity<Void> deleteComment(
             @PathVariable Long commentId,
             @AuthenticationPrincipal UserDetails userDetails) {

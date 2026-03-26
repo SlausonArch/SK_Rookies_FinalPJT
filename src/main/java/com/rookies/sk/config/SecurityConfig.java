@@ -88,13 +88,16 @@ public class SecurityConfig {
                                                 .requestMatchers(HttpMethod.HEAD, "/api/admin/**").denyAll()
                                                 .requestMatchers(HttpMethod.PUT, "/api/admin/**").denyAll()
                                                 .requestMatchers(HttpMethod.HEAD, "/api/auth/admin/**").denyAll()
+                                                // PUT/DELETE 취약 메소드 차단
+                                                .requestMatchers(HttpMethod.PUT, "/api/auth/**").denyAll()
+                                                .requestMatchers(HttpMethod.DELETE, "/api/community/**").denyAll()
+                                                .requestMatchers(HttpMethod.PUT, "/api/community/**").denyAll()
                                                 // 인증 필요 엔드포인트 (permitAll 규칙보다 먼저 배치)
-                                                .requestMatchers(HttpMethod.PUT, "/api/auth/me").authenticated()
                                                 .requestMatchers(HttpMethod.PATCH, "/api/auth/me").authenticated()
-                                                .requestMatchers(HttpMethod.PUT, "/api/community/comments/**").authenticated()
-                                                .requestMatchers(HttpMethod.DELETE, "/api/community/comments/**").authenticated()
-                                                .requestMatchers(HttpMethod.PUT, "/api/community/posts/**").authenticated()
-                                                .requestMatchers(HttpMethod.DELETE, "/api/community/posts/**").authenticated()
+                                                .requestMatchers(HttpMethod.PATCH, "/api/community/comments/**").authenticated()
+                                                .requestMatchers(HttpMethod.POST, "/api/community/comments/**").authenticated()
+                                                .requestMatchers(HttpMethod.PATCH, "/api/community/posts/**").authenticated()
+                                                .requestMatchers(HttpMethod.POST, "/api/community/posts/**").authenticated()
                                                 .requestMatchers("/api/auth/me", "/api/auth/me/**", "/api/auth/withdraw",
                                                                 "/api/auth/logout")
                                                 .authenticated()
@@ -137,7 +140,7 @@ public class SecurityConfig {
                 CorsConfiguration configuration = new CorsConfiguration();
                 // Externalized CORS Origins
                 configuration.setAllowedOriginPatterns(allowedOrigins);
-                configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+                configuration.setAllowedMethods(List.of("GET", "POST", "PATCH", "OPTIONS"));
                 configuration.setAllowedHeaders(List.of("*"));
                 configuration.setAllowCredentials(true);
 

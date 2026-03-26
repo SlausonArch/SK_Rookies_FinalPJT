@@ -222,7 +222,7 @@ public class AuthController {
         }
     }
 
-    @PutMapping("/me")
+    @PatchMapping("/me")
     public ResponseEntity<?> updateMyInfo(
             @AuthenticationPrincipal UserDetails userDetails,
             @RequestBody java.util.Map<String, String> body) {

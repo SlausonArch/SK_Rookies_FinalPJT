@@ -238,7 +238,7 @@ function CommunityDetail() {
   const onDeletePost = async () => {
     if (!post || !token) return;
     if (!window.confirm('이 게시글을 삭제하시겠습니까?')) return;
-    await axios.delete(`${API_BASE}/api/community/posts/${post.postId}`, { headers: authHeaders });
+    await axios.post(`${API_BASE}/api/community/posts/${post.postId}/delete`, {}, { headers: authHeaders });
     navigate('/community');
   };
 
@@ -294,7 +294,7 @@ function CommunityDetail() {
     if (!post || !token) return;
     if (!window.confirm('댓글을 삭제하시겠습니까?')) return;
     try {
-      await axios.delete(`${API_BASE}/api/community/comments/${commentId}`, { headers: authHeaders });
+      await axios.post(`${API_BASE}/api/community/comments/${commentId}/delete`, {}, { headers: authHeaders });
       await loadDetail();
     } catch {
       alert('댓글 삭제에 실패했습니다.');
@@ -309,7 +309,7 @@ function CommunityDetail() {
   const onSaveEditComment = async (commentId: number) => {
     if (!token) return;
     try {
-      await axios.put(
+      await axios.patch(
         `${API_BASE}/api/community/comments/${commentId}`,
         { content: editingContent },
         { headers: authHeaders }

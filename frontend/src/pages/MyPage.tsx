@@ -431,7 +431,7 @@ const MyPage: React.FC = () => {
     setErrorMsg('');
 
     try {
-      await axios.put(`${API_BASE}/api/auth/me`, form, {
+      await axios.patch(`${API_BASE}/api/auth/me`, form, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setMember(prev => (prev ? { ...prev, ...form } : prev));

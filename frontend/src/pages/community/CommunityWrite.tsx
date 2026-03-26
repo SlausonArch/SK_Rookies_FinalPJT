@@ -191,7 +191,7 @@ function CommunityWrite() {
         attachmentUrl: attachmentUrl || null
       };
       if (isEdit && numericPostId) {
-        const response = await axios.put<Post>(`${API_BASE}/api/community/posts/${numericPostId}`, payload, {
+        const response = await axios.patch<Post>(`${API_BASE}/api/community/posts/${numericPostId}`, payload, {
           headers: authHeaders
         });
         navigate(`/community/${response.data.postId}`);

@@ -1363,7 +1363,7 @@ const AdminDashboard = () => {
   const handleDeletePost = async (postId: number) => {
     if (!confirm('게시글을 삭제하시겠습니까?')) return;
     try {
-      await axios.delete(`${API_BASE}/api/community/posts/${postId}`, { headers });
+      await axios.post(`${API_BASE}/api/community/posts/${postId}/delete`, {}, { headers });
       setPosts(prev => prev.filter((p: any) => p.postId !== postId));
     } catch {
       alert('삭제 실패');
