@@ -2,6 +2,7 @@ package com.rookies.sk.controller;
 
 import com.rookies.sk.dto.AdminAssetReclaimRequestDto;
 import com.rookies.sk.service.AdminService;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -30,7 +31,7 @@ public class AdminController {
     @GetMapping("/members/search")
     @PreAuthorize("hasAnyRole('VCESYS_CORE', 'VCESYS_MGMT')")
     public ResponseEntity<Map<String, Object>> searchMembers(
-            @RequestParam(required = false) @Size(max = 100) String q,
+            @RequestParam(required = false) @Size(max = 100) @Pattern(regexp = "^[^'\"\\-;=()/*]*$", message = "검색어에 허용되지 않는 문자가 포함되어 있습니다.") String q,
             @RequestParam(required = false) String role,
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "0") int page,
@@ -107,7 +108,7 @@ public class AdminController {
     @GetMapping("/transactions/search")
     @PreAuthorize("hasAnyRole('VCESYS_CORE', 'VCESYS_MGMT')")
     public ResponseEntity<Map<String, Object>> searchTransactions(
-            @RequestParam(required = false) String memberEmail,
+            @RequestParam(required = false) @Size(max = 200) @Pattern(regexp = "^[^'\"\\-;=()/*]*$", message = "검색어에 허용되지 않는 문자가 포함되어 있습니다.") String memberEmail,
             @RequestParam(required = false) String assetType,
             @RequestParam(required = false) String txType,
             @RequestParam(required = false) String from,
