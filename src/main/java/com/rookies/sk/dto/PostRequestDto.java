@@ -1,6 +1,7 @@
 package com.rookies.sk.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
@@ -17,6 +18,10 @@ public class PostRequestDto {
     private String content;
 
     @Size(max = 500, message = "첨부 URL은 500자 이내로 입력해 주세요.")
+    @Pattern(
+        regexp = "^(https?://.*|/uploads/.*)$",
+        message = "첨부 URL은 http(s):// 로 시작하는 외부 URL 또는 /uploads/ 경로만 허용됩니다."
+    )
     private String attachmentUrl;
 
     private boolean notice;

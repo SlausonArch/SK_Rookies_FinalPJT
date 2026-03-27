@@ -181,6 +181,18 @@ function CommunityWrite() {
       navigate(loginRedirectUrl);
       return;
     }
+    if (attachmentUrl) {
+      try {
+        const { protocol } = new URL(attachmentUrl);
+        if (protocol !== 'https:' && protocol !== 'http:') {
+          setError('첨부 링크는 http:// 또는 https:// 로 시작하는 URL만 허용됩니다.');
+          return;
+        }
+      } catch {
+        setError('올바른 URL 형식이 아닙니다.');
+        return;
+      }
+    }
     setSaving(true);
     setError(null);
     try {

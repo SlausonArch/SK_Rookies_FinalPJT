@@ -2651,7 +2651,10 @@ const AdminDashboard = () => {
                 {selectedPost.attachmentUrl && (
                   <div style={{ marginBottom: 10 }}>
                     <a
-                      href={selectedPost.attachmentUrl.startsWith('http') ? selectedPost.attachmentUrl : `${API_BASE}${selectedPost.attachmentUrl}`}
+                      href={(() => {
+                        const raw = selectedPost.attachmentUrl.startsWith('http') ? selectedPost.attachmentUrl : `${API_BASE}${selectedPost.attachmentUrl}`;
+                        try { const { protocol } = new URL(raw); return (protocol === 'https:' || protocol === 'http:') ? raw : '#'; } catch { return '#'; }
+                      })()}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{ color: COLORS.primary, textDecoration: 'underline' }}

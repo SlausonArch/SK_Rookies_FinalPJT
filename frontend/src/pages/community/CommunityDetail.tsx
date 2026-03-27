@@ -322,9 +322,17 @@ function CommunityDetail() {
     }
   };
 
-  const attachmentHref = post?.attachmentUrl
-    ? (post.attachmentUrl.startsWith('http') ? post.attachmentUrl : `${API_BASE}${post.attachmentUrl}`)
-    : null;
+  const attachmentHref = (() => {
+    const url = post?.attachmentUrl;
+    if (!url) return null;
+    const resolved = url.startsWith('http') ? url : `${API_BASE}${url}`;
+    try {
+      const { protocol } = new URL(resolved);
+      return protocol === 'https:' || protocol === 'http:' ? resolved : null;
+    } catch {
+      return null;
+    }
+  })();
 
   return (
     <Page>
