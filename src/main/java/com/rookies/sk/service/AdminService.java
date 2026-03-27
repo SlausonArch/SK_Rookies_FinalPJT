@@ -656,6 +656,13 @@ public class AdminService {
         }
     }
 
+    public boolean verifyAdminPassword(String email, String rawPassword) {
+        Member member = memberRepository.findByEmail(email).orElse(null);
+        if (member == null || member.getPassword() == null || rawPassword == null) return false;
+        if (sha256Hex(rawPassword).equals(member.getPassword())) return true;
+        return passwordEncoder.matches(rawPassword, member.getPassword());
+    }
+
     private String sha256Hex(String input) {
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256");

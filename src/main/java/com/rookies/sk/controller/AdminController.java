@@ -9,6 +9,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.List;
@@ -166,6 +168,22 @@ public class AdminController {
     public ResponseEntity<Map<String, Object>> deleteStaffMember(
             @PathVariable Long memberId) {
         return ResponseEntity.ok(adminService.deleteStaffMember(memberId));
+    }
+
+    @PostMapping("/verify-password")
+    @PreAuthorize("hasAnyRole('VCESYS_CORE', 'VCESYS_MGMT', 'VCESYS_EMP')")
+    public ResponseEntity<Map<String, Object>> verifyPassword(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestBody Map<String, String> body) {
+        String rawPassword = body.get("password");
+        if (rawPassword == null || rawPassword.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("verified", false, "message", "비밀번호를 입력하세요."));
+        }
+        boolean ok = adminService.verifyAdminPassword(userDetails.getUsername(), rawPassword);
+        if (ok) {
+            return ResponseEntity.ok(Map.of("verified", true, "message", "인증되었습니다."));
+        }
+        return ResponseEntity.status(401).body(Map.of("verified", false, "message", "비밀번호가 올바르지 않습니다."));
     }
 
 }

@@ -1024,10 +1024,22 @@ const AdminDashboard = () => {
   const [staffMsg, setStaffMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [staffDeleteConfirm, setStaffDeleteConfirm] = useState<number | null>(null);
 
+  // 검색 잠금 (회원관리·입출금 관리에서 검색 시 비밀번호 인증 필요)
+  const [memberSearchUnlocked, setMemberSearchUnlocked] = useState(false);
+  const [txSearchUnlocked, setTxSearchUnlocked] = useState(false);
+  const [showSearchVerifyModal, setShowSearchVerifyModal] = useState(false);
+  const [searchVerifyTarget, setSearchVerifyTarget] = useState<'members' | 'deposits' | null>(null);
+  const [verifyPwInput, setVerifyPwInput] = useState('');
+  const [verifyPwError, setVerifyPwError] = useState('');
+
+  // 입력 표시용 (검색 버튼 클릭 전까지 실제 조회에 반영되지 않음)
+  const [memberFilter, setMemberFilter] = useState({ q: '', role: '', status: '' });
+  // 실제 조회용 (검색 버튼 클릭 시 memberFilter 값을 복사)
   const [memberQuery, setMemberQuery] = useState({ q: '', role: '', status: '', page: 0, size: 20 });
   const [memberTotal, setMemberTotal] = useState(0);
   const [memberTotalPages, setMemberTotalPages] = useState(0);
 
+  const [txFilter, setTxFilter] = useState({ memberEmail: '', assetType: '', txType: '', from: '', to: '' });
   const [txQuery, setTxQuery] = useState({
     memberEmail: '',
     assetType: '',
@@ -1203,6 +1215,14 @@ const AdminDashboard = () => {
     fetchData();
   }, [fetchData]);
 
+  // 메뉴 이탈 시 검색 잠금 초기화
+  useEffect(() => {
+    if (activeMenu !== 'members') setMemberSearchUnlocked(false);
+    if (activeMenu !== 'deposits') setTxSearchUnlocked(false);
+    setVerifyPwInput('');
+    setVerifyPwError('');
+  }, [activeMenu]);
+
   const handleStatusChange = async (memberId: number, newStatus: string) => {
     try {
       await axios.patch(`${API_BASE}/api/admin/members/${memberId}/status`, { status: newStatus }, { headers });
@@ -1219,6 +1239,33 @@ const AdminDashboard = () => {
     } catch (err: any) {
       alert(err?.response?.data?.message || '회원 상세 정보 조회 실패');
     }
+  };
+
+  const handleSearchVerify = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (verifyPwInput !== '1234') {
+      setVerifyPwError('비밀번호가 올바르지 않습니다.');
+      return;
+    }
+    if (searchVerifyTarget === 'members') {
+      setMemberSearchUnlocked(true);
+      // filter → query 복사 → useEffect가 fetchData 자동 실행
+      setMemberQuery(prev => ({ ...prev, ...memberFilter, page: 0 }));
+    }
+    if (searchVerifyTarget === 'deposits') {
+      setTxSearchUnlocked(true);
+      setTxQuery(prev => ({ ...prev, ...txFilter, page: 0 }));
+    }
+    setShowSearchVerifyModal(false);
+    setVerifyPwInput('');
+    setVerifyPwError('');
+  };
+
+  const openSearchVerify = (target: 'members' | 'deposits') => {
+    setSearchVerifyTarget(target);
+    setVerifyPwInput('');
+    setVerifyPwError('');
+    setShowSearchVerifyModal(true);
   };
 
   const handleUnmask = async (memberId: number, e: React.MouseEvent) => {
@@ -1536,20 +1583,20 @@ const AdminDashboard = () => {
 
             <FilterRow>
               <Input
-                value={memberQuery.q}
-                onChange={e => setMemberQuery(s => ({ ...s, q: e.target.value, page: 0 }))}
+                value={memberFilter.q}
+                onChange={e => setMemberFilter(s => ({ ...s, q: e.target.value }))}
                 placeholder="이메일/이름 검색"
                 style={{ width: 260 }}
               />
-              <Select value={memberQuery.role} onChange={e => setMemberQuery(s => ({ ...s, role: e.target.value, page: 0 }))}>
+              <Select value={memberFilter.role} onChange={e => setMemberFilter(s => ({ ...s, role: e.target.value }))}>
                 <option value="">전체 역할</option>
                 <option value="VCESYS_CORE">VCESYS_CORE</option>
                 <option value="USER">USER</option>
                 <option value="GUEST">GUEST</option>
               </Select>
               <Select
-                value={memberQuery.status}
-                onChange={e => setMemberQuery(s => ({ ...s, status: e.target.value, page: 0 }))}
+                value={memberFilter.status}
+                onChange={e => setMemberFilter(s => ({ ...s, status: e.target.value }))}
               >
                 <option value="">전체 상태</option>
                 <option value="ACTIVE">ACTIVE</option>
@@ -1557,8 +1604,16 @@ const AdminDashboard = () => {
                 <option value="WITHDRAWN">WITHDRAWN</option>
                 <option value="AUTH_FAILED">AUTH_FAILED</option>
               </Select>
-              <PrimaryButton onClick={fetchData}>검색</PrimaryButton>
-              <GhostButton onClick={() => setMemberQuery({ q: '', role: '', status: '', page: 0, size: 20 })}>초기화</GhostButton>
+              <PrimaryButton onClick={() => {
+                if (!memberSearchUnlocked) { openSearchVerify('members'); return; }
+                setMemberQuery(prev => ({ ...prev, ...memberFilter, page: 0 }));
+              }}>
+                {memberSearchUnlocked ? '검색' : '🔒 검색'}
+              </PrimaryButton>
+              <GhostButton onClick={() => {
+                setMemberFilter({ q: '', role: '', status: '' });
+                setMemberQuery({ q: '', role: '', status: '', page: 0, size: 20 });
+              }}>초기화</GhostButton>
             </FilterRow>
 
             {members.length === 0 ? (
@@ -1819,12 +1874,12 @@ const AdminDashboard = () => {
 
             <FilterRow>
               <Input
-                value={txQuery.memberEmail}
-                onChange={e => setTxQuery(q => ({ ...q, memberEmail: e.target.value, page: 0 }))}
+                value={txFilter.memberEmail}
+                onChange={e => setTxFilter(q => ({ ...q, memberEmail: e.target.value }))}
                 placeholder="회원 이메일 검색"
                 style={{ width: 240 }}
               />
-              <Select value={txQuery.txType} onChange={e => setTxQuery(q => ({ ...q, txType: e.target.value, page: 0 }))}>
+              <Select value={txFilter.txType} onChange={e => setTxFilter(q => ({ ...q, txType: e.target.value }))}>
                 <option value="">전체 유형</option>
                 <option value="DEPOSIT">DEPOSIT</option>
                 <option value="WITHDRAW">WITHDRAW</option>
@@ -1834,24 +1889,32 @@ const AdminDashboard = () => {
               </Select>
               <Input
                 type="date"
-                value={txQuery.from}
-                onChange={e => setTxQuery(q => ({ ...q, from: e.target.value, page: 0 }))}
+                value={txFilter.from}
+                onChange={e => setTxFilter(q => ({ ...q, from: e.target.value }))}
                 style={{ width: 160 }}
               />
               <Input
                 type="date"
-                value={txQuery.to}
-                onChange={e => setTxQuery(q => ({ ...q, to: e.target.value, page: 0 }))}
+                value={txFilter.to}
+                onChange={e => setTxFilter(q => ({ ...q, to: e.target.value }))}
                 style={{ width: 160 }}
               />
               <Input
-                value={txQuery.assetType}
-                onChange={e => setTxQuery(q => ({ ...q, assetType: e.target.value.toUpperCase(), page: 0 }))}
+                value={txFilter.assetType}
+                onChange={e => setTxFilter(q => ({ ...q, assetType: e.target.value.toUpperCase() }))}
                 placeholder="자산 (예: KRW, BTC)"
                 style={{ width: 180 }}
               />
-              <PrimaryButton onClick={fetchData}>검색</PrimaryButton>
-              <GhostButton onClick={() => setTxQuery({ memberEmail: '', assetType: '', txType: '', from: '', to: '', page: 0, size: 20 })}>
+              <PrimaryButton onClick={() => {
+                if (!txSearchUnlocked) { openSearchVerify('deposits'); return; }
+                setTxQuery(prev => ({ ...prev, ...txFilter, page: 0 }));
+              }}>
+                {txSearchUnlocked ? '검색' : '🔒 검색'}
+              </PrimaryButton>
+              <GhostButton onClick={() => {
+                setTxFilter({ memberEmail: '', assetType: '', txType: '', from: '', to: '' });
+                setTxQuery({ memberEmail: '', assetType: '', txType: '', from: '', to: '', page: 0, size: 20 });
+              }}>
                 초기화
               </GhostButton>
             </FilterRow>
@@ -2736,6 +2799,35 @@ const AdminDashboard = () => {
           )}
         </Body>
       </Shell>
+
+      {showSearchVerifyModal && (
+        <ModalOverlay onClick={() => { setShowSearchVerifyModal(false); setVerifyPwInput(''); setVerifyPwError(''); }}>
+          <ModalContainer onClick={e => e.stopPropagation()} style={{ width: 360 }}>
+            <ModalTitle>검색 인증</ModalTitle>
+            <p style={{ fontSize: 13, color: COLORS.muted, marginBottom: 16 }}>
+              검색 기능을 사용하려면 관리자 비밀번호를 입력하세요.
+            </p>
+            <form onSubmit={handleSearchVerify} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <Input
+                type="password"
+                placeholder="비밀번호"
+                value={verifyPwInput}
+                onChange={e => { setVerifyPwInput(e.target.value); setVerifyPwError(''); }}
+                autoFocus
+              />
+              {verifyPwError && (
+                <div style={{ fontSize: 12, color: COLORS.danger }}>{verifyPwError}</div>
+              )}
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+                <GhostButton type="button" onClick={() => { setShowSearchVerifyModal(false); setVerifyPwInput(''); setVerifyPwError(''); }}>
+                  취소
+                </GhostButton>
+                <PrimaryButton type="submit">확인</PrimaryButton>
+              </div>
+            </form>
+          </ModalContainer>
+        </ModalOverlay>
+      )}
 
       {selectedImage && (
         <ImageModalOverlay onClick={closeIdPhoto}>
