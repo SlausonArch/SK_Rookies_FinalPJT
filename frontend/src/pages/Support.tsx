@@ -387,7 +387,7 @@ const Support: React.FC = () => {
   const [formContent, setFormContent] = useState('');
   const [file, setFile] = useState<File | null>(null);
 
-  const token = localStorage.getItem('accessToken');
+  const token = sessionStorage.getItem('accessToken');
   const isLoggedIn = !!token;
   const role = parseRoleFromToken(token);
   const isStaff = role === 'STAFF' || role === 'ADMIN' || role === 'MANAGER';
