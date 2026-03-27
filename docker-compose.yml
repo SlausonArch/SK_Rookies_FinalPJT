@@ -52,44 +52,41 @@ services:
 
   # 3. Frontend - Exchange
   exchange-front:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        - VITE_APP_MODE=exchange
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL}
+        - VITE_EXCHANGE_FRONTEND_URL=${VITE_EXCHANGE_FRONTEND_URL}
+        - VITE_BANK_FRONTEND_URL=${VITE_BANK_FRONTEND_URL}
     ports:
       - "${APP_BIND_IP:-0.0.0.0}:${HOST_EXCHANGE_FRONT_PORT:-15173}:3000"
-    environment:
-      - VITE_API_BASE_URL=${VITE_API_BASE_URL}
-      - VITE_EXCHANGE_FRONTEND_URL=${VITE_EXCHANGE_FRONTEND_URL}
-      - VITE_BANK_FRONTEND_URL=${VITE_BANK_FRONTEND_URL}
-      - VITE_APP_MODE=exchange
-    stdin_open: true
-    tty: true
     restart: unless-stopped
 
   # 4. Frontend - Bank
   bank-front:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        - VITE_APP_MODE=bank
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL}
+        - VITE_EXCHANGE_FRONTEND_URL=${VITE_EXCHANGE_FRONTEND_URL}
+        - VITE_BANK_FRONTEND_URL=${VITE_BANK_FRONTEND_URL}
     ports:
       - "${APP_BIND_IP:-0.0.0.0}:${HOST_BANK_FRONT_PORT:-25173}:3000"
-    environment:
-      - VITE_API_BASE_URL=${VITE_API_BASE_URL}
-      - VITE_EXCHANGE_FRONTEND_URL=${VITE_EXCHANGE_FRONTEND_URL}
-      - VITE_BANK_FRONTEND_URL=${VITE_BANK_FRONTEND_URL}
-      - VITE_APP_MODE=bank
-    stdin_open: true
-    tty: true
     restart: unless-stopped
 
   # 5. Frontend - Admin
   admin-front:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        - VITE_APP_MODE=admin
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL}
+        - VITE_EXCHANGE_FRONTEND_URL=${VITE_EXCHANGE_FRONTEND_URL}
+        - VITE_BANK_FRONTEND_URL=${VITE_BANK_FRONTEND_URL}
     ports:
       - "${APP_BIND_IP:-0.0.0.0}:${HOST_ADMIN_FRONT_PORT:-45173}:3000"
-    environment:
-      - VITE_API_BASE_URL=${VITE_API_BASE_URL}
-      - VITE_EXCHANGE_FRONTEND_URL=${VITE_EXCHANGE_FRONTEND_URL}
-      - VITE_BANK_FRONTEND_URL=${VITE_BANK_FRONTEND_URL}
-      - VITE_APP_MODE=admin
-    stdin_open: true
-    tty: true
     restart: unless-stopped
 
 volumes:

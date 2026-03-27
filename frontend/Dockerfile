@@ -1,12 +1,25 @@
-FROM node:20-alpine
-
+# Build stage
+FROM node:20-alpine AS builder
 WORKDIR /app
-
 COPY package*.json ./
 RUN npm ci
-
 COPY . .
 
-EXPOSE 3000
+ARG VITE_APP_MODE=exchange
+ARG VITE_API_BASE_URL
+ARG VITE_EXCHANGE_FRONTEND_URL
+ARG VITE_BANK_FRONTEND_URL
 
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]
+ENV VITE_APP_MODE=$VITE_APP_MODE
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+ENV VITE_EXCHANGE_FRONTEND_URL=$VITE_EXCHANGE_FRONTEND_URL
+ENV VITE_BANK_FRONTEND_URL=$VITE_BANK_FRONTEND_URL
+
+RUN npm run build
+
+# Serve stage
+FROM nginx:alpine
+COPY --from=builder /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 3000
+CMD ["nginx", "-g", "daemon off;"]
