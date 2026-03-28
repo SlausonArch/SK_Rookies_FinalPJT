@@ -1,11 +1,13 @@
+'use client'
+
 import React, { useState, useEffect } from 'react';
 import styled, { keyframes } from 'styled-components';
 import axios from 'axios';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useRouter, usePathname } from 'next/navigation';
 import { CheckCircle2, AlertCircle, TrendingUp, TrendingDown, Clock, Info } from 'lucide-react';
 import { getUserAccessToken } from '../../utils/auth';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080';
 
 interface Props {
   market: string;
@@ -225,8 +227,8 @@ function formatScaleValue(value: number, scale: number): string {
 }
 
 const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, tradeType }) => {
-  const navigate = useNavigate();
-  const location = useLocation();
+  const router = useRouter();
+  const pathname = usePathname();
   // const [tab, setTab] = useState<'buy' | 'sell'>('buy'); // 제거됨
   const [price, setPrice] = useState('');
   const [priceTouched, setPriceTouched] = useState(false);
@@ -239,7 +241,7 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
   const token = getToken();
   const isLoggedIn = !!token;
   const assetType = market.replace('KRW-', '');
-  const currentRoute = `${location.pathname}${location.search || ''}`;
+  const currentRoute = pathname ?? '/';
 
   // ... (useEffect 및 핸들러들은 그대로 유지)
 
@@ -452,7 +454,7 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
               시장가 {tradeType === 'buy' ? '매수' : '매도'}
             </SubmitBtn>
           </div>
-          <HistoryBtn onClick={() => navigate('/investments')} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', padding: '10px' }}>
+          <HistoryBtn onClick={() => router.push('/investments')} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', padding: '10px' }}>
             <Clock size={16} /> 거래 내역 조회
           </HistoryBtn>
         </ButtonContainer>

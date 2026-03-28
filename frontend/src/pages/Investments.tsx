@@ -1,6 +1,8 @@
+'use client'
+
 import { useState, useEffect, useMemo } from 'react';
 import styled from 'styled-components';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useRouter, usePathname } from 'next/navigation';
 import axios from 'axios';
 import { fetchTickers } from '../services/upbitApi';
 import type { UpbitTicker } from '../services/upbitApi';
@@ -552,8 +554,8 @@ const sectionTabs: Array<{ key: SubSectionKey; label: string }> = [
 ];
 
 const Investments = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
+  const router = useRouter();
+  const pathname = usePathname();
   const [activeSection, setActiveSection] = useState<SubSectionKey>('holdings');
   const [performancePeriod, setPerformancePeriod] = useState<PerformancePeriod>('monthly');
   const [performanceMetric, setPerformanceMetric] = useState<PerformanceMetric>('amountWeighted');
@@ -574,7 +576,7 @@ const Investments = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [openOrders, setOpenOrders] = useState<OpenOrder[]>([]);
   const [loading, setLoading] = useState(true);
-  const loginRedirectUrl = `/login?redirect=${encodeURIComponent(`${location.pathname}${location.search || ''}`)}`;
+  const loginRedirectUrl = `/login?redirect=${encodeURIComponent(pathname)}`;
   const [cancelingOrderId, setCancelingOrderId] = useState<number | null>(null);
 
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -598,7 +600,7 @@ const Investments = () => {
     const token = getUserAccessToken();
 
     if (!token) {
-      navigate(loginRedirectUrl, { replace: true });
+      router.replace(loginRedirectUrl);
       return;
     }
 
@@ -607,17 +609,17 @@ const Investments = () => {
         const headers = { Authorization: `Bearer ${token}` };
 
         const [balanceResponse, summaryResponse, txResponse, openOrderResponse] = await Promise.all([
-          axios.get(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/assets`, { headers }),
-          axios.get(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/assets/summary`, { headers }),
-          axios.get(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/transactions`, { headers }),
-          axios.get(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/orders/open`, { headers }),
+          axios.get(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/api/assets`, { headers }),
+          axios.get(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/api/assets/summary`, { headers }),
+          axios.get(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/api/transactions`, { headers }),
+          axios.get(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/api/orders/open`, { headers }),
         ]);
 
         // HTML 응답 체크
         if (typeof balanceResponse.data === 'string' && balanceResponse.data.includes('<!DOCTYPE html>')) {
           console.warn('인증 세션 만료됨');
           clearUserSession(true);
-          navigate(loginRedirectUrl);
+          router.push(loginRedirectUrl);
           return;
         }
 
@@ -672,7 +674,7 @@ const Investments = () => {
           (error.response.status === 403 && error.response.data?.message === 'WITHDRAWN_ACCOUNT')
         )) {
           clearUserSession(true);
-          navigate(loginRedirectUrl, { replace: true });
+          router.replace(loginRedirectUrl);
         }
       } finally {
         setLoading(false);
@@ -680,12 +682,12 @@ const Investments = () => {
     };
 
     fetchData();
-  }, [navigate, loginRedirectUrl]);
+  }, [router, loginRedirectUrl]);
 
   const handleCancelOpenOrder = async (orderId: number) => {
     const token = getUserAccessToken();
     if (!token) {
-      navigate(loginRedirectUrl, { replace: true });
+      router.replace(loginRedirectUrl);
       return;
     }
     if (!window.confirm('해당 지정가 주문을 취소하시겠습니까?')) return;
@@ -693,10 +695,10 @@ const Investments = () => {
     setCancelingOrderId(orderId);
     try {
       const headers = { Authorization: `Bearer ${token}` };
-      await axios.delete(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/orders/${orderId}`, { headers });
+      await axios.delete(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/api/orders/${orderId}`, { headers });
 
       const openOrderResponse = await axios.get(
-        `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/orders/open`,
+        `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/api/orders/open`,
         { headers }
       );
       const openOrderData = Array.isArray(openOrderResponse.data) ? openOrderResponse.data : [];
@@ -1352,7 +1354,7 @@ const Investments = () => {
                       <Td>
                         <SymbolButton
                           type='button'
-                          onClick={() => navigate(`/exchange?market=${encodeURIComponent(market)}`)}
+                          onClick={() => router.push(`/exchange?market=${encodeURIComponent(market)}`)}
                         >
                           {symbol}
                         </SymbolButton>

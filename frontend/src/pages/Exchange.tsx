@@ -1,5 +1,7 @@
+'use client'
+
 import React, { useEffect, useState, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'next/navigation';
 import styled from 'styled-components';
 import Header from '../components/Header';
 import { fetchKRWMarkets, fetchTickers } from '../services/upbitApi';
@@ -221,10 +223,10 @@ const MyHistory = ({ market }: { market: string }) => {
       try {
         const headers = { Authorization: `Bearer ${token}` };
         const [txRes, openRes] = await Promise.all([
-          axios.get(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/transactions?assetType=${assetType}`, {
+          axios.get(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/api/transactions?assetType=${assetType}`, {
             headers,
           }),
-          axios.get(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/orders/open`, {
+          axios.get(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/api/orders/open`, {
             headers,
           }),
         ]);
@@ -253,7 +255,7 @@ const MyHistory = ({ market }: { market: string }) => {
 
     setCancellingOrderId(orderId);
     try {
-      await axios.delete(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/orders/${orderId}`, {
+      await axios.delete(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/api/orders/${orderId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setOpenOrders(prev => prev.filter((o: any) => o.orderId !== orderId));
@@ -367,7 +369,7 @@ const MyHistory = ({ market }: { market: string }) => {
 };
 
 const Exchange: React.FC = () => {
-  const [searchParams] = useSearchParams();
+  const searchParams = useSearchParams();
   const [markets, setMarkets] = useState<UpbitMarket[]>([]);
   const [selectedMarket, setSelectedMarket] = useState('KRW-BTC');
   const [selectedPrice, setSelectedPrice] = useState<number | null>(null);

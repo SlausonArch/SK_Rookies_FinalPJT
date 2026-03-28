@@ -1,3 +1,5 @@
+'use client'
+
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import styled from 'styled-components';
 import axios from 'axios';
@@ -389,7 +391,7 @@ const Trends: React.FC = () => {
   // fetch news
   const loadNews = useCallback(async () => {
     try {
-      const { data } = await axios.get<NewsItem[]>(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/news`);
+      const { data } = await axios.get<NewsItem[]>(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/api/news`);
       setNews(data);
     } catch { /* ignore */ }
   }, []);

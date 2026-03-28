@@ -1,5 +1,7 @@
+'use client'
+
 import React, { useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { setUserSession } from '../utils/auth';
 
 function sanitizeRedirectTarget(target: string | null | undefined): string {
@@ -11,8 +13,8 @@ function sanitizeRedirectTarget(target: string | null | undefined): string {
 }
 
 const OAuthCallback: React.FC = () => {
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
+  const searchParams = useSearchParams();
+  const router = useRouter();
 
   useEffect(() => {
     const accessToken = searchParams.get('accessToken');
@@ -28,8 +30,8 @@ const OAuthCallback: React.FC = () => {
 
     alert('로그인 정보가 올바르지 않습니다.');
     const redirect = sanitizeRedirectTarget(localStorage.getItem('postLoginRedirect'));
-    navigate(`/login?redirect=${encodeURIComponent(redirect)}`);
-  }, [searchParams, navigate]);
+    router.push(`/login?redirect=${encodeURIComponent(redirect)}`);
+  }, [searchParams, router]);
 
   return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>

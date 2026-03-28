@@ -1,5 +1,7 @@
+'use client'
+
 import React, { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'next/navigation';
 import axios from 'axios';
 import styled from 'styled-components';
 import ReactMarkdown from 'react-markdown';
@@ -7,7 +9,7 @@ import remarkGfm from 'remark-gfm';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080';
 
 const Container = styled.div`
   min-height: 100vh;
@@ -106,7 +108,7 @@ const ErrorMsg = styled.div`
 `;
 
 const PrivacyPolicy: React.FC = () => {
-  const [searchParams] = useSearchParams();
+  const searchParams = useSearchParams();
   // V-04 (Path Traversal): doc 파라미터를 검증 없이 서버 API에 전달
   // 공격 예시:
   //   /privacy-policy?doc=../deployment-env.md

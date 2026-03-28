@@ -1,8 +1,11 @@
+'use client'
+
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import axios from 'axios';
 import styled from 'styled-components';
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import Link from 'next/link';
+import { useRouter, usePathname, useParams } from 'next/navigation';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
 import {
@@ -187,11 +190,12 @@ const Empty = styled.div`
 `;
 
 function CommunityDetail() {
-  const { postId } = useParams<{ postId: string }>();
-  const navigate = useNavigate();
-  const location = useLocation();
+  const params = useParams();
+  const postId = params.postId as string;
+  const router = useRouter();
+  const pathname = usePathname();
   const token = getAccessToken();
-  const loginRedirectUrl = `/login?redirect=${encodeURIComponent(`${location.pathname}${location.search || ''}`)}`;
+  const loginRedirectUrl = `/login?redirect=${encodeURIComponent(pathname)}`;
   const authHeaders = useMemo(() => getAuthHeaders(token), [token]);
 
   const [post, setPost] = useState<Post | null>(null);
@@ -237,14 +241,14 @@ function CommunityDetail() {
     if (!post || !token) return;
     if (!window.confirm('이 게시글을 삭제하시겠습니까?')) return;
     await axios.delete(`${API_BASE}/api/community/posts/${post.postId}`, { headers: authHeaders });
-    navigate('/community');
+    router.push('/community');
   };
 
   const onLike = async () => {
     if (!post || savingLike) return;
     if (!token) {
       alert('로그인이 필요합니다.');
-      navigate(loginRedirectUrl);
+      router.push(loginRedirectUrl);
       return;
     }
     // 낙관적 UI 업데이트 - 즉시 UI 업데이트 (토글)
@@ -270,7 +274,7 @@ function CommunityDetail() {
     e.preventDefault();
     if (!post || !token) {
       alert('로그인이 필요합니다.');
-      navigate(loginRedirectUrl);
+      router.push(loginRedirectUrl);
       return;
     }
     setSavingComment(true);
@@ -324,7 +328,7 @@ function CommunityDetail() {
       <Header />
       <Wrapper>
         <Breadcrumb>
-          <Link to="/community">커뮤니티</Link> / 상세보기
+          <Link href="/community">커뮤니티</Link> / 상세보기
         </Breadcrumb>
         {loading && <Empty>불러오는 중입니다...</Empty>}
         {error && <Empty>{error}</Empty>}
@@ -377,9 +381,9 @@ function CommunityDetail() {
                   <Button type="button" onClick={onLike} disabled={savingLike}>👍 {savingLike ? '저장 중...' : `좋아요 ${post.likeCount}`}</Button>
                 )}
                 <Row>
-                  <GrayButton type="button" onClick={() => navigate('/community')}>목록</GrayButton>
+                  <GrayButton type="button" onClick={() => router.push('/community')}>목록</GrayButton>
                   {post.canEdit && (
-                    <GrayButton type="button" onClick={() => navigate(`/community/${post.postId}/edit`)}>
+                    <GrayButton type="button" onClick={() => router.push(`/community/${post.postId}/edit`)}>
                       수정
                     </GrayButton>
                   )}

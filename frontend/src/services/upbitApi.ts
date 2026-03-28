@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const UPBIT_API = 'https://api.upbit.com/v1';
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || '';
 const PROXY_API = `${API_BASE}/api/market`;
 
 export interface UpbitMarket {

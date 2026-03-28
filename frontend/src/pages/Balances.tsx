@@ -1,6 +1,8 @@
+'use client'
+
 import { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useRouter, usePathname } from 'next/navigation';
 import axios from 'axios';
 import { fetchTickers } from '../services/upbitApi';
 import type { UpbitTicker } from '../services/upbitApi';
@@ -8,7 +10,7 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { clearUserSession, getUserAccessToken } from '../utils/auth';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080';
 
 const Container = styled.div`
   min-height: 100vh;
@@ -202,10 +204,10 @@ const Td = styled.td`
 `;
 
 const Balances = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
+  const router = useRouter();
+  const pathname = usePathname();
   const [loading, setLoading] = useState(true);
-  const loginRedirectUrl = `/login?redirect=${encodeURIComponent(`${location.pathname}${location.search || ''}`)}`;
+  const loginRedirectUrl = `/login?redirect=${encodeURIComponent(pathname)}`;
 
   // 자산 정보
   const [krwBalance, setKrwBalance] = useState(0);
@@ -236,7 +238,7 @@ const Balances = () => {
     const token = getUserAccessToken();
     if (!token) {
       if (loading) setLoading(false);
-      navigate(loginRedirectUrl, { replace: true });
+      router.replace(loginRedirectUrl);
       return;
     }
 
@@ -248,7 +250,7 @@ const Balances = () => {
 
       if (typeof assetsResponse.data === 'string' && assetsResponse.data.includes('<!DOCTYPE html>')) {
         clearUserSession(true);
-        navigate(loginRedirectUrl);
+        router.push(loginRedirectUrl);
         return;
       }
 
@@ -274,7 +276,7 @@ const Balances = () => {
         (error.response.status === 403 && error.response.data?.message === 'WITHDRAWN_ACCOUNT')
       )) {
         clearUserSession(true);
-        navigate(loginRedirectUrl, { replace: true });
+        router.replace(loginRedirectUrl);
       }
     } finally {
       if (loading) setLoading(false);
@@ -285,7 +287,7 @@ const Balances = () => {
     fetchData();
     const intervalId = setInterval(fetchData, 3000);
     return () => clearInterval(intervalId);
-  }, [navigate, loginRedirectUrl]);
+  }, [router, loginRedirectUrl]);
 
   // 실시간 코인 시세 조회
   useEffect(() => {

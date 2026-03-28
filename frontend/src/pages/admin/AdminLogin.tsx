@@ -1,10 +1,12 @@
+'use client'
+
 import { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import { getAdminAccessToken, getAdminRole, setAdminSession } from '../../utils/auth';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080';
 
 /* --------------------------------- Theme (Dashboard Tone) --------------------------------- */
 const COLORS = {
@@ -140,7 +142,7 @@ const ErrorMessage = styled.div`
 `;
 
 const AdminLogin = () => {
-  const navigate = useNavigate();
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -150,9 +152,9 @@ const AdminLogin = () => {
     const token = getAdminAccessToken();
     const role = getAdminRole();
     if (token && ['ADMIN', 'MANAGER', 'STAFF'].includes(role || '')) {
-      navigate('/admin/dashboard', { replace: true });
+      router.replace('/admin/dashboard');
     }
-  }, [navigate]);
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -168,7 +170,7 @@ const AdminLogin = () => {
       const { accessToken, role, email: userEmail, name } = response.data;
       setAdminSession(accessToken, role, userEmail, name);
 
-      navigate('/admin/dashboard', { replace: true });
+      router.replace('/admin/dashboard');
     } catch (err: any) {
       setError(err.response?.data || '로그인에 실패했습니다.');
     } finally {

@@ -1,7 +1,9 @@
+'use client'
+
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import axios from 'axios';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useRouter } from 'next/navigation';
 import styled from 'styled-components';
 import { setUserSession } from '../utils/auth';
 
@@ -192,8 +194,8 @@ interface SignupInputs {
 
 const SignupComplete: React.FC = () => {
   const { register, handleSubmit, setValue, formState: { errors } } = useForm<SignupInputs>();
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
 
@@ -243,7 +245,7 @@ const SignupComplete: React.FC = () => {
     }
 
     try {
-      const response = await axios.post(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/auth/signup/complete`, formData, {
+      const response = await axios.post(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/api/auth/signup/complete`, formData, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'multipart/form-data'
@@ -253,7 +255,7 @@ const SignupComplete: React.FC = () => {
       const newToken = response.data;
       setUserSession(newToken);
       alert('회원가입이 완료되었습니다. 신분증 승인 전까지 계정 상태는 LOCKED(입출금 및 코인거래 제한)입니다.');
-      navigate('/');
+      router.push('/');
     } catch (error: any) {
       console.error(error);
       const errorMsg = error.response?.data?.message || '회원가입 처리에 실패했습니다. 다시 시도해주세요.';

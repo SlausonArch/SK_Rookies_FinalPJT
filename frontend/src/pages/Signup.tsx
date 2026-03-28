@@ -1,6 +1,8 @@
+'use client'
+
 import React from 'react';
 import styled from 'styled-components';
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 
 const Container = styled.div`
   display: flex;
@@ -107,13 +109,13 @@ const Signup: React.FC = () => {
 
         <SocialButton
           provider="kakao"
-          href={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/oauth2/authorization/kakao`}
+          href={`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/oauth2/authorization/kakao`}
         >
           카카오로 3초만에 가입하기
         </SocialButton>
         <SocialButton
           provider="naver"
-          href={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/oauth2/authorization/naver`}
+          href={`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/oauth2/authorization/naver`}
         >
           네이버로 가입하기
         </SocialButton>

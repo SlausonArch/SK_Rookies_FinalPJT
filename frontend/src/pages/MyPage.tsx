@@ -1,13 +1,15 @@
+'use client'
+
 import React, { useEffect, useState } from 'react';
 import styled from 'styled-components';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useRouter, usePathname } from 'next/navigation';
 import axios from 'axios';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import TierModal from '../components/TierModal';
 import { clearUserSession, getUserAccessToken, getUserRefreshToken } from '../utils/auth';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080';
 
 const BANK_OPTIONS = [
   'NH농협은행',
@@ -335,8 +337,8 @@ interface MemberInfo {
 type MyPageTab = 'profile' | 'account' | 'idPhoto';
 
 const MyPage: React.FC = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
+  const router = useRouter();
+  const pathname = usePathname();
   const [member, setMember] = useState<MemberInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -362,12 +364,12 @@ const MyPage: React.FC = () => {
   });
 
   const getToken = () => getUserAccessToken();
-  const loginRedirectUrl = `/login?redirect=${encodeURIComponent(`${location.pathname}${location.search || ''}`)}`;
+  const loginRedirectUrl = `/login?redirect=${encodeURIComponent(pathname)}`;
 
   useEffect(() => {
     const token = getToken();
     if (!token) {
-      navigate(loginRedirectUrl, { replace: true });
+      router.replace(loginRedirectUrl);
       return;
     }
 
@@ -394,11 +396,11 @@ const MyPage: React.FC = () => {
       .catch(err => {
         if (err.response?.status === 401) {
           clearUserSession(true);
-          navigate(loginRedirectUrl, { replace: true });
+          router.replace(loginRedirectUrl);
         }
       })
       .finally(() => setLoading(false));
-  }, [navigate, loginRedirectUrl]);
+  }, [router, loginRedirectUrl]);
 
   const handleEdit = () => {
     setEditing(true);
@@ -513,7 +515,7 @@ const MyPage: React.FC = () => {
         },
       );
       clearUserSession(true);
-      navigate('/withdrawal-complete', { replace: true });
+      router.replace('/withdrawal-complete');
     } catch (err: any) {
       alert(
         err.response?.data?.message ||

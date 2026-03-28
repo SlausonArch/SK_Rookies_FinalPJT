@@ -1,7 +1,9 @@
+'use client'
+
 import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import styled from 'styled-components';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useRouter, usePathname } from 'next/navigation';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { API_BASE, formatDateOnly, getAccessToken, getAuthHeaders, parseRoleFromToken } from './community/common';
@@ -257,10 +259,10 @@ const parseCreatedAt = (value: string | null): number => {
 };
 
 function Community() {
-  const navigate = useNavigate();
-  const location = useLocation();
+  const router = useRouter();
+  const pathname = usePathname();
   const token = getAccessToken();
-  const loginRedirectUrl = `/login?redirect=${encodeURIComponent(`${location.pathname}${location.search || ''}`)}`;
+  const loginRedirectUrl = `/login?redirect=${encodeURIComponent(pathname)}`;
   const role = parseRoleFromToken(token);
   const isAdmin = role === 'ADMIN' || role === 'STAFF';
   const authHeaders = getAuthHeaders(token);
@@ -342,10 +344,10 @@ function Community() {
   const onClickWrite = () => {
     if (!token) {
       alert('로그인 후 글쓰기가 가능합니다.');
-      navigate(loginRedirectUrl);
+      router.push(loginRedirectUrl);
       return;
     }
-    navigate('/community/write');
+    router.push('/community/write');
   };
 
   return (
@@ -403,7 +405,7 @@ function Community() {
             </thead>
             <tbody>
               {!loading && !error && pagedPosts.map((post, index) => (
-                <tr key={post.postId} onClick={() => navigate(`/community/${post.postId}`)}>
+                <tr key={post.postId} onClick={() => router.push(`/community/${post.postId}`)}>
                   <td>{filteredPosts.length - ((currentPage - 1) * PAGE_SIZE + index)}</td>
                   <TitleCell>
                     {post.notice && <NoticeBadge>공지</NoticeBadge>}

@@ -30,7 +30,7 @@ export interface Comment {
   canEdit: boolean;
 }
 
-export const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080';
 const KST_TIME_ZONE = 'Asia/Seoul';
 
 export function getAccessToken(): string | null {

@@ -1,3 +1,5 @@
+'use client'
+
 import React, { useState } from 'react';
 import styled from 'styled-components';
 import axios from 'axios';
@@ -343,7 +345,7 @@ const Events: React.FC = () => {
   const [attendanceDone, setAttendanceDone] = useState(false);
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
 
-  const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:18080';
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080';
 
   const getTodayKey = () => new Date().toISOString().slice(0, 10);
 

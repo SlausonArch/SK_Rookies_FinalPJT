@@ -1,5 +1,7 @@
+'use client'
+
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 import styled from 'styled-components';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
@@ -10,8 +12,8 @@ import type { UpbitMarket, UpbitTicker } from '../services/upbitApi';
 import { useUpbitTicker } from '../hooks/useUpbitWebSocket';
 import axios from 'axios';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
-const bankUrl = import.meta.env.VITE_BANK_FRONTEND_URL || `${window.location.protocol}//${window.location.hostname}:15174`;
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080';
+const bankUrl = process.env.NEXT_PUBLIC_BANK_FRONTEND_URL || 'http://localhost:15174';
 
 const MainContainer = styled.div`
   min-height: 100vh;
@@ -424,9 +426,9 @@ const Home: React.FC = () => {
           </HeroText>
 
           <HeroActions>
-            <CTAButton to="/exchange">거래소 둘러보기</CTAButton>
+            <CTAButton href="/exchange">거래소 둘러보기</CTAButton>
             {isLoggedIn && <BankButton href={bankUrl}>은행 바로가기</BankButton>}
-            {!isLoggedIn && <LoginButton to={`/login?redirect=${encodeURIComponent('/crypto')}`}>로그인</LoginButton>}
+            {!isLoggedIn && <LoginButton href={`/login?redirect=${encodeURIComponent('/crypto')}`}>로그인</LoginButton>}
           </HeroActions>
         </HeroSection>
 
@@ -462,7 +464,7 @@ const Home: React.FC = () => {
           >
             실시간 {activeTabLabel} 코인
           </SectionTitle>
-          <MoreLink to="/exchange">전체 보기 &gt;</MoreLink>
+          <MoreLink href="/exchange">전체 보기 &gt;</MoreLink>
         </SectionHeader>
 
         <TabContainer>
@@ -521,7 +523,7 @@ const Home: React.FC = () => {
 
         <SectionHeader>
           <SectionTitle>공지사항</SectionTitle>
-          <MoreLink to="/community">전체 보기 &gt;</MoreLink>
+          <MoreLink href="/community">전체 보기 &gt;</MoreLink>
         </SectionHeader>
 
         <NoticeSection>
@@ -531,7 +533,7 @@ const Home: React.FC = () => {
             <NoticeList>
               {notices.slice(0, 5).map(n => (
                 <NoticeItem key={n.postId}>
-                  <Link to={`/community/${n.postId}`}>{n.title}</Link>
+                  <Link href={`/community/${n.postId}`}>{n.title}</Link>
                   <NoticeDate>{formatDate(n.createdAt)}</NoticeDate>
                 </NoticeItem>
               ))}

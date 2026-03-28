@@ -1,11 +1,13 @@
+'use client'
+
 import React, { useEffect, useState } from 'react';
 import styled from 'styled-components';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useRouter, usePathname } from 'next/navigation';
 import axios from 'axios';
 import { clearUserSession, getUserAccessToken } from '../../utils/auth';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
-const exchangeUrl = import.meta.env.VITE_EXCHANGE_FRONTEND_URL || `${window.location.protocol}//${window.location.hostname}:15173`;
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080';
+const exchangeUrl = process.env.NEXT_PUBLIC_EXCHANGE_FRONTEND_URL || 'http://localhost:15173';
 
 const PageContainer = styled.div`
   min-height: 100vh;
@@ -211,8 +213,8 @@ const ModeBtn = styled.button<{ $active: boolean }>`
 
 
 const BankDashboard: React.FC = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
+  const router = useRouter();
+  const pathname = usePathname();
   const [balance, setBalance] = useState<number>(0);
   const [mode, setMode] = useState<'main' | 'deposit' | 'withdraw'>('main');
   const [amount, setAmount] = useState('');
@@ -221,7 +223,7 @@ const BankDashboard: React.FC = () => {
   const [success, setSuccess] = useState('');
   const [token, setToken] = useState<string | null>(getUserAccessToken());
 
-  const loginRedirectUrl = `/login?redirect=${encodeURIComponent(`${location.pathname}${location.search || ''}`)}`;
+  const loginRedirectUrl = `/login?redirect=${encodeURIComponent(pathname ?? '/')}`;
 
   useEffect(() => {
     const handleStorageChange = () => {
@@ -302,7 +304,7 @@ const BankDashboard: React.FC = () => {
           if (token) {
             clearUserSession(true);
             setToken(null);
-            navigate(loginRedirectUrl, { replace: true });
+            router.replace(loginRedirectUrl);
           }
         }
       });
@@ -368,7 +370,7 @@ const BankDashboard: React.FC = () => {
         if (token) {
           clearUserSession(true);
           setToken(null);
-          navigate(loginRedirectUrl, { replace: true });
+          router.replace(loginRedirectUrl);
         }
       }
     } finally {
@@ -382,7 +384,7 @@ const BankDashboard: React.FC = () => {
         <DashboardCard>
           <BankLogo>🏦 VCE 가상은행</BankLogo>
           <p>서비스를 이용하려면 거래소 로그인이 필요합니다.</p>
-          <SubmitButton style={{ background: '#1a5bc4', marginTop: '20px' }} onClick={() => navigate(loginRedirectUrl)}>로 그 인</SubmitButton>
+          <SubmitButton style={{ background: '#1a5bc4', marginTop: '20px' }} onClick={() => router.push(loginRedirectUrl)}>로 그 인</SubmitButton>
         </DashboardCard>
       </PageContainer>
     );

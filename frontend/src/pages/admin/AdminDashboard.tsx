@@ -1,6 +1,8 @@
+'use client'
+
 import { useState, useEffect, useCallback, useMemo, type ElementType } from 'react';
 import styled, { createGlobalStyle } from 'styled-components';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import type { Post } from '../community/common';
 import {
@@ -21,7 +23,7 @@ import {
   getAdminRole,
 } from '../../utils/auth';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080';
 
 const COLORS = {
   appBg: '#F1F4F8',
@@ -922,7 +924,7 @@ function toneFromTxType(t: string): 'success' | 'danger' | 'warn' | 'info' | 'ne
 }
 
 const AdminDashboard = () => {
-  const navigate = useNavigate();
+  const router = useRouter();
   const [activeMenu, setActiveMenu] = useState<
     'dashboard' | 'members' | 'idApprovals' | 'orders' | 'assets' | 'deposits' | 'community' | 'inquiries' | 'settings'
   >('dashboard');
@@ -997,7 +999,7 @@ const AdminDashboard = () => {
       const currentToken = getAdminAccessToken();
       const r = getAdminRole();
       if (!currentToken || !r) {
-        navigate('/admin/login', { replace: true });
+        router.replace('/admin/login');
         return;
       }
       setToken(currentToken);
@@ -1006,7 +1008,7 @@ const AdminDashboard = () => {
     checkAuth();
     window.addEventListener('storage', checkAuth);
     return () => window.removeEventListener('storage', checkAuth);
-  }, [navigate]);
+  }, [router]);
 
   // STAFF 권한 탭 보정 (마운트 시 1회)
   useEffect(() => {
@@ -1337,7 +1339,7 @@ const AdminDashboard = () => {
     }
 
     clearAdminSession(true);
-    navigate('/admin/login', { replace: true });
+    router.replace('/admin/login');
   };
 
   const menuTitles: Record<typeof activeMenu, { title: string; desc: string; icon: ElementType }> = {

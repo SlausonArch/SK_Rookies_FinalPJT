@@ -1,6 +1,8 @@
+'use client'
+
 import React, { useEffect, useState } from 'react';
 import styled from 'styled-components';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'next/navigation';
 import axios from 'axios';
 import { setUserSession } from '../utils/auth';
 
@@ -91,7 +93,7 @@ function sanitizeRedirectTarget(target: string | null | undefined): string {
 }
 
 const Login: React.FC = () => {
-  const [searchParams] = useSearchParams();
+  const searchParams = useSearchParams();
   const [error, setError] = useState('');
   const [clickCount, setClickCount] = useState(0);
   const redirectFromQuery = sanitizeRedirectTarget(searchParams.get('redirect'));
@@ -146,13 +148,13 @@ const Login: React.FC = () => {
   const handleSocialLogin = (provider: 'kakao' | 'naver') => {
     rememberRedirectTarget();
     const origin = window.location.origin;
-    window.location.href = `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/oauth2/authorization/${provider}?frontend_url=${encodeURIComponent(origin)}`;
+    window.location.href = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/oauth2/authorization/${provider}?frontend_url=${encodeURIComponent(origin)}`;
   };
 
   const handleTestLogin = async () => {
     setError('');
     try {
-      const { data } = await axios.post(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/auth/test/login`, {
+      const { data } = await axios.post(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/api/auth/test/login`, {
         email: 'test@vce.com',
         password: 'test1234',
       });

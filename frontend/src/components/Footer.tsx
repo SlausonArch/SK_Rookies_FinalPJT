@@ -1,9 +1,8 @@
+'use client'
+
 import React from 'react';
 import styled from 'styled-components';
-import { Link } from 'react-router-dom';
-
-const mode = import.meta.env.VITE_APP_MODE || 'exchange';
-const exchangeUrl = import.meta.env.VITE_EXCHANGE_FRONTEND_URL || `${window.location.protocol}//${window.location.hostname}:15173`;
+import Link from 'next/link';
 
 const FooterContainer = styled.footer`
   background-color: white;
@@ -48,6 +47,8 @@ const PolicyLinks = styled.div`
 `;
 
 const Footer: React.FC = () => {
+  const mode = process.env.NEXT_PUBLIC_APP_MODE || 'exchange';
+  const exchangeUrl = process.env.NEXT_PUBLIC_EXCHANGE_FRONTEND_URL || `${typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:15173` : 'http://localhost:15173'}`;
   return (
     <FooterContainer>
       <FooterContent>
@@ -59,7 +60,7 @@ const Footer: React.FC = () => {
             {mode === 'bank' ? (
               <a href={`${exchangeUrl}/privacy-policy`}>개인정보처리방침</a>
             ) : (
-              <Link to="/privacy-policy">개인정보처리방침</Link>
+              <Link href="/privacy-policy">개인정보처리방침</Link>
             )}
           </PolicyLinks>
           <Copy>Copyright © 2026 VCE. All rights reserved.</Copy>

@@ -1,8 +1,11 @@
+'use client'
+
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import axios from 'axios';
 import styled from 'styled-components';
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import Link from 'next/link';
+import { useRouter, usePathname, useParams } from 'next/navigation';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
 import {
@@ -111,11 +114,12 @@ const ErrorBox = styled.div`
 `;
 
 function CommunityWrite() {
-  const { postId } = useParams<{ postId: string }>();
-  const navigate = useNavigate();
-  const location = useLocation();
+  const params = useParams();
+  const postId = params.postId as string | undefined;
+  const router = useRouter();
+  const pathname = usePathname();
   const token = getAccessToken();
-  const loginRedirectUrl = `/login?redirect=${encodeURIComponent(`${location.pathname}${location.search || ''}`)}`;
+  const loginRedirectUrl = `/login?redirect=${encodeURIComponent(pathname)}`;
   const role = parseRoleFromToken(token);
   const isAdmin = role === 'ADMIN' || role === 'STAFF';
   const isEdit = Boolean(postId);
@@ -178,7 +182,7 @@ function CommunityWrite() {
     e.preventDefault();
     if (!token) {
       alert('로그인이 필요합니다.');
-      navigate(loginRedirectUrl);
+      router.push(loginRedirectUrl);
       return;
     }
     setSaving(true);
@@ -194,10 +198,10 @@ function CommunityWrite() {
         const response = await axios.put<Post>(`${API_BASE}/api/community/posts/${numericPostId}`, payload, {
           headers: authHeaders
         });
-        navigate(`/community/${response.data.postId}`);
+        router.push(`/community/${response.data.postId}`);
       } else {
         const response = await axios.post<Post>(`${API_BASE}/api/community/posts`, payload, { headers: authHeaders });
-        navigate(`/community/${response.data.postId}`);
+        router.push(`/community/${response.data.postId}`);
       }
     } catch {
       setError('저장에 실패했습니다. 입력값 또는 로그인 상태를 확인해 주세요.');
@@ -211,7 +215,7 @@ function CommunityWrite() {
       <Header />
       <Wrapper>
         <Breadcrumb>
-          <Link to="/community">커뮤니티</Link> / {isEdit ? '글 수정' : '글 쓰기'}
+          <Link href="/community">커뮤니티</Link> / {isEdit ? '글 수정' : '글 쓰기'}
         </Breadcrumb>
         <Card>
           <Title>{isEdit ? '게시글 수정' : '새 글 작성'}</Title>
@@ -268,7 +272,7 @@ function CommunityWrite() {
               )}
 
               <ButtonRow>
-                <GrayButton type="button" onClick={() => navigate(-1)}>취소</GrayButton>
+                <GrayButton type="button" onClick={() => router.back()}>취소</GrayButton>
                 <Button type="submit" disabled={saving}>
                   {saving ? '저장 중...' : '저장'}
                 </Button>

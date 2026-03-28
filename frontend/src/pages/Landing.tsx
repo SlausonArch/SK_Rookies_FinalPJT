@@ -1,6 +1,8 @@
+'use client'
+
 import React, { useEffect, useRef } from 'react';
 import styled from 'styled-components';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import Matter from 'matter-js';
 
 const COLORS = {
@@ -110,7 +112,7 @@ const ActionButton = styled.button<{ $variant?: 'bank' | 'crypto' }>`
 
 const Landing: React.FC = () => {
     const sceneRef = useRef<HTMLDivElement>(null);
-    const navigate = useNavigate();
+    const router = useRouter();
     const isLoggedIn = !!localStorage.getItem('accessToken');
 
     useEffect(() => {
@@ -243,15 +245,15 @@ const Landing: React.FC = () => {
             <CanvasWrapper ref={sceneRef} />
             {!isLoggedIn && (
                 <TopActions>
-                    <TopActionButton onClick={() => navigate(`/login?redirect=${encodeURIComponent('/')}`)}>로그인</TopActionButton>
+                    <TopActionButton onClick={() => router.push(`/login?redirect=${encodeURIComponent('/')}`)}>로그인</TopActionButton>
                 </TopActions>
             )}
             <Overlay>
                 <Title>디지털 자산의 모든 것</Title>
                 <Subtitle>은행 시스템과 가상 자산 거래소를 하나의 플랫폼에서 경험하세요.</Subtitle>
                 <ButtonGroup>
-                    <ActionButton $variant="bank" onClick={() => navigate('/bank')}>가상 은행 접속</ActionButton>
-                    <ActionButton $variant="crypto" onClick={() => navigate('/crypto')}>암호화폐 거래소 접속</ActionButton>
+                    <ActionButton $variant="bank" onClick={() => router.push('/bank')}>가상 은행 접속</ActionButton>
+                    <ActionButton $variant="crypto" onClick={() => router.push('/crypto')}>암호화폐 거래소 접속</ActionButton>
                 </ButtonGroup>
             </Overlay>
         </Container>

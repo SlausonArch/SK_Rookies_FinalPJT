@@ -1,12 +1,11 @@
+'use client'
+
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { Link, NavLink, useLocation } from 'react-router-dom';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import axios from 'axios';
 import { clearUserSession, getUserAccessToken, getUserRefreshToken } from '../utils/auth';
-
-const mode = import.meta.env.VITE_APP_MODE || 'exchange';
-const exchangeUrl = import.meta.env.VITE_EXCHANGE_FRONTEND_URL || `${window.location.protocol}//${window.location.hostname}:15173`;
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 
 // Header.tsx (스타일만 교체/추가)
 
@@ -49,7 +48,7 @@ display: flex;
 gap: 24px;
 `;
 
-const NavItem = styled(NavLink)`
+const NavItem = styled(Link)`
   color: rgba(255, 255, 255, 0.78);
   text-decoration: none;
   font-weight: 600;
@@ -175,7 +174,10 @@ const LogoutButton = styled.button`
 
 
 const Header: React.FC = () => {
-  const location = useLocation();
+  const pathname = usePathname();
+  const mode = process.env.NEXT_PUBLIC_APP_MODE || 'exchange';
+  const exchangeUrl = process.env.NEXT_PUBLIC_EXCHANGE_FRONTEND_URL || 'http://localhost:15173';
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080';
   const [isLoggedIn, setIsLoggedIn] = useState(!!getUserAccessToken());
 
   useEffect(() => {
@@ -192,8 +194,7 @@ const Header: React.FC = () => {
     };
   }, []);
 
-  const redirectTarget = `${location.pathname}${location.search || ''}`;
-  const loginUrl = `/login?redirect=${encodeURIComponent(redirectTarget)}`;
+  const loginUrl = `/login?redirect=${encodeURIComponent(pathname)}`;
 
   const handleLogout = async () => {
     const token = getUserAccessToken();
@@ -222,7 +223,7 @@ const Header: React.FC = () => {
           {mode === 'bank' ? (
             <a href={`${exchangeUrl}/crypto`} style={{ color: '#fff', textDecoration: 'none' }}>VCE</a>
           ) : (
-            <Link to="/crypto">VCE</Link>
+            <Link href="/crypto">VCE</Link>
           )}
         </Logo>
 
@@ -239,13 +240,13 @@ const Header: React.FC = () => {
             </>
           ) : (
             <>
-              <NavItem to="/exchange">거래소</NavItem>
-              <NavItem to="/balances">입출금</NavItem>
-              <NavItem to="/investments">투자내역</NavItem>
-              <NavItem to="/trends">코인동향</NavItem>
-              <NavItem to="/community">커뮤니티</NavItem>
-              <NavItem to="/events">이벤트</NavItem>
-              <NavItem to="/support">고객센터</NavItem>
+              <NavItem href="/exchange" className={pathname.startsWith('/exchange') ? 'active' : ''}>거래소</NavItem>
+              <NavItem href="/balances" className={pathname.startsWith('/balances') ? 'active' : ''}>입출금</NavItem>
+              <NavItem href="/investments" className={pathname.startsWith('/investments') ? 'active' : ''}>투자내역</NavItem>
+              <NavItem href="/trends" className={pathname.startsWith('/trends') ? 'active' : ''}>코인동향</NavItem>
+              <NavItem href="/community" className={pathname.startsWith('/community') ? 'active' : ''}>커뮤니티</NavItem>
+              <NavItem href="/events" className={pathname.startsWith('/events') ? 'active' : ''}>이벤트</NavItem>
+              <NavItem href="/support" className={pathname.startsWith('/support') ? 'active' : ''}>고객센터</NavItem>
             </>
           )}
         </Nav>
@@ -256,14 +257,14 @@ const Header: React.FC = () => {
               {mode === 'bank' ? (
                 <ExternalAuthLink href={`${exchangeUrl}/mypage`}>마이페이지</ExternalAuthLink>
               ) : (
-                <AuthLink to="/mypage">마이페이지</AuthLink>
+                <AuthLink href="/mypage">마이페이지</AuthLink>
               )}
               <LogoutButton onClick={handleLogout}>로그아웃</LogoutButton>
             </>
           ) : (
             <>
-              <AuthLink to={loginUrl}>로그인</AuthLink>
-              <AuthLink to="/signup">회원가입</AuthLink>
+              <AuthLink href={loginUrl}>로그인</AuthLink>
+              <AuthLink href="/signup">회원가입</AuthLink>
             </>
           )}
         </AuthButtons>

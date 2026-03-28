@@ -1,6 +1,8 @@
+'use client'
+
 import React from 'react';
 import styled from 'styled-components';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 
@@ -66,7 +68,7 @@ const ReturnButton = styled.button`
 `;
 
 const WithdrawalComplete: React.FC = () => {
-    const navigate = useNavigate();
+    const router = useRouter();
 
     return (
         <Container>
@@ -79,7 +81,7 @@ const WithdrawalComplete: React.FC = () => {
                         회원님의 탈퇴 처리가 정상적으로 완료되었습니다.<br />
                         개인정보 및 거래 내역은 안전하게 익명화 처리되거나 파기되었습니다.
                     </Desc>
-                    <ReturnButton onClick={() => navigate('/')}>
+                    <ReturnButton onClick={() => router.push('/')}>
                         메인 화면으로 돌아가기
                     </ReturnButton>
                 </Box>
