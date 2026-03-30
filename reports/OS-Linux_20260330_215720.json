@@ -1,0 +1,191 @@
+{
+  "target": "localhost",
+  "scan_type": "OS-Linux",
+  "started_at": "2026-03-30 21:57:20",
+  "finished_at": "2026-03-30 21:57:20",
+  "summary": {
+    "total": 14,
+    "vulnerable": 3,
+    "safe": 2,
+    "manual": 8,
+    "error": 1,
+    "skipped": 0,
+    "by_severity": {
+      "위험": 1,
+      "높음": 1,
+      "보통": 1,
+      "낮음": 0,
+      "정보": 0
+    }
+  },
+  "results": [
+    {
+      "check_id": "OS-L-01",
+      "category": "OS-Linux",
+      "name": "root 계정 원격 로그인 제한",
+      "status": "취약",
+      "severity": "위험",
+      "description": "/etc/ssh/sshd_config에서 PermitRootLogin 설정을 확인합니다.",
+      "details": "PermitRootLogin 설정 없음 (기본값 허용)",
+      "recommendation": "sshd_config에 'PermitRootLogin no' 설정 후 sshd 재시작",
+      "evidence": "",
+      "checked_at": "2026-03-30 21:57:20"
+    },
+    {
+      "check_id": "OS-L-02",
+      "category": "OS-Linux",
+      "name": "패스워드 복잡도 및 최소 길이 설정",
+      "status": "오류",
+      "severity": "높음",
+      "description": "/etc/login.defs 또는 PAM 설정에서 패스워드 정책을 확인합니다.",
+      "details": "login.defs 읽기 실패",
+      "recommendation": "/etc/login.defs: PASS_MIN_LEN 8 이상, PAM pwquality 모듈 적용",
+      "evidence": "",
+      "checked_at": "2026-03-30 21:57:20"
+    },
+    {
+      "check_id": "OS-L-03",
+      "category": "OS-Linux",
+      "name": "빈 패스워드 계정 존재 여부",
+      "status": "수동점검",
+      "severity": "위험",
+      "description": "/etc/shadow에서 패스워드 필드가 비어있는 계정을 확인합니다.",
+      "details": "shadow 파일 접근 불가 (root 권한 필요) — 수동 점검 필요",
+      "recommendation": "해당 계정에 패스워드를 설정하거나 계정을 잠금 처리",
+      "evidence": "",
+      "checked_at": "2026-03-30 21:57:20"
+    },
+    {
+      "check_id": "OS-L-04",
+      "category": "OS-Linux",
+      "name": "UID=0 계정 확인 (root 외)",
+      "status": "양호",
+      "severity": "위험",
+      "description": "/etc/passwd에서 UID가 0인 계정(root 제외)을 확인합니다.",
+      "details": "root 외 UID=0 계정 없음",
+      "recommendation": "root 외 UID=0 계정 제거 또는 UID 변경",
+      "evidence": "",
+      "checked_at": "2026-03-30 21:57:20"
+    },
+    {
+      "check_id": "OS-L-05",
+      "category": "OS-Linux",
+      "name": "불필요한 SUID/SGID 파일 존재 여부",
+      "status": "수동점검",
+      "severity": "높음",
+      "description": "SUID/SGID 비트가 설정된 실행 파일을 점검합니다.",
+      "details": "SUID/SGID 파일 검색 실패 — 수동 점검 필요",
+      "recommendation": "불필요한 SUID/SGID 파일에서 chmod -s 로 비트 제거",
+      "evidence": "find: -perm: /6000: illegal mode string",
+      "checked_at": "2026-03-30 21:57:20"
+    },
+    {
+      "check_id": "OS-L-06",
+      "category": "OS-Linux",
+      "name": "중요 디렉토리 World-Writable 권한 확인",
+      "status": "수동점검",
+      "severity": "높음",
+      "description": "/etc, /usr, /bin 등 중요 경로의 world-writable 파일을 확인합니다.",
+      "details": "검색 실패 — 수동 점검 필요",
+      "recommendation": "해당 파일/디렉토리에서 chmod o-w 로 other 쓰기 권한 제거",
+      "evidence": "find: /usr/sbin/authserver: Permission denied",
+      "checked_at": "2026-03-30 21:57:20"
+    },
+    {
+      "check_id": "OS-L-07",
+      "category": "OS-Linux",
+      "name": "기본 umask 설정",
+      "status": "수동점검",
+      "severity": "보통",
+      "description": "/etc/profile, /etc/bashrc 등에서 umask 설정을 확인합니다.",
+      "details": "umask 설정 확인 불가",
+      "recommendation": "umask 022 이상(022 또는 027) 으로 설정",
+      "evidence": "",
+      "checked_at": "2026-03-30 21:57:20"
+    },
+    {
+      "check_id": "OS-L-08",
+      "category": "OS-Linux",
+      "name": "/etc/shadow 파일 권한",
+      "status": "수동점검",
+      "severity": "위험",
+      "description": "/etc/shadow 파일의 권한이 400 이하인지 확인합니다.",
+      "details": "stat 실패 — 수동 점검 필요",
+      "recommendation": "chmod 400 /etc/shadow 또는 chmod 000 /etc/shadow",
+      "evidence": "",
+      "checked_at": "2026-03-30 21:57:20"
+    },
+    {
+      "check_id": "OS-L-09",
+      "category": "OS-Linux",
+      "name": "/etc/passwd 파일 권한",
+      "status": "수동점검",
+      "severity": "높음",
+      "description": "/etc/passwd 파일의 권한이 644 이하인지 확인합니다.",
+      "details": "stat 실패 — 수동 점검 필요",
+      "recommendation": "chmod 644 /etc/passwd",
+      "evidence": "",
+      "checked_at": "2026-03-30 21:57:20"
+    },
+    {
+      "check_id": "OS-L-10",
+      "category": "OS-Linux",
+      "name": "SSH 보안 설정 (Protocol, MaxAuthTries 등)",
+      "status": "취약",
+      "severity": "높음",
+      "description": "sshd_config의 주요 보안 설정을 확인합니다.",
+      "details": "MaxAuthTries = 6 (5 초과)",
+      "recommendation": "Protocol 2, MaxAuthTries 5, PermitEmptyPasswords no 설정",
+      "evidence": "",
+      "checked_at": "2026-03-30 21:57:20"
+    },
+    {
+      "check_id": "OS-L-11",
+      "category": "OS-Linux",
+      "name": "불필요한 서비스 실행 여부",
+      "status": "양호",
+      "severity": "높음",
+      "description": "telnet, ftp, rsh, rlogin 등 취약한 서비스 실행 여부를 확인합니다.",
+      "details": "취약 서비스 미실행",
+      "recommendation": "systemctl disable --now <서비스명> 으로 불필요한 서비스 중지",
+      "evidence": "",
+      "checked_at": "2026-03-30 21:57:20"
+    },
+    {
+      "check_id": "OS-L-12",
+      "category": "OS-Linux",
+      "name": "cron 설정 파일 권한",
+      "status": "수동점검",
+      "severity": "보통",
+      "description": "/etc/crontab 파일의 소유자 및 권한을 확인합니다.",
+      "details": "stat 실패 — 수동 점검 필요",
+      "recommendation": "chown root /etc/crontab && chmod 600 /etc/crontab",
+      "evidence": "",
+      "checked_at": "2026-03-30 21:57:20"
+    },
+    {
+      "check_id": "OS-L-13",
+      "category": "OS-Linux",
+      "name": "syslog/rsyslog 서비스 실행 여부",
+      "status": "취약",
+      "severity": "보통",
+      "description": "시스템 로그 데몬(rsyslog/syslog)이 실행 중인지 확인합니다.",
+      "details": "rsyslog/syslog 미실행",
+      "recommendation": "systemctl enable --now rsyslog",
+      "evidence": "",
+      "checked_at": "2026-03-30 21:57:20"
+    },
+    {
+      "check_id": "OS-L-14",
+      "category": "OS-Linux",
+      "name": "커널 버전 확인 (정보 수집)",
+      "status": "수동점검",
+      "severity": "정보",
+      "description": "현재 커널 버전을 수집합니다. 최신 보안 패치 적용 여부를 수동으로 확인하세요.",
+      "details": "커널 버전: 25.4.0",
+      "recommendation": "apt upgrade / yum update 등으로 최신 커널 유지",
+      "evidence": "25.4.0",
+      "checked_at": "2026-03-30 21:57:20"
+    }
+  ]
+}
