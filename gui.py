@@ -139,6 +139,7 @@ class VulnScannerGUI:
         self.ssm_sk     = tk.StringVar()
         self.ssm_tok    = tk.StringVar()
         self.ssm_os     = tk.StringVar(value="linux")
+        self.docker_ctn = tk.StringVar()
         self.mod_key    = tk.StringVar(value="1")
         self.target     = tk.StringVar(value="localhost")
         self.nginx_conf = tk.StringVar()
@@ -288,7 +289,8 @@ class VulnScannerGUI:
         self._sec(p, "연결 방식")
         modes = [("1","🖥","로컬","현재 시스템에서 직접 진단"),
                  ("2","🔑","SSH","원격 서버 / PEM 키 또는 패스워드"),
-                 ("3","☁","AWS SSM","EC2 Session Manager")]
+                 ("3","☁","AWS SSM","EC2 Session Manager"),
+                 ("4","🐳","Docker","로컬 Docker 컨테이너 내부 진단")]
         for val, icon, title, desc in modes:
             row = tk.Frame(p, bg=C_MANTLE, cursor="hand2"); row.pack(fill=tk.X, pady=2)
             ttk.Radiobutton(row, text="", variable=self.conn_mode,
@@ -341,6 +343,14 @@ class VulnScannerGUI:
         or_ = tk.Frame(self.f_ssm, bg=C_MANTLE); or_.pack(anchor=tk.W, pady=2)
         for v, l in [("linux","🐧 Linux"), ("windows","🪟 Windows")]:
             ttk.Radiobutton(or_, text=l, variable=self.ssm_os, value=v).pack(side=tk.LEFT, padx=(0,10))
+
+        # Docker 필드
+        self.f_docker = tk.Frame(p, bg=C_MANTLE)
+        self._fl(self.f_docker, "컨테이너 이름 또는 ID")
+        self._ent(self.f_docker, self.docker_ctn)
+        _lbl(self.f_docker,
+             "※ 로컬에 docker CLI가 설치·실행 중이어야 합니다.",
+             C_MANTLE, C_OVER0, 8).pack(anchor=tk.W, pady=(4, 0))
 
         self._on_conn()
 
@@ -501,10 +511,11 @@ class VulnScannerGUI:
 
     # ── 이벤트 ────────────────────────────────────────────────────────────────
     def _on_conn(self):
-        self.f_ssh.pack_forget(); self.f_ssm.pack_forget()
+        self.f_ssh.pack_forget(); self.f_ssm.pack_forget(); self.f_docker.pack_forget()
         m = self.conn_mode.get()
         if m == "2": self.f_ssh.pack(fill=tk.X); self._on_auth()
         elif m == "3": self.f_ssm.pack(fill=tk.X); self._on_cred()
+        elif m == "4": self.f_docker.pack(fill=tk.X)
 
     def _on_auth(self):
         self.f_pem.pack_forget(); self.f_spwd.pack_forget()
@@ -659,6 +670,23 @@ class VulnScannerGUI:
             if rc != 0 or "OK" not in out:
                 raise RuntimeError(err or "SSM 응답 없음")
             print("  ✓ SSM 연결 성공\n"); return ex
+        if m == "4":
+            ctn = self.docker_ctn.get().strip()
+            if not ctn:
+                raise ValueError("컨테이너 이름 또는 ID를 입력하세요.")
+            print(f"\n  → Docker 컨테이너 확인 중 ({ctn})...")
+            from core.remote import DockerExecutor
+            ex = DockerExecutor(ctn)
+            rc, out, err = ex.run_shell("echo OK", timeout=10)
+            if rc != 0 or "OK" not in out:
+                raise RuntimeError(
+                    f"Docker 컨테이너 접근 실패: {err or '응답 없음'}\n\n"
+                    "점검 항목:\n"
+                    "  1) 컨테이너가 실행 중인지 확인  (docker ps)\n"
+                    "  2) 컨테이너 이름/ID가 올바른지 확인\n"
+                    "  3) docker CLI가 설치되어 있는지 확인"
+                )
+            print("  ✓ Docker 연결 성공\n"); return ex
         return None
 
     def _make_opts(self, executor) -> dict:

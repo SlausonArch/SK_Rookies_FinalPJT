@@ -72,6 +72,7 @@ CONNECTION_MODES = {
     "1": "로컬 (현재 시스템)",
     "2": "SSH (원격 서버 / EC2 Key Pair)",
     "3": "AWS SSM (EC2 Session Manager)",
+    "4": "Docker (로컬 컨테이너 내부 진단)",
 }
 
 # ── UI 헬퍼 ─────────────────────────────────────────────────────────────────
@@ -148,6 +149,26 @@ def _build_executor(mode: str):
             return executor, host
         except Exception as e:
             print(RED(f"  ✗ SSH 연결 실패: {e}"))
+            sys.exit(1)
+
+    if mode == "4":
+        # ── Docker ───────────────────────────────────
+        print()
+        print(BOLD("Docker 연결 정보 입력"))
+        _hr()
+        container = _ask("컨테이너 이름 또는 ID")
+        print()
+        print(f"  {CYAN('→')} Docker 컨테이너 확인 중 ({container})...")
+        try:
+            from core.remote import DockerExecutor
+            executor = DockerExecutor(container)
+            rc, out, err = executor.run_shell("echo OK", timeout=10)
+            if rc != 0 or "OK" not in out:
+                raise RuntimeError(err or "응답 없음")
+            print(f"  {GREEN('✓')} Docker 연결 성공")
+            return executor, container
+        except Exception as e:
+            print(RED(f"  ✗ Docker 연결 실패: {e}"))
             sys.exit(1)
 
     if mode == "3":

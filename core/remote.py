@@ -1,5 +1,5 @@
 """
-원격 실행기 (SSH / AWS SSM)
+원격 실행기 (SSH / AWS SSM / Docker)
 BaseScanner._run_cmd / _run_shell / _read_file 에 주입해 원격 진단에 사용
 """
 from __future__ import annotations
@@ -176,3 +176,45 @@ class SSMExecutor:
 
     def __repr__(self):
         return f"SSMExecutor({self.instance_id} @ {self.region})"
+
+
+# ══════════════════════════════════════════════════════
+# Docker Executor (docker exec 기반)
+# ══════════════════════════════════════════════════════
+
+class DockerExecutor:
+    """
+    로컬 Docker 컨테이너 내부에서 명령 실행 및 파일 읽기.
+    docker CLI가 설치되어 있고, 해당 컨테이너가 실행 중이어야 함.
+    """
+
+    def __init__(self, container: str):
+        self.container = container
+
+    def _exec(self, cmd: str, timeout: int) -> tuple[int, str, str]:
+        import subprocess
+        full = f"docker exec {shlex.quote(self.container)} sh -c {shlex.quote(cmd)}"
+        try:
+            r = subprocess.run(full, shell=True, capture_output=True,
+                               text=True, timeout=timeout)
+            return r.returncode, r.stdout.strip(), r.stderr.strip()
+        except subprocess.TimeoutExpired:
+            return -1, "", f"docker exec timeout after {timeout}s"
+        except Exception as e:
+            return -1, "", str(e)
+
+    def run_cmd(self, cmd: str, timeout: int = 10) -> tuple[int, str, str]:
+        return self._exec(cmd, timeout)
+
+    def run_shell(self, cmd: str, timeout: int = 10) -> tuple[int, str, str]:
+        return self._exec(cmd, timeout)
+
+    def read_file(self, path: str) -> Optional[str]:
+        rc, out, _ = self._exec(f"cat {shlex.quote(path)} 2>/dev/null", timeout=10)
+        return out if rc == 0 and out else None
+
+    def close(self):
+        pass
+
+    def __repr__(self):
+        return f"DockerExecutor({self.container})"
