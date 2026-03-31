@@ -3,10 +3,13 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        BUILD_SCRIPT: build:exchange
+        VITE_APP_MODE: ${VITE_APP_MODE:-exchange}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+        VITE_EXCHANGE_FRONTEND_URL: ${VITE_EXCHANGE_FRONTEND_URL}
+        VITE_BANK_FRONTEND_URL: ${VITE_BANK_FRONTEND_URL}
+        NEXT_SERVER_ACTION_ALLOWED_ORIGINS: ${NEXT_SERVER_ACTION_ALLOWED_ORIGINS:-}
     ports:
-      - "15173:80"
-    env_file:
-      - ./frontend/.env.exchange
-    stdin_open: true
-    tty: true
+      - "80:80"
     restart: unless-stopped

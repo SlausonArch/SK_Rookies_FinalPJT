@@ -9,6 +9,7 @@ import Header from '../components/Header';
 import { fetchKRWMarkets, fetchMinuteCandles, fetchDayCandles } from '../services/upbitApi';
 import type { UpbitMarket } from '../services/upbitApi';
 import { useUpbitTicker } from '../hooks/useUpbitWebSocket';
+import { API_BASE_URL } from '@/config/publicEnv';
 
 /* ───── types ───── */
 
@@ -391,7 +392,7 @@ const Trends: React.FC = () => {
   // fetch news
   const loadNews = useCallback(async () => {
     try {
-      const { data } = await axios.get<NewsItem[]>(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/api/news`);
+      const { data } = await axios.get<NewsItem[]>(`${API_BASE_URL}/api/news`);
       setNews(data);
     } catch { /* ignore */ }
   }, []);

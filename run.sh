@@ -37,7 +37,7 @@ fi
 
 # 프론트엔드 .env 확인 로직 추가
 if [ ! -f frontend/.env ]; then
-  echo "⚠️ Warning: frontend/.env file not found. Frontend might use default localhost:8080 for API_BASE."
+  echo "⚠️ Warning: frontend/.env file not found. Frontend env validation will fail without NEXT_PUBLIC_* variables."
 fi
 
 # 1. Database Check (Docker)
@@ -59,7 +59,7 @@ FRONTEND_PID=$!
 
 echo "✅ All systems are starting up!"
 echo "- Backend: http://localhost:8080 (or as configured in .env)"
-echo "- Frontend: http://localhost:5173 (or as configured in frontend/.env VITE_API_BASE_URL)"
+echo "- Frontend: http://localhost:15173 (or as configured in frontend/.env NEXT_PUBLIC_API_BASE_URL)"
 echo "- Logs: tail -f logs/backend.log & logs/frontend.log"
 
 # 프로세스 종료 관리 (Ctrl+C 시 함께 종료)

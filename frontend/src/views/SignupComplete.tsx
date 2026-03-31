@@ -6,6 +6,7 @@ import axios from 'axios';
 import { useSearchParams, useRouter } from 'next/navigation';
 import styled from 'styled-components';
 import { setUserSession } from '../utils/auth';
+import { API_BASE_URL } from '@/config/publicEnv';
 
 const Container = styled.div`
   display: flex;
@@ -245,7 +246,7 @@ const SignupComplete: React.FC = () => {
     }
 
     try {
-      const response = await axios.post(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/api/auth/signup/complete`, formData, {
+      const response = await axios.post(`${API_BASE_URL}/api/auth/signup/complete`, formData, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'multipart/form-data'

@@ -3,6 +3,7 @@
 import React from 'react';
 import styled from 'styled-components';
 import Link from 'next/link';
+import { APP_MODE, getExchangeFrontendUrl } from '@/config/publicEnv';
 
 const FooterContainer = styled.footer`
   background-color: white;
@@ -47,8 +48,8 @@ const PolicyLinks = styled.div`
 `;
 
 const Footer: React.FC = () => {
-  const mode = process.env.NEXT_PUBLIC_APP_MODE || 'exchange';
-  const exchangeUrl = process.env.NEXT_PUBLIC_EXCHANGE_FRONTEND_URL || `${typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:15173` : 'http://localhost:15173'}`;
+  const mode = APP_MODE;
+  const exchangeUrl = mode === 'bank' ? getExchangeFrontendUrl() : '';
   return (
     <FooterContainer>
       <FooterContent>

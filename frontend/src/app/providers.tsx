@@ -2,9 +2,10 @@
 
 import { useEffect, useRef } from 'react'
 import axios from 'axios'
+import { API_BASE_URL } from '@/config/publicEnv'
 import { syncAuthState, setUserSession, getUserRefreshToken } from '@/utils/auth'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'
+const API_BASE = API_BASE_URL
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const lastActivityRef = useRef<number>(Date.now())

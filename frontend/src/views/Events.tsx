@@ -5,6 +5,7 @@ import styled from 'styled-components';
 import axios from 'axios';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import { API_BASE_URL } from '@/config/publicEnv';
 
 const Container = styled.div`
   min-height: 100vh;
@@ -345,7 +346,7 @@ const Events: React.FC = () => {
   const [attendanceDone, setAttendanceDone] = useState(false);
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080';
+  const API_BASE = API_BASE_URL;
 
   const getTodayKey = () => new Date().toISOString().slice(0, 10);
 

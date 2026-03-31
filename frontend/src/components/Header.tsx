@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import axios from 'axios';
 import { clearUserSession, getUserAccessToken, getUserRefreshToken } from '../utils/auth';
+import { APP_MODE, API_BASE_URL, getExchangeFrontendUrl } from '@/config/publicEnv';
 
 // Header.tsx (스타일만 교체/추가)
 
@@ -175,9 +176,9 @@ const LogoutButton = styled.button`
 
 const Header: React.FC = () => {
   const pathname = usePathname();
-  const mode = process.env.NEXT_PUBLIC_APP_MODE || 'exchange';
-  const exchangeUrl = process.env.NEXT_PUBLIC_EXCHANGE_FRONTEND_URL || 'http://localhost:15173';
-  const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080';
+  const mode = APP_MODE;
+  const exchangeUrl = mode === 'bank' ? getExchangeFrontendUrl() : '';
+  const API_BASE = API_BASE_URL;
   const [isLoggedIn, setIsLoggedIn] = useState(typeof window !== 'undefined' && !!getUserAccessToken());
 
   useEffect(() => {

@@ -11,9 +11,10 @@ import { fetchKRWMarkets, fetchTickers } from '../services/upbitApi';
 import type { UpbitMarket, UpbitTicker } from '../services/upbitApi';
 import { useUpbitTicker } from '../hooks/useUpbitWebSocket';
 import axios from 'axios';
+import { API_BASE_URL, getBankFrontendUrl } from '@/config/publicEnv';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080';
-const bankUrl = process.env.NEXT_PUBLIC_BANK_FRONTEND_URL || 'http://localhost:15174';
+const API_BASE = API_BASE_URL;
+const bankUrl = getBankFrontendUrl();
 
 const MainContainer = styled.div`
   min-height: 100vh;

@@ -5,9 +5,10 @@ import styled from 'styled-components';
 import { useRouter, usePathname } from 'next/navigation';
 import axios from 'axios';
 import { clearUserSession, getUserAccessToken } from '../../utils/auth';
+import { API_BASE_URL, getExchangeFrontendUrl } from '@/config/publicEnv';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080';
-const exchangeUrl = process.env.NEXT_PUBLIC_EXCHANGE_FRONTEND_URL || 'http://localhost:15173';
+const API_BASE = API_BASE_URL;
+const exchangeUrl = getExchangeFrontendUrl();
 
 const PageContainer = styled.div`
   min-height: 100vh;

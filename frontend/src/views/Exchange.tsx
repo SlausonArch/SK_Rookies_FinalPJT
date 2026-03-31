@@ -12,6 +12,7 @@ import PriceChart from './exchange/PriceChart';
 import Orderbook from './exchange/Orderbook';
 import TradeForm from './exchange/TradeForm';
 import RecentTrades from './exchange/RecentTrades';
+import { API_BASE_URL } from '@/config/publicEnv';
 
 import axios from 'axios';
 
@@ -223,10 +224,10 @@ const MyHistory = ({ market }: { market: string }) => {
       try {
         const headers = { Authorization: `Bearer ${token}` };
         const [txRes, openRes] = await Promise.all([
-          axios.get(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/api/transactions?assetType=${assetType}`, {
+          axios.get(`${API_BASE_URL}/api/transactions?assetType=${assetType}`, {
             headers,
           }),
-          axios.get(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/api/orders/open`, {
+          axios.get(`${API_BASE_URL}/api/orders/open`, {
             headers,
           }),
         ]);
@@ -255,7 +256,7 @@ const MyHistory = ({ market }: { market: string }) => {
 
     setCancellingOrderId(orderId);
     try {
-      await axios.delete(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/api/orders/${orderId}`, {
+      await axios.delete(`${API_BASE_URL}/api/orders/${orderId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setOpenOrders(prev => prev.filter((o: any) => o.orderId !== orderId));

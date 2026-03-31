@@ -5,6 +5,7 @@ import styled from 'styled-components';
 import { useSearchParams } from 'next/navigation';
 import axios from 'axios';
 import { setUserSession } from '../utils/auth';
+import { API_BASE_URL } from '@/config/publicEnv';
 
 const Container = styled.div`
   display: flex;
@@ -148,13 +149,13 @@ const Login: React.FC = () => {
   const handleSocialLogin = (provider: 'kakao' | 'naver') => {
     rememberRedirectTarget();
     const origin = window.location.origin;
-    window.location.href = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/oauth2/authorization/${provider}?frontend_url=${encodeURIComponent(origin)}`;
+    window.location.href = `${API_BASE_URL}/oauth2/authorization/${provider}?frontend_url=${encodeURIComponent(origin)}`;
   };
 
   const handleTestLogin = async () => {
     setError('');
     try {
-      const { data } = await axios.post(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/api/auth/test/login`, {
+      const { data } = await axios.post(`${API_BASE_URL}/api/auth/test/login`, {
         email: 'test@vce.com',
         password: 'test1234',
       });

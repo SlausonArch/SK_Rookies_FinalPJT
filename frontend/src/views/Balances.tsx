@@ -9,8 +9,9 @@ import type { UpbitTicker } from '../services/upbitApi';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { clearUserSession, getUserAccessToken } from '../utils/auth';
+import { API_BASE_URL } from '@/config/publicEnv';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080';
+const API_BASE = API_BASE_URL;
 
 const Container = styled.div`
   min-height: 100vh;

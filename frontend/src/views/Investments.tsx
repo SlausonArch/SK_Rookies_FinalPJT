@@ -10,6 +10,7 @@ import { TrendingUp, TrendingDown, Download, Upload } from 'lucide-react';
 import Header from '../components/Header';
 import { clearUserSession, getUserAccessToken } from '../utils/auth';
 import Footer from '../components/Footer';
+import { API_BASE_URL } from '@/config/publicEnv';
 
 const Container = styled.div`
   min-height: 100vh;
@@ -609,10 +610,10 @@ const Investments = () => {
         const headers = { Authorization: `Bearer ${token}` };
 
         const [balanceResponse, summaryResponse, txResponse, openOrderResponse] = await Promise.all([
-          axios.get(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/api/assets`, { headers }),
-          axios.get(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/api/assets/summary`, { headers }),
-          axios.get(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/api/transactions`, { headers }),
-          axios.get(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/api/orders/open`, { headers }),
+          axios.get(`${API_BASE_URL}/api/assets`, { headers }),
+          axios.get(`${API_BASE_URL}/api/assets/summary`, { headers }),
+          axios.get(`${API_BASE_URL}/api/transactions`, { headers }),
+          axios.get(`${API_BASE_URL}/api/orders/open`, { headers }),
         ]);
 
         // HTML 응답 체크
@@ -695,10 +696,10 @@ const Investments = () => {
     setCancelingOrderId(orderId);
     try {
       const headers = { Authorization: `Bearer ${token}` };
-      await axios.delete(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/api/orders/${orderId}`, { headers });
+      await axios.delete(`${API_BASE_URL}/api/orders/${orderId}`, { headers });
 
       const openOrderResponse = await axios.get(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/api/orders/open`,
+        `${API_BASE_URL}/api/orders/open`,
         { headers }
       );
       const openOrderData = Array.isArray(openOrderResponse.data) ? openOrderResponse.data : [];

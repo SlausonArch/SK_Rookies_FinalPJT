@@ -32,8 +32,9 @@ Used by:
 - `npm run dev:exchange`
 
 Notes:
-- `VITE_API_BASE_URL` must point to the integrated backend public URL.
-- `VITE_APP_MODE=exchange`
+- `NEXT_PUBLIC_API_BASE_URL` must point to the integrated backend public URL.
+- `NEXT_PUBLIC_APP_MODE=exchange`
+- `NEXT_SERVER_ACTION_ALLOWED_ORIGINS` must include every frontend origin that can call server actions.
 
 ### 3. Bank Frontend
 
@@ -49,4 +50,4 @@ Used by:
 
 Notes:
 - Build `frontend/dist` and publish that output to IIS on `bank.vceapp.com`.
-- `VITE_APP_MODE=bank`
+- `NEXT_PUBLIC_APP_MODE=bank`

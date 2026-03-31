@@ -6,8 +6,9 @@ import axios from 'axios';
 import { useRouter, usePathname } from 'next/navigation';
 import { CheckCircle2, AlertCircle, TrendingUp, TrendingDown, Clock, Info } from 'lucide-react';
 import { getUserAccessToken } from '../../utils/auth';
+import { API_BASE_URL } from '@/config/publicEnv';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080';
+const API_BASE = API_BASE_URL;
 
 interface Props {
   market: string;

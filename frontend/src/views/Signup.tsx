@@ -3,6 +3,7 @@
 import React from 'react';
 import styled from 'styled-components';
 import Link from 'next/link';
+import { API_BASE_URL } from '@/config/publicEnv';
 
 const Container = styled.div`
   display: flex;
@@ -109,13 +110,13 @@ const Signup: React.FC = () => {
 
         <SocialButton
           provider="kakao"
-          href={`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/oauth2/authorization/kakao`}
+          href={`${API_BASE_URL}/oauth2/authorization/kakao`}
         >
           카카오로 3초만에 가입하기
         </SocialButton>
         <SocialButton
           provider="naver"
-          href={`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080'}/oauth2/authorization/naver`}
+          href={`${API_BASE_URL}/oauth2/authorization/naver`}
         >
           네이버로 가입하기
         </SocialButton>

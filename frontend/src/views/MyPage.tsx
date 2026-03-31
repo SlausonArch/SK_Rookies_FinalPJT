@@ -8,8 +8,9 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import TierModal from '../components/TierModal';
 import { clearUserSession, getUserAccessToken, getUserRefreshToken } from '../utils/auth';
+import { API_BASE_URL } from '@/config/publicEnv';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080';
+const API_BASE = API_BASE_URL;
 
 const BANK_OPTIONS = [
   'NH농협은행',

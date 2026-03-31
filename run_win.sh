@@ -48,7 +48,7 @@ FRONTEND_PID=$!
 
 echo "All systems are starting up!"
 echo "- Backend: http://localhost:8080"
-echo "- Frontend: http://localhost:5173"
+echo "- Frontend: http://localhost:15173"
 echo "- Active profile: windows (.env.windows, frontend/.env.windows)"
 echo "- Logs: tail -f logs/backend.log logs/frontend.log"
 

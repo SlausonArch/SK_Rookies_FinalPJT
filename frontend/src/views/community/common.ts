@@ -1,4 +1,5 @@
 import { getUserAccessToken } from '../../utils/auth';
+import { API_BASE_URL } from '@/config/publicEnv';
 
 export interface Post {
   postId: number;
@@ -30,7 +31,7 @@ export interface Comment {
   canEdit: boolean;
 }
 
-export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080';
+export const API_BASE = API_BASE_URL;
 const KST_TIME_ZONE = 'Asia/Seoul';
 
 export function getAccessToken(): string | null {

@@ -5,8 +5,9 @@ import styled from 'styled-components';
 import axios from 'axios';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import { API_BASE_URL } from '@/config/publicEnv';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080';
+const API_BASE = API_BASE_URL;
 
 function parseRoleFromToken(token: string | null): string | null {
   if (!token) return null;
