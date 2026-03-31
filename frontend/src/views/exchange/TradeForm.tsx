@@ -238,7 +238,7 @@ const TradeForm: React.FC<Props> = ({ market, currentPrice, selectedPrice, trade
   const [message, setMessage] = useState<{ text: string; success: boolean } | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const token = getToken();
+  const token = typeof window !== 'undefined' ? getToken() : null;
   const isLoggedIn = !!token;
   const assetType = market.replace('KRW-', '');
   const currentRoute = pathname ?? '/';

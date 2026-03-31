@@ -930,8 +930,8 @@ const AdminDashboard = () => {
   >('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  const userName = getAdminName() || '관리자';
-  const [token, setToken] = useState<string | null>(getAdminAccessToken);
+  const userName = (typeof window !== 'undefined' ? getAdminName() : null) || '관리자';
+  const [token, setToken] = useState<string | null>(() => typeof window !== 'undefined' ? getAdminAccessToken() : null);
 
   const [stats, setStats] = useState<Stats | null>(null);
   const [members, setMembers] = useState<MemberRow[]>([]);
@@ -2206,7 +2206,7 @@ const AdminDashboard = () => {
   };
 
   const page = menuTitles[activeMenu] || menuTitles.dashboard;
-  const role = getAdminRole() || 'GUEST';
+  const role = (typeof window !== 'undefined' ? getAdminRole() : null) || 'GUEST';
 
   const menuSections = {
     main: ['dashboard'] as const,

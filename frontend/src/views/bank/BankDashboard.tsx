@@ -221,7 +221,7 @@ const BankDashboard: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [token, setToken] = useState<string | null>(getUserAccessToken());
+  const [token, setToken] = useState<string | null>(() => typeof window !== 'undefined' ? getUserAccessToken() : null);
 
   const loginRedirectUrl = `/login?redirect=${encodeURIComponent(pathname ?? '/')}`;
 

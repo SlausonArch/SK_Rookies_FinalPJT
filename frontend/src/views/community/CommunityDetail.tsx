@@ -194,7 +194,7 @@ function CommunityDetail() {
   const postId = params.postId as string;
   const router = useRouter();
   const pathname = usePathname();
-  const token = getAccessToken();
+  const token = typeof window !== 'undefined' ? getAccessToken() : null;
   const loginRedirectUrl = `/login?redirect=${encodeURIComponent(pathname)}`;
   const authHeaders = useMemo(() => getAuthHeaders(token), [token]);
 

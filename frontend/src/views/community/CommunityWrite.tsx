@@ -118,7 +118,7 @@ function CommunityWrite() {
   const postId = params.postId as string | undefined;
   const router = useRouter();
   const pathname = usePathname();
-  const token = getAccessToken();
+  const token = typeof window !== 'undefined' ? getAccessToken() : null;
   const loginRedirectUrl = `/login?redirect=${encodeURIComponent(pathname)}`;
   const role = parseRoleFromToken(token);
   const isAdmin = role === 'ADMIN' || role === 'STAFF';
