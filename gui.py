@@ -124,14 +124,21 @@ class VulnScannerGUI:
         self.db_port    = tk.StringVar(value="3306")
         self.db_user    = tk.StringVar()
         self.db_pass    = tk.StringVar()
-        self.ora_deploy = tk.StringVar(value="server")
-        self.ora_host   = tk.StringVar(value="localhost")
+        self.ora_deploy     = tk.StringVar(value="server")
+        self.ora_host       = tk.StringVar(value="localhost")
         self.ora_host.trace_add("write", lambda *_: self._update_rds_cmd())
-        self.ora_port   = tk.StringVar(value="1521")
+        self.ora_port       = tk.StringVar(value="1521")
         self.ora_port.trace_add("write", lambda *_: self._update_rds_cmd())
-        self.ora_svc    = tk.StringVar(value="ORCL")
-        self.ora_user   = tk.StringVar(value="system")
-        self.ora_pass   = tk.StringVar()
+        self.ora_svc        = tk.StringVar(value="ORCL")
+        self.ora_user       = tk.StringVar(value="system")
+        self.ora_pass       = tk.StringVar()
+        # RDS 전용: SSM 터널 자동화
+        self.ora_rds_ep     = tk.StringVar()   # 실제 RDS 엔드포인트
+        self.ora_rds_ep.trace_add("write", lambda *_: self._update_rds_cmd())
+        self.ora_local_port = tk.StringVar(value="11521")  # 로컬 포워딩 포트
+        self.ora_local_port.trace_add("write", lambda *_: self._update_rds_cmd())
+        self.ora_auto_tunnel = tk.BooleanVar(value=True)   # 터널 자동 시작 여부
+        self._ssm_proc       = None   # 실행 중인 SSM 터널 프로세스
         self.rpt_excel  = tk.BooleanVar(value=True)
         self.rpt_md     = tk.BooleanVar(value=False)
         self.status_var = tk.StringVar(value="IDLE")
@@ -471,54 +478,77 @@ class VulnScannerGUI:
             ttk.Radiobutton(dpr, text=l, variable=self.ora_deploy,
                             value=v, command=self._on_ora_deploy).pack(side=tk.LEFT, padx=(0,8))
 
-        # ── SSM 포트 포워딩 안내 (RDS 선택 시 표시) ──────────────────
+        # ── RDS 전용 패널 (RDS 선택 시 표시) ────────────────────────
         self.f_rds_guide = tk.Frame(f6, bg=C_DEEP)
-        gi = tk.Frame(self.f_rds_guide, bg=C_DEEP); gi.pack(fill=tk.X, padx=16, pady=8)
+        gi = tk.Frame(self.f_rds_guide, bg=C_DEEP); gi.pack(fill=tk.X, padx=14, pady=8)
 
         # 제목
-        th = tk.Frame(gi, bg=C_DEEP); th.pack(fill=tk.X, pady=(0,6))
-        tk.Label(th, text="⚡", bg=C_DEEP, fg=C_GOLD, font=(_UI,10)).pack(side=tk.LEFT)
-        tk.Label(th, text="  SSM 포트 포워딩 사전 설정 필요", bg=C_DEEP, fg=C_GOLD,
+        th = tk.Frame(gi, bg=C_DEEP); th.pack(fill=tk.X, pady=(0,4))
+        tk.Label(th, text="⚡", bg=C_DEEP, fg=C_GOLD, font=(_UI,11)).pack(side=tk.LEFT)
+        tk.Label(th, text="  AWS RDS  ·  SSM 포트 포워딩 자동화", bg=C_DEEP, fg=C_GOLD,
                  font=(_UI,9,"bold")).pack(side=tk.LEFT)
 
-        # 설명
-        tk.Label(gi, text="RDS는 직접 접근이 불가하므로, 진단 전 아래 명령을\n"
-                          "터미널에서 먼저 실행해 터널을 열어야 합니다.",
-                 bg=C_DEEP, fg=C_SUB, font=(_UI,8), justify=tk.LEFT).pack(anchor=tk.W, pady=(0,8))
+        # ── 입력 필드 ──────────────────────────────────────────────
+        self._field(gi, "RDS 엔드포인트  (실제 RDS 호스트명)", self.ora_rds_ep, bg=C_DEEP)
 
-        # STEP 1
-        tk.Label(gi, text="STEP 1  —  터미널에서 실행",
-                 bg=C_DEEP, fg=C_TEAL, font=(_UI,8,"bold")).pack(anchor=tk.W)
-        cmd_box = tk.Frame(gi, bg=C_LINE); cmd_box.pack(fill=tk.X, pady=(3,8))
-        self.rds_cmd_txt = tk.Text(cmd_box, bg=C_LINE, fg=C_FG,
-                                   font=(_MONO,8), height=6,
+        pr = tk.Frame(gi, bg=C_DEEP); pr.pack(fill=tk.X)
+        lf = tk.Frame(pr, bg=C_DEEP); lf.pack(side=tk.LEFT, padx=(0,8), fill=tk.X, expand=True)
+        tk.Label(lf, text="RDS 포트", bg=C_DEEP, fg=C_SUB, font=(_UI,8)).pack(anchor=tk.W, pady=(4,1))
+        ttk.Entry(lf, textvariable=self.ora_port, width=9).pack(anchor=tk.W)
+        rf2 = tk.Frame(pr, bg=C_DEEP); rf2.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        tk.Label(rf2, text="로컬 포워딩 포트", bg=C_DEEP, fg=C_SUB, font=(_UI,8)).pack(anchor=tk.W, pady=(4,1))
+        ttk.Entry(rf2, textvariable=self.ora_local_port, width=9).pack(anchor=tk.W)
+
+        self._field(gi, "서비스명 / SID", self.ora_svc, bg=C_DEEP)
+        self._field(gi, "접속 계정", self.ora_user, bg=C_DEEP)
+        self._field(gi, "DB 패스워드", self.ora_pass, show="●", bg=C_DEEP)
+
+        # ── 자동 터널 옵션 ──────────────────────────────────────────
+        tk.Frame(gi, bg=C_LINE2, height=1).pack(fill=tk.X, pady=(8,0))
+        ar = tk.Frame(gi, bg=C_DEEP); ar.pack(fill=tk.X, pady=(6,4))
+        ttk.Checkbutton(ar, text="진단 시작 시 SSM 터널 자동 시작  (aws cli 필요)",
+                        variable=self.ora_auto_tunnel,
+                        command=self._on_auto_tunnel).pack(anchor=tk.W)
+        self.f_auto_info = tk.Frame(gi, bg=C_DEEP)
+        tk.Label(self.f_auto_info,
+                 text="  ✓  SSM 인스턴스 ID · 리전 → 왼쪽 CONNECTION 패널 AWS SSM 설정 사용\n"
+                      "  ✓  터널 연결 확인 후 자동으로 DB 진단 시작\n"
+                      "  ✓  진단 완료 후 터널 자동 종료",
+                 bg=C_DEEP, fg=C_TEAL, font=(_UI,8), justify=tk.LEFT).pack(anchor=tk.W)
+        self.f_auto_info.pack(fill=tk.X)
+
+        # ── 명령어 미리보기 ────────────────────────────────────────
+        tk.Frame(gi, bg=C_LINE2, height=1).pack(fill=tk.X, pady=(6,0))
+        tk.Label(gi, text="생성된 SSM 명령어  (참고용 / 자동 실행됨)",
+                 bg=C_DEEP, fg=C_SUB, font=(_UI,7,"bold")).pack(anchor=tk.W, pady=(6,2))
+        cmd_box = tk.Frame(gi, bg=C_LINE); cmd_box.pack(fill=tk.X)
+        self.rds_cmd_txt = tk.Text(cmd_box, bg=C_LINE, fg=C_SUB,
+                                   font=(_MONO,7), height=5,
                                    relief=tk.FLAT, padx=10, pady=6,
                                    state=tk.DISABLED, wrap=tk.NONE)
         self.rds_cmd_txt.pack(fill=tk.X)
-        cp_btn = tk.Button(gi, text="📋  명령어 복사", bg=C_LINE, fg=C_TEAL,
-                           relief=tk.FLAT, font=(_UI,8), padx=8, pady=3,
-                           activebackground=C_LINE2, cursor="hand2",
-                           command=self._copy_rds_cmd)
-        cp_btn.pack(anchor=tk.W, pady=(0,8))
+        br = tk.Frame(gi, bg=C_DEEP); br.pack(fill=tk.X, pady=(4,0))
+        tk.Button(br, text="📋 복사", bg=C_LINE, fg=C_TEAL, relief=tk.FLAT,
+                  font=(_UI,8), padx=8, pady=3, cursor="hand2",
+                  activebackground=C_LINE2, command=self._copy_rds_cmd).pack(side=tk.LEFT)
+        self.tunnel_status_lbl = tk.Label(br, text="", bg=C_DEEP, fg=C_MUTE, font=(_UI,8))
+        self.tunnel_status_lbl.pack(side=tk.LEFT, padx=(10,0))
 
-        # STEP 2
-        tk.Label(gi, text="STEP 2  —  아래 접속 정보 입력 후 진단 시작",
-                 bg=C_DEEP, fg=C_TEAL, font=(_UI,8,"bold")).pack(anchor=tk.W, pady=(0,4))
-        tk.Label(gi, text="호스트: 127.0.0.1   /   포트: localPortNumber 값",
-                 bg=C_DEEP, fg=C_MUTE, font=(_UI,8)).pack(anchor=tk.W)
+        self._update_rds_cmd()
 
-        self._update_rds_cmd()   # 초기 렌더링
-
-        self._field(f6, "DB 호스트 / IP", self.ora_host)
-        ph = tk.Frame(f6, bg=C_CARD); ph.pack(fill=tk.X, padx=16)
+        # ── 비-RDS 공통 DB 접속 필드 (server/docker용) ───────────
+        self.f_nonrds = tk.Frame(f6, bg=C_CARD)
+        self._field(self.f_nonrds, "DB 호스트 / IP", self.ora_host, bg=C_CARD)
+        ph = tk.Frame(self.f_nonrds, bg=C_CARD); ph.pack(fill=tk.X, padx=16)
         pf2 = tk.Frame(ph, bg=C_CARD); pf2.pack(side=tk.LEFT, padx=(0,8))
         tk.Label(pf2, text="포트", bg=C_CARD, fg=C_SUB, font=(_UI,8)).pack(anchor=tk.W, pady=(4,1))
         ttk.Entry(pf2, textvariable=self.ora_port, width=9).pack()
         sf2 = tk.Frame(ph, bg=C_CARD); sf2.pack(side=tk.LEFT)
         tk.Label(sf2, text="서비스명/SID", bg=C_CARD, fg=C_SUB, font=(_UI,8)).pack(anchor=tk.W, pady=(4,1))
         ttk.Entry(sf2, textvariable=self.ora_svc, width=16).pack()
-        self._field(f6, "접속 계정",  self.ora_user)
-        self._field(f6, "DB 패스워드", self.ora_pass, show="●")
+        self._field(self.f_nonrds, "접속 계정",  self.ora_user, bg=C_CARD)
+        self._field(self.f_nonrds, "DB 패스워드", self.ora_pass, show="●", bg=C_CARD)
+
         self.opt_frames["6"] = f6
 
     def _on_mod(self):
@@ -530,36 +560,38 @@ class VulnScannerGUI:
 
     def _on_ora_deploy(self):
         if not hasattr(self, "f_rds_guide"): return
-        if self.ora_deploy.get() == "rds":
+        is_rds = self.ora_deploy.get() == "rds"
+        if is_rds:
             self._update_rds_cmd()
-            self.f_rds_guide.pack(fill=tk.X, padx=16, pady=(6,4))
+            self.f_rds_guide.pack(fill=tk.X, pady=(4, 0))
+            self.f_nonrds.pack_forget()
         else:
             self.f_rds_guide.pack_forget()
+            self.f_nonrds.pack(fill=tk.X)
 
-    def _get_rds_host(self) -> str:
-        """SSM 아이디가 있으면 실제 RDS 엔드포인트, 없으면 플레이스홀더"""
-        h = self.ora_host.get().strip()
-        return h if h and h != "localhost" else "your-rds-endpoint.rds.amazonaws.com"
+    def _on_auto_tunnel(self):
+        if not hasattr(self, "f_auto_info"): return
+        if self.ora_auto_tunnel.get():
+            self.f_auto_info.pack(fill=tk.X)
+        else:
+            self.f_auto_info.pack_forget()
 
     def _update_rds_cmd(self):
         if not hasattr(self, "rds_cmd_txt"): return
-        iid    = self.ssm_id.get().strip()     or "i-xxxxxxxxxxxxxxxxx"
-        region = self.ssm_region.get().strip() or "ap-northeast-2"
-        host   = self._get_rds_host()
-        port   = self.ora_port.get().strip()   or "1521"
-        local  = port   # localPort = remotePort (변경 가능)
-
+        iid    = self.ssm_id.get().strip()        or "i-xxxxxxxxxxxxxxxxx"
+        region = self.ssm_region.get().strip()    or "ap-northeast-2"
+        ep     = self.ora_rds_ep.get().strip()    or "your-rds.rds.amazonaws.com"
+        port   = self.ora_port.get().strip()      or "1521"
+        local  = self.ora_local_port.get().strip() or "11521"
         cmd = (
             f"aws ssm start-session \\\n"
             f"    --region {region} \\\n"
             f"    --target {iid} \\\n"
             f"    --document-name AWS-StartPortForwardingSessionToRemoteHost \\\n"
-            f"    --parameters '{{"
-            f'"host":["{host}"],'
-            f'"portNumber":["{port}"],'
-            f'"localPortNumber":["{local}"]'
-            f"}}'"
-        )
+            f"    --parameters "
+            f"'{{\"host\":[\"{ep}\"],"
+            f"\"portNumber\":[\"{port}\"],"
+            f"\"localPortNumber\":[\"{local}\"]}}'")
         self.rds_cmd_txt.config(state=tk.NORMAL)
         self.rds_cmd_txt.delete("1.0", tk.END)
         self.rds_cmd_txt.insert("1.0", cmd)
@@ -682,6 +714,11 @@ class VulnScannerGUI:
         old = sys.stdout; sys.stdout = StdoutQueue(self.output_q); executor = None
         try:
             executor = self._make_executor()
+            # RDS + 자동 터널 시작
+            if (self.mod_key.get() == "6" and
+                    self.ora_deploy.get() == "rds" and
+                    self.ora_auto_tunnel.get()):
+                self._start_ssm_tunnel()
             opts     = self._make_opts(executor)
             k        = self.mod_key.get()
             Cls      = MODULES[k]["loader"]()
@@ -706,6 +743,7 @@ class VulnScannerGUI:
             if executor:
                 try: executor.close()
                 except: pass
+            self._stop_ssm_tunnel()
 
     def _make_executor(self):
         m = self.conn_mode.get()
@@ -804,13 +842,90 @@ class VulnScannerGUI:
             opts["user"]    = self.db_user.get().strip()
             if opts["user"]: opts["password"] = self.db_pass.get()
         elif k == "6":
-            opts.update(deploy_type=self.ora_deploy.get(),
-                        db_host=self.ora_host.get().strip() or t,
-                        db_port=int(self.ora_port.get() or 1521),
+            deploy = self.ora_deploy.get()
+            if deploy == "rds":
+                # RDS: 터널 통해 127.0.0.1:localPort 로 접속
+                db_host = "127.0.0.1"
+                db_port = int(self.ora_local_port.get() or 11521)
+            else:
+                db_host = self.ora_host.get().strip() or t
+                db_port = int(self.ora_port.get() or 1521)
+            opts.update(deploy_type=deploy,
+                        db_host=db_host,
+                        db_port=db_port,
                         service_name=self.ora_svc.get().strip() or "ORCL",
                         db_user=self.ora_user.get().strip() or "system",
                         db_password=self.ora_pass.get())
         return opts
+
+    def _start_ssm_tunnel(self):
+        import subprocess, socket, time
+        iid    = self.ssm_id.get().strip()
+        region = self.ssm_region.get().strip() or "ap-northeast-2"
+        ep     = self.ora_rds_ep.get().strip()
+        port   = self.ora_port.get().strip()       or "1521"
+        local  = self.ora_local_port.get().strip() or "11521"
+
+        if not iid:
+            raise ValueError("SSM 인스턴스 ID를 입력하세요.\n(CONNECTION → AWS SSM → EC2 인스턴스 ID)")
+        if not ep:
+            raise ValueError("RDS 엔드포인트를 입력하세요.\n(Oracle 옵션 → RDS 엔드포인트)")
+
+        params = (f'{{"host":["{ep}"],'
+                  f'"portNumber":["{port}"],'
+                  f'"localPortNumber":["{local}"]}}')
+        cmd = ["aws", "ssm", "start-session",
+               "--region", region,
+               "--target", iid,
+               "--document-name", "AWS-StartPortForwardingSessionToRemoteHost",
+               "--parameters", params]
+
+        # IAM 키 직접 입력인 경우 환경변수 주입
+        env = os.environ.copy()
+        if self.ssm_cred.get() == "1":
+            if self.ssm_ak.get(): env["AWS_ACCESS_KEY_ID"]     = self.ssm_ak.get()
+            if self.ssm_sk.get(): env["AWS_SECRET_ACCESS_KEY"]  = self.ssm_sk.get()
+            if self.ssm_tok.get(): env["AWS_SESSION_TOKEN"]     = self.ssm_tok.get()
+
+        print(f"  → SSM 터널 시작 중... (127.0.0.1:{local} → {ep}:{port})")
+        self.root.after(0, lambda: self.tunnel_status_lbl.config(
+            text="🔄 터널 연결 중...", fg=C_WARN))
+
+        self._ssm_proc = subprocess.Popen(cmd, env=env,
+                                           stdout=subprocess.DEVNULL,
+                                           stderr=subprocess.DEVNULL)
+
+        # 포트가 열릴 때까지 최대 30초 대기
+        local_port = int(local)
+        for i in range(30):
+            time.sleep(1)
+            try:
+                with socket.create_connection(("127.0.0.1", local_port), timeout=1):
+                    break
+            except OSError:
+                if i % 5 == 4:
+                    print(f"  → 터널 대기 중... ({i+1}s)")
+        else:
+            self._ssm_proc.terminate()
+            self._ssm_proc = None
+            raise RuntimeError(
+                f"SSM 터널 연결 시간 초과 (30s)\n\n"
+                f"  1) aws cli 가 설치·로그인 상태인지 확인\n"
+                f"  2) SSM 인스턴스 ID가 올바른지 확인\n"
+                f"  3) 인스턴스에 SSM Agent 및 RDS 접근 권한 확인")
+
+        print(f"  ✓ SSM 터널 연결 완료 (127.0.0.1:{local})")
+        self.root.after(0, lambda: self.tunnel_status_lbl.config(
+            text=f"✓ 터널 열림  127.0.0.1:{local}", fg=C_GREEN))
+
+    def _stop_ssm_tunnel(self):
+        if self._ssm_proc and self._ssm_proc.poll() is None:
+            self._ssm_proc.terminate()
+            print("  ✓ SSM 터널 종료")
+        self._ssm_proc = None
+        self.root.after(0, lambda: (
+            hasattr(self, "tunnel_status_lbl") and
+            self.tunnel_status_lbl.config(text="", fg=C_MUTE)))
 
     def _on_done(self, report):
         self.run_btn.config(state=tk.NORMAL, bg=C_GOLD)
