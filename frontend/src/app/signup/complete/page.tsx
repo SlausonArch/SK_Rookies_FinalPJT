@@ -1,2 +1,2 @@
-import SignupComplete from '@/pages/SignupComplete'
+import SignupComplete from '@/views/SignupComplete'
 export default function SignupCompletePage() { return <SignupComplete /> }

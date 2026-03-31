@@ -1,2 +1,2 @@
-import OAuthCallback from '@/pages/OAuthCallback'
+import OAuthCallback from '@/views/OAuthCallback'
 export default function OAuthCallbackPage() { return <OAuthCallback /> }

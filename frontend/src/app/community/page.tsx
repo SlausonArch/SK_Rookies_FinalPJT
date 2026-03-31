@@ -1,2 +1,2 @@
-import Community from '@/pages/Community'
+import Community from '@/views/Community'
 export default function CommunityPage() { return <Community /> }

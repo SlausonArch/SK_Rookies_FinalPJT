@@ -1,2 +1,2 @@
-import Trends from '@/pages/Trends'
+import Trends from '@/views/Trends'
 export default function TrendsPage() { return <Trends /> }

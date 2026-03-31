@@ -1,2 +1,2 @@
-import Support from '@/pages/Support'
+import Support from '@/views/Support'
 export default function SupportPage() { return <Support /> }
