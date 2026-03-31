@@ -166,12 +166,19 @@ def _build_executor(mode: str):
                 session_token = _ask_secret("Session Token")
 
         print()
-        print(f"  {CYAN('→')} SSM 연결 확인 중 ({instance_id} / {region})...")
+        print("  대상 OS: 1) Linux  2) Windows")
+        os_choice = _ask("번호 선택", "1")
+        platform = "windows" if os_choice == "2" else "linux"
+        ping_cmd = "echo OK" if platform == "linux" else "Write-Output OK"
+
+        print()
+        print(f"  {CYAN('→')} SSM 연결 확인 중 ({instance_id} / {region} / {platform})...")
         try:
             from core.remote import SSMExecutor
-            executor = SSMExecutor(instance_id, region, access_key, secret_key, session_token)
+            executor = SSMExecutor(instance_id, region, access_key, secret_key,
+                                   session_token, platform=platform)
             # 간단한 ping 명령으로 연결 확인
-            rc, out, err = executor.run_shell("echo OK", timeout=30)
+            rc, out, err = executor.run_shell(ping_cmd, timeout=30)
             if rc != 0 or "OK" not in out:
                 raise RuntimeError(err or "응답 없음")
             print(f"  {GREEN('✓')} SSM 연결 성공")

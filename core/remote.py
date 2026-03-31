@@ -102,6 +102,7 @@ class SSMExecutor:
         aws_access_key_id: Optional[str] = None,
         aws_secret_access_key: Optional[str] = None,
         aws_session_token: Optional[str] = None,
+        platform: str = "linux",   # "linux" | "windows"
     ):
         try:
             import boto3
@@ -110,6 +111,11 @@ class SSMExecutor:
 
         self.instance_id = instance_id
         self.region = region
+        # Linux: AWS-RunShellScript / Windows: AWS-RunPowerShellScript
+        self._document = (
+            "AWS-RunPowerShellScript" if platform == "windows"
+            else "AWS-RunShellScript"
+        )
 
         session_kwargs: dict = dict(region_name=region)
         if aws_access_key_id:
@@ -127,7 +133,7 @@ class SSMExecutor:
         try:
             resp = self._ssm.send_command(
                 InstanceIds=[self.instance_id],
-                DocumentName="AWS-RunShellScript",
+                DocumentName=self._document,
                 Parameters={"commands": [cmd]},
                 TimeoutSeconds=max(timeout, 10),
             )
