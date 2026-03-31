@@ -181,296 +181,387 @@ class LinuxScanner(BaseScanner):
     # 1. 계정 관리
     # ══════════════════════════════════════════════════════════
 
+    # ══════════════════════════════════════════════════════════
+    # 1. 계정 관리
+    # ══════════════════════════════════════════════════════════
+
     def _a01(self):
-        """1.1 로그인 설정"""
-        cid, name = "1.1", "로그인 설정"
-        desc = "로그인 실패 기록, login.defs 기본 설정, PAM 로그인 정책을 점검합니다."
-        rec  = "login.defs: FAILLOG_ENAB yes, LOG_UNKFAIL_ENAB yes 설정 / PAM faillock 적용"
-
-        content = self._read_file("/etc/login.defs") or ""
-        issues = []
-        settings = {}
-        for line in content.splitlines():
-            s = line.strip()
-            if s and not s.startswith("#"):
-                parts = s.split()
-                if len(parts) >= 2:
-                    settings[parts[0]] = parts[1]
-
-        if settings.get("FAILLOG_ENAB", "no").lower() != "yes":
-            issues.append("FAILLOG_ENAB 미설정(yes 권고)")
-        if settings.get("LOG_UNKFAIL_ENAB", "no").lower() != "yes":
-            issues.append("LOG_UNKFAIL_ENAB 미설정(yes 권고)")
-
-        # PAM faillock/tally2 확인
-        pam = self._pam_content()
-        if "pam_faillock" not in pam and "pam_tally2" not in pam:
-            issues.append("PAM 로그인 실패 잠금 미설정(pam_faillock/tally2)")
-
-        if issues:
-            self.vulnerable(cid, name, Severity.MEDIUM, desc,
-                            " / ".join(issues), rec, "\n".join(
-                                f"{k}={v}" for k, v in settings.items()
-                                if k in ("FAILLOG_ENAB", "LOG_UNKFAIL_ENAB")))
-        else:
-            self.safe(cid, name, Severity.MEDIUM, desc,
-                      "로그인 실패 로깅 및 잠금 정책 설정됨", rec)
+        """1.1 로그인 설정 — N/A"""
+        self.skipped(
+            "1.1", "로그인 설정", Severity.MEDIUM,
+            "로그인 관련 정책(최대 로그인 시도 횟수, 세션 잠금 등)을 점검합니다.",
+            "N/A — 해당 항목은 운영 정책 인터뷰 기반으로 자동 진단 불가합니다.",
+            "운영 담당자 인터뷰 및 관련 정책 문서 확인",
+        )
 
     def _a02(self):
         """1.2 Default 계정 삭제"""
         cid, name = "1.2", "Default 계정 삭제"
-        desc = "OS 설치 시 기본 생성되는 불필요한 계정이 삭제되었는지 점검합니다."
-        rec  = "userdel <계정명> 으로 불필요한 기본 계정 삭제"
+        desc = ("lp, uucp, nuucp 등 OS 기본 생성 계정이 shell 제한 없이 "
+                "존재하는지 점검합니다.")
+        rec  = "userdel <계정명> 으로 불필요한 기본 계정 삭제 또는 shell을 /sbin/nologin으로 변경"
 
-        content = self._read_file("/etc/passwd") or ""
-        found = [a for a in _DEFAULT_ACCOUNTS
-                 if any(l.startswith(a + ":") for l in content.splitlines())]
+        cmd = 'egrep "^(lp|uucp|nuucp):" /etc/passwd | egrep -v "false|nologin"'
+        rc, out, err = self._run_shell(cmd)
+        found = [l for l in out.splitlines() if l.strip()]
         if found:
             self.vulnerable(cid, name, Severity.MEDIUM, desc,
-                            f"기본 계정 잔존: {', '.join(sorted(found))}", rec)
+                            f"shell 미제한 기본 계정 {len(found)}개 발견:\n" +
+                            "\n".join(found),
+                            rec, command=cmd, cmd_output=out or "(출력 없음)")
         else:
-            self.safe(cid, name, Severity.MEDIUM, desc, "기본 계정 삭제됨", rec)
+            self.safe(cid, name, Severity.MEDIUM, desc,
+                      "lp/uucp/nuucp 계정이 없거나 shell이 false/nologin으로 제한됨",
+                      rec, command=cmd, cmd_output=out or "(출력 없음)")
 
     def _a03(self):
         """1.3 일반계정 root 권한 관리"""
         cid, name = "1.3", "일반계정 root 권한 관리"
-        desc = "sudo 권한 부여가 최소화되었는지, NOPASSWD 설정이 없는지 점검합니다."
-        rec  = "/etc/sudoers에서 NOPASSWD:ALL 항목 제거, sudo 권한을 필요한 계정에만 부여"
+        desc = "UID=0인 계정이 root 하나만 존재하는지 점검합니다."
+        rec  = "root 외 UID=0 계정의 UID를 고유값으로 변경"
+
+        cmd = "awk -F: '$3 == 0 { print $0 }' /etc/passwd"
+        rc, out, err = self._run_shell(cmd)
+        uid0_lines = [l for l in out.splitlines() if l.strip()]
+        # root만 있으면 양호
+        uid0_users = [l.split(":")[0] for l in uid0_lines if l.strip()]
+        extra = [u for u in uid0_users if u != "root"]
+        if extra:
+            self.vulnerable(cid, name, Severity.HIGH, desc,
+                            f"UID=0 계정이 {len(uid0_users)}개 (root 외 {len(extra)}개): "
+                            f"{', '.join(extra)}",
+                            rec, command=cmd, cmd_output=out)
+        elif not uid0_lines:
+            self.manual(cid, name, Severity.HIGH, desc,
+                        "UID=0 계정 조회 결과 없음 — 수동 확인 필요",
+                        rec, command=cmd, cmd_output=out or err)
+        else:
+            self.safe(cid, name, Severity.HIGH, desc,
+                      "UID=0 계정이 root 하나만 존재",
+                      rec, command=cmd, cmd_output=out)
+
+    def _a04(self):
+        """1.4 /etc/passwd 파일 권한 설정 (passwd + shadow 동시 점검)"""
+        cid, name = "1.4", "/etc/passwd 파일 권한 설정"
+        desc = ("/etc/passwd 소유자 root·권한 644, "
+                "/etc/shadow 소유자 root·권한 400(또는 r--------) 여부를 점검합니다.")
+        rec  = ("chmod 644 /etc/passwd && chown root /etc/passwd\n"
+                "chmod 400 /etc/shadow && chown root /etc/shadow")
+
+        cmd_passwd = (
+            "ls -l /etc/passwd | "
+            "awk '$3 == \"root\" && $1 ~ /^-rw-r--r--/ {print \"PASS\"} "
+            "!($3 == \"root\" && $1 ~ /^-rw-r--r--/) {print \"FAIL: \" $0}'"
+        )
+        cmd_shadow = (
+            "ls -l /etc/shadow | "
+            "awk '$3 == \"root\" && $1 ~ /^-r--------/ {print \"PASS\"} "
+            "!($3 == \"root\" && $1 ~ /^-r--------/) {print \"FAIL: \" $0}'"
+        )
+
+        _, out_p, _ = self._run_shell(cmd_passwd)
+        _, out_s, _ = self._run_shell(cmd_shadow)
+
+        combined_cmd    = f"# /etc/passwd\n{cmd_passwd}\n\n# /etc/shadow\n{cmd_shadow}"
+        combined_output = f"[/etc/passwd]\n{out_p or '(출력 없음)'}\n\n[/etc/shadow]\n{out_s or '(출력 없음)'}"
 
         issues = []
-        # sudoers 파일 + sudoers.d 디렉터리 전체 검사
-        sudo_content = self._read_file("/etc/sudoers") or ""
-        for f in glob.glob("/etc/sudoers.d/*"):
-            c = self._read_file(f)
-            if c:
-                sudo_content += f"\n# === {f} ===\n" + c
-
-        if not sudo_content:
-            self.manual(cid, name, Severity.HIGH, desc,
-                        "/etc/sudoers 읽기 실패 — root 권한으로 재시도 필요", rec)
-            return
-
-        for line in sudo_content.splitlines():
-            s = line.strip()
-            if s.startswith("#") or not s:
-                continue
-            if "NOPASSWD" in s and "ALL" in s:
-                issues.append(f"NOPASSWD:ALL 항목 발견: {s}")
-            if s.startswith("ALL") and "ALL=(ALL)" in s:
-                issues.append(f"과도한 sudo 권한: {s}")
-
-        # wheel/sudo 그룹 멤버 수
-        group = self._read_file("/etc/group") or ""
-        admin_members = []
-        for line in group.splitlines():
-            parts = line.split(":")
-            if len(parts) >= 4 and parts[0] in ("wheel", "sudo"):
-                members = [m for m in parts[3].split(",") if m.strip()]
-                admin_members.extend(members)
-
-        if len(admin_members) > 5:
-            issues.append(f"sudo/wheel 그룹 멤버 과다 ({len(admin_members)}명): "
-                          f"{', '.join(admin_members)}")
+        if out_p and "PASS" not in out_p:
+            issues.append(f"/etc/passwd: {out_p}")
+        if out_s and "PASS" not in out_s:
+            issues.append(f"/etc/shadow: {out_s}")
+        # shadow 파일이 아예 없는 경우
+        if not out_s:
+            issues.append("/etc/shadow 확인 불가 (root 권한 필요 또는 파일 없음)")
 
         if issues:
             self.vulnerable(cid, name, Severity.HIGH, desc,
-                            "\n".join(issues), rec)
+                            "\n".join(issues), rec,
+                            command=combined_cmd, cmd_output=combined_output)
         else:
             self.safe(cid, name, Severity.HIGH, desc,
-                      f"sudo 권한 적절히 관리됨 (멤버 {len(admin_members)}명)", rec)
-
-    def _a04(self):
-        """1.4 /etc/passwd 파일 권한 설정"""
-        self._chk_perm("1.4", "/etc/passwd 파일 권한 설정",
-                       "/etc/passwd", 0o644, Severity.HIGH,
-                       "chown root /etc/passwd && chmod 644 /etc/passwd")
+                      "/etc/passwd (644/root), /etc/shadow (400/root) — 양호",
+                      rec, command=combined_cmd, cmd_output=combined_output)
 
     def _a05(self):
         """1.5 /etc/group 파일 권한 설정"""
-        self._chk_perm("1.5", "/etc/group 파일 권한 설정",
-                       "/etc/group", 0o644, Severity.HIGH,
-                       "chown root /etc/group && chmod 644 /etc/group")
+        cid, name = "1.5", "/etc/group 파일 권한 설정"
+        desc = "/etc/group 파일의 소유자가 root이고 권한이 644 이하인지 점검합니다."
+        rec  = "chown root /etc/group && chmod 644 /etc/group"
+
+        cmd = "ls -al /etc/group"
+        rc, out, err = self._run_shell(cmd)
+
+        issues = []
+        if rc == 0 and out:
+            # 출력 예: -rw-r--r--  1 root root 1234 ...
+            parts = out.splitlines()[0].split() if out.splitlines() else []
+            if len(parts) >= 3:
+                perm_str, owner = parts[0], parts[2]
+                if owner != "root":
+                    issues.append(f"소유자: {owner} (root 권고)")
+                # perm_str 예: -rw-r--r-- → 644
+                allowed = {"-rw-r--r--", "-rw-------", "-r--r--r--", "-r--------"}
+                if perm_str not in allowed and len(perm_str) >= 10:
+                    issues.append(f"권한: {perm_str} (644 이하 권고)")
+        else:
+            issues.append(f"ls 실패: {err}")
+
+        if issues:
+            self.vulnerable(cid, name, Severity.HIGH, desc,
+                            "\n".join(issues), rec,
+                            command=cmd, cmd_output=out or err)
+        else:
+            self.safe(cid, name, Severity.HIGH, desc,
+                      f"소유자·권한 양호 ({out.split()[0] if out else '-'})",
+                      rec, command=cmd, cmd_output=out)
 
     def _a06(self):
         """1.6 /etc/shadow 파일 권한 설정"""
-        self._chk_perm("1.6", "/etc/shadow 파일 권한 설정",
-                       "/etc/shadow", 0o400, Severity.CRITICAL,
-                       "chown root /etc/shadow && chmod 400 /etc/shadow")
+        cid, name = "1.6", "/etc/shadow 파일 권한 설정"
+        desc = "/etc/shadow 파일 권한이 400 이하인지 점검합니다."
+        rec  = "chown root /etc/shadow && chmod 400 /etc/shadow"
+
+        # AIX 계열은 /etc/security/passwd 사용
+        for shadow_path in ("/etc/shadow", "/etc/security/passwd"):
+            cmd = f"ls -al {shadow_path}"
+            rc, out, err = self._run_shell(cmd)
+            if rc != 0 or not out:
+                continue
+
+            parts = out.splitlines()[0].split()
+            perm_str = parts[0] if parts else ""
+            owner    = parts[2] if len(parts) >= 3 else "?"
+            # 400 이하 허용 문자열
+            allowed_400 = {"-r--------", "----------"}
+            issues = []
+            if owner != "root":
+                issues.append(f"소유자: {owner}")
+            if perm_str not in allowed_400:
+                issues.append(f"권한: {perm_str} (r-------- 권고)")
+
+            if issues:
+                self.vulnerable(cid, name, Severity.CRITICAL, desc,
+                                "\n".join(issues), rec,
+                                command=cmd, cmd_output=out)
+            else:
+                self.safe(cid, name, Severity.CRITICAL, desc,
+                          f"{shadow_path}: {perm_str} {owner} — 양호",
+                          rec, command=cmd, cmd_output=out)
+            return
+
+        self.skipped(cid, name, Severity.CRITICAL, desc,
+                     "/etc/shadow · /etc/security/passwd 없음 — N/A",
+                     rec, command="ls -al /etc/shadow", cmd_output="(파일 없음)")
 
     def _a07(self):
         """1.7 패스워드 사용 규칙 적용"""
         cid, name = "1.7", "패스워드 사용 규칙 적용"
-        desc  = "최소 길이 8자 이상, 최대 사용기간 90일 이하, 복잡도 정책 적용 여부를 점검합니다."
-        rec   = ("login.defs: PASS_MIN_LEN 8, PASS_MAX_DAYS 90, PASS_MIN_DAYS 1\n"
-                 "PAM: pam_pwquality minlen=8 dcredit=-1 ucredit=-1 ocredit=-1")
+        desc = ("PASS_MIN_LEN(8자↑), PASS_MAX_DAYS(60일↓), PASS_MIN_DAYS(7일↑), "
+                "계정잠금 임계값(5↓), 패스워드 복잡도 모듈 적용 여부를 점검합니다.")
+        rec  = ("login.defs: PASS_MIN_LEN 8, PASS_MAX_DAYS 60, PASS_MIN_DAYS 7\n"
+                "PAM system-auth: pam_faillock deny=5 / pam_pwquality minlen=8\n"
+                "pam_unix.so remember=5 (재사용 금지)")
 
+        cmd = r"""echo "=== [패스워드 정책 점검 결과] ==="; \
+echo "1. 기본 설정 (/etc/login.defs)"; \
+grep -E "PASS_MIN_LEN|PASS_MAX_DAYS|PASS_MIN_DAYS" /etc/login.defs 2>/dev/null; \
+echo ""; echo "2. 계정 잠금 정책 (PAM)"; \
+grep -E "pam_tally|pam_faillock" /etc/pam.d/system-auth 2>/dev/null; \
+echo ""; echo "3. 패스워드 복잡성 규칙"; \
+grep "password" /etc/pam.d/system-auth 2>/dev/null | grep "requisite"; \
+echo ""; echo "4. 패스워드 재사용 금지 (History)"; \
+grep "pam_unix.so" /etc/pam.d/system-auth 2>/dev/null | grep "remember" """
+
+        _, out, _ = self._run_shell(cmd)
+
+        # 판정 로직
         issues = []
+
         min_len  = self._login_defs("PASS_MIN_LEN")
         max_days = self._login_defs("PASS_MAX_DAYS")
         min_days = self._login_defs("PASS_MIN_DAYS")
 
-        if min_len  is None or (isinstance(min_len, int)  and min_len  < 8):
-            issues.append(f"PASS_MIN_LEN={min_len} (8 미만)")
-        if max_days is None or (isinstance(max_days, int) and max_days > 90):
-            issues.append(f"PASS_MAX_DAYS={max_days} (90 초과)")
-        if min_days is None or (isinstance(min_days, int) and min_days < 1):
-            issues.append(f"PASS_MIN_DAYS={min_days} (1 미만)")
+        # 기준: 최소 길이 8↑, 최대 사용기간 60일↓, 최소 사용기간 7일↑
+        if min_len  is None or (isinstance(min_len,  int) and min_len  < 8):
+            issues.append(f"PASS_MIN_LEN={min_len} → 8자 이상 권고")
+        if max_days is None or (isinstance(max_days, int) and max_days > 60):
+            issues.append(f"PASS_MAX_DAYS={max_days} → 60일 이하 권고")
+        if min_days is None or (isinstance(min_days, int) and min_days < 7):
+            issues.append(f"PASS_MIN_DAYS={min_days} → 7일 이상 권고")
 
+        # 계정 잠금: deny 값 확인
         pam = self._pam_content()
+        has_lock = "pam_faillock" in pam or "pam_tally2" in pam
+        if not has_lock:
+            issues.append("계정 잠금 정책(pam_faillock/pam_tally2) 미설정")
+        else:
+            deny_vals = re.findall(r"deny=(\d+)", pam)
+            if deny_vals and max(int(v) for v in deny_vals) > 5:
+                issues.append(f"계정 잠금 임계값 deny={max(int(v) for v in deny_vals)} → 5 이하 권고")
+
+        # 복잡도 모듈
         if "pam_pwquality" not in pam and "pam_cracklib" not in pam:
             issues.append("패스워드 복잡도 모듈(pam_pwquality/pam_cracklib) 미적용")
-        else:
-            minlen_m = re.search(r"minlen=(\d+)", pam)
-            if minlen_m and int(minlen_m.group(1)) < 8:
-                issues.append(f"PAM minlen={minlen_m.group(1)} (8 미만)")
 
         if issues:
             self.vulnerable(cid, name, Severity.HIGH, desc,
-                            "\n".join(issues), rec)
+                            "\n".join(issues), rec,
+                            command=cmd, cmd_output=out or "(출력 없음)")
         else:
             self.safe(cid, name, Severity.HIGH, desc,
-                      f"패스워드 정책 적용됨 (PASS_MIN_LEN={min_len}, "
-                      f"PASS_MAX_DAYS={max_days})", rec)
+                      f"패스워드 정책 모두 충족 "
+                      f"(MIN_LEN={min_len}, MAX_DAYS={max_days}, MIN_DAYS={min_days})",
+                      rec, command=cmd, cmd_output=out or "(출력 없음)")
 
     def _a08(self):
-        """1.8 취약한 패스워드 점검"""
+        """1.8 취약한 패스워드 점검 — 인터뷰"""
         cid, name = "1.8", "취약한 패스워드 점검"
-        desc = "빈 패스워드 계정 존재 여부 및 패스워드 미설정 계정을 점검합니다."
-        rec  = ("빈 패스워드 계정에 즉시 패스워드 설정\n"
-                "전체 패스워드 강도 점검은 john/hashcat 등 별도 도구로 수행 권고")
+        desc = ("계정과 유사하지 않은 8자 이상 영문/숫자/특수문자 조합 패스워드 설정 여부를 점검합니다.\n"
+                "진단 방법: 인터뷰 (자동화로 실제 패스워드 강도 검증 불가)")
+        rec  = ("8자 이상, 영문 대소문자+숫자+특수문자 조합으로 패스워드 변경\n"
+                "계정명·생년월일 등 추측 가능한 문자열 사용 금지\n"
+                "john / hashcat 등 별도 도구로 패스워드 크래킹 점검 수행 권고")
 
-        shadow = self._read_file("/etc/shadow")
-        if shadow is None:
-            self.manual(cid, name, Severity.CRITICAL, desc,
-                        "/etc/shadow 읽기 실패 — root 권한 필요. 수동 점검 요망\n"
-                        "※ 전체 패스워드 강도(사전 공격 등)는 john/hashcat으로 별도 진단 필요", rec)
-            return
-
-        empty, locked, never_set = [], [], []
-        for line in shadow.splitlines():
-            parts = line.split(":")
-            if len(parts) < 2:
-                continue
-            user, pw = parts[0], parts[1]
-            if pw == "":
-                empty.append(user)
-            elif pw in ("!!", "!"):
-                locked.append(user)
-
-        issues = []
-        if empty:
-            issues.append(f"빈 패스워드 계정: {', '.join(empty)}")
-
-        note = ("※ 패스워드 강도(사전 공격·무차별 대입) 점검은 자동화 범위 초과 — "
-                "john/hashcat 등 별도 도구로 수행 필요")
-
-        if issues:
-            self.vulnerable(cid, name, Severity.CRITICAL, desc,
-                            "\n".join(issues) + "\n" + note, rec,
-                            f"잠금 계정: {', '.join(locked) or '없음'}")
-        else:
-            self.safe(cid, name, Severity.CRITICAL, desc,
-                      f"빈 패스워드 없음 (잠금 계정 {len(locked)}개)\n{note}", rec)
+        self.manual(cid, name, Severity.CRITICAL, desc,
+                    "인터뷰 기반 항목 — 자동 점검 불가\n"
+                    "담당자 인터뷰 또는 john/hashcat으로 수동 진단 필요",
+                    rec, command="(인터뷰 항목)", cmd_output="")
 
     def _a09(self):
         """1.9 로그인이 불필요한 계정 shell 제한"""
         cid, name = "1.9", "로그인이 불필요한 계정 shell 제한"
-        desc = "서비스 계정의 shell이 /sbin/nologin 또는 /bin/false 로 제한되어 있는지 점검합니다."
-        rec  = "usermod -s /sbin/nologin <계정명> 으로 서비스 계정 shell 변경"
+        desc = ("lp, uucp, nuucp 등 로그인이 필요 없는 계정의 shell이 "
+                "/bin/false 또는 /sbin/nologin으로 제한되어 있는지 점검합니다.")
+        rec  = "usermod -s /sbin/nologin <계정명>"
 
-        no_login = {"/bin/false", "/sbin/nologin", "/usr/sbin/nologin",
-                    "/dev/null", "/nonexistent"}
-        passwd = self._read_file("/etc/passwd") or ""
-        issues = []
-        for line in passwd.splitlines():
-            parts = line.split(":")
-            if len(parts) < 7:
-                continue
-            user, shell = parts[0], parts[6].strip()
-            if user in _SYSTEM_ACCOUNTS and shell not in no_login:
-                issues.append(f"{user}: {shell}")
+        cmd = (r'echo "=== [시스템 계정 쉘 제한 점검] ==="; '
+               r'egrep "^(lp|uucp|nuucp):" /etc/passwd | '
+               r"awk -F: '$NF !~ /false|nologin/ {print \" [취약] \" $0} "
+               r'$NF ~ /false|nologin/ {print " [양호] " $0}\'')
+        _, out, _ = self._run_shell(cmd)
 
-        if issues:
+        vuln_lines = [l for l in out.splitlines() if "[취약]" in l]
+        if vuln_lines:
             self.vulnerable(cid, name, Severity.MEDIUM, desc,
-                            f"shell 미제한 서비스 계정 {len(issues)}개:\n" +
-                            "\n".join(issues[:15]), rec)
+                            f"shell 미제한 계정 {len(vuln_lines)}개:\n" +
+                            "\n".join(vuln_lines),
+                            rec, command=cmd, cmd_output=out or "(출력 없음)")
         else:
             self.safe(cid, name, Severity.MEDIUM, desc,
-                      "서비스 계정 shell 제한 적용됨", rec)
+                      "lp/uucp/nuucp 계정이 없거나 shell이 false/nologin으로 제한됨",
+                      rec, command=cmd, cmd_output=out or "(출력 없음)")
 
     def _a10(self):
-        """1.10 SU(Select User) 사용 제한"""
+        """1.10 SU 사용 제한"""
         cid, name = "1.10", "SU 사용 제한"
-        desc = "일반 사용자가 su 명령으로 root 전환하지 못하도록 wheel 그룹 제한 여부를 점검합니다."
-        rec  = "/etc/pam.d/su에 'auth required pam_wheel.so use_uid' 추가"
+        desc = ("su 명령어를 특정 그룹(wheel)에 속한 사용자만 사용하도록 "
+                "제한되어 있는지 점검합니다.")
+        rec  = ("/etc/pam.d/su: auth required pam_wheel.so use_uid 추가\n"
+                "/etc/default/security: SU_ROOT_GROUP=wheel 설정")
 
-        su_pam = self._read_file("/etc/pam.d/su") or ""
-        if not su_pam:
-            self.manual(cid, name, Severity.HIGH, desc,
-                        "/etc/pam.d/su 읽기 실패 — 수동 확인 필요", rec)
-            return
+        cmd = (r'echo "=== [su 명령어 사용 제한 점검] ==="; '
+               r'echo "1. 보안 설정 확인 (SU_ROOT_GROUP)"; '
+               r'[ -f /etc/default/security ] && grep "SU_ROOT_GROUP" /etc/default/security || echo "파일 없음"; '
+               r'echo ""; echo "2. wheel 그룹 생성 여부"; '
+               r'grep "wheel" /etc/group 2>/dev/null; '
+               r'echo ""; echo "3. su 명령어 권한 확인"; '
+               r'ls -l /bin/su /usr/bin/su 2>/dev/null; '
+               r'echo ""; echo "4. PAM su 설정"; '
+               r'grep -E "pam_wheel|pam_rootok" /etc/pam.d/su 2>/dev/null')
+        _, out, _ = self._run_shell(cmd)
 
-        has_wheel = any(
+        # PAM wheel 설정 확인
+        pam_su = self._read_file("/etc/pam.d/su") or ""
+        has_pam_wheel = any(
             "pam_wheel" in l and "use_uid" in l and not l.strip().startswith("#")
-            for l in su_pam.splitlines()
+            for l in pam_su.splitlines()
         )
-        if not has_wheel:
-            self.vulnerable(cid, name, Severity.HIGH, desc,
-                            "pam_wheel 미적용 — 모든 사용자 su root 가능", rec,
-                            su_pam[:300])
-            return
+        # /etc/default/security 확인
+        security = self._read_file("/etc/default/security") or ""
+        has_su_root_group = "SU_ROOT_GROUP" in security
 
-        group = self._read_file("/etc/group") or ""
-        wheel_members = []
-        for line in group.splitlines():
-            parts = line.split(":")
-            if parts[0] == "wheel" and len(parts) >= 4:
-                wheel_members = [m for m in parts[3].split(",") if m.strip()]
-        self.safe(cid, name, Severity.HIGH, desc,
-                  f"pam_wheel 적용 (wheel 멤버: {', '.join(wheel_members) or '없음'})", rec)
+        if has_pam_wheel or has_su_root_group:
+            self.safe(cid, name, Severity.HIGH, desc,
+                      "su 사용 제한 설정됨 "
+                      f"(PAM wheel={'적용' if has_pam_wheel else '미적용'}, "
+                      f"SU_ROOT_GROUP={'적용' if has_su_root_group else '미적용'})",
+                      rec, command=cmd, cmd_output=out or "(출력 없음)")
+        else:
+            self.vulnerable(cid, name, Severity.HIGH, desc,
+                            "su 사용 제한 미설정 — 모든 사용자가 su root 가능",
+                            rec, command=cmd, cmd_output=out or "(출력 없음)")
 
     def _a11(self):
         """1.11 계정이 존재하지 않는 GID 금지"""
         cid, name = "1.11", "계정이 존재하지 않는 GID 금지"
-        desc = "/etc/passwd의 GID가 /etc/group에 정의되지 않은 계정을 점검합니다."
-        rec  = "orphan GID 계정의 그룹을 /etc/group에 추가하거나 계정 삭제"
+        desc = ("시스템 관리·운용에 불필요한 그룹이 /etc/group에 존재하는지 점검합니다.\n"
+                "진단 방법: /etc/group 내용 확인 및 불필요 그룹 검토")
+        rec  = "groupdel <그룹명> 으로 불필요한 그룹 삭제"
 
+        cmd = "cat /etc/group"
+        rc, out, _ = self._run_shell(cmd)
+
+        if rc != 0 or not out:
+            self.manual(cid, name, Severity.MEDIUM, desc,
+                        "/etc/group 읽기 실패 — 수동 확인 필요",
+                        rec, command=cmd, cmd_output=out or "")
+            return
+
+        # /etc/passwd에 존재하지 않는 GID를 가진 그룹(역방향) 검사
         passwd = self._read_file("/etc/passwd") or ""
-        group  = self._read_file("/etc/group")  or ""
-        defined = {l.split(":")[2] for l in group.splitlines() if len(l.split(":")) >= 3}
-        orphans = []
-        for line in passwd.splitlines():
-            parts = line.split(":")
-            if len(parts) >= 5 and parts[3] not in defined:
-                orphans.append(f"{parts[0]} (GID={parts[3]})")
-        if orphans:
+        passwd_gids = {l.split(":")[3] for l in passwd.splitlines() if len(l.split(":")) >= 4}
+        group_lines = out.splitlines()
+        defined_gids = {l.split(":")[2] for l in group_lines if len(l.split(":")) >= 3}
+
+        # passwd에 있는 GID 중 group에 없는 것
+        orphan_gids = passwd_gids - defined_gids
+        if orphan_gids:
             self.vulnerable(cid, name, Severity.MEDIUM, desc,
-                            f"미정의 GID 계정 {len(orphans)}개:\n" +
-                            "\n".join(orphans), rec)
+                            f"/etc/passwd에서 /etc/group에 없는 GID {len(orphan_gids)}개: "
+                            f"{', '.join(sorted(orphan_gids))}",
+                            rec, command=cmd, cmd_output=out[:500])
         else:
             self.safe(cid, name, Severity.MEDIUM, desc,
-                      "모든 계정 GID 정상", rec)
+                      "불필요한 그룹 미발견 — 수동으로 불필요 그룹 확인 권고",
+                      rec, command=cmd, cmd_output=out[:500])
 
     def _a12(self):
         """1.12 동일한 UID 금지"""
         cid, name = "1.12", "동일한 UID 금지"
-        desc = "/etc/passwd에서 동일한 UID를 가진 계정이 있는지 점검합니다."
-        rec  = "중복 UID 계정에 고유한 UID 재할당"
+        desc = "동일한 UID로 설정된 사용자 계정이 존재하는지 점검합니다."
+        rec  = "중복 UID 계정에 고유한 UID 재할당 (usermod -u <UID> <계정명>)"
 
-        passwd = self._read_file("/etc/passwd") or ""
+        cmd = "cat /etc/passwd"
+        rc, out, _ = self._run_shell(cmd)
+
+        if rc != 0 or not out:
+            self.manual(cid, name, Severity.MEDIUM, desc,
+                        "/etc/passwd 읽기 실패 — 수동 확인 필요",
+                        rec, command=cmd, cmd_output=out or "")
+            return
+
         uid_map: dict[str, list] = {}
-        for line in passwd.splitlines():
+        for line in out.splitlines():
             parts = line.split(":")
             if len(parts) >= 3:
                 uid_map.setdefault(parts[2], []).append(parts[0])
+
         dups = {uid: accs for uid, accs in uid_map.items() if len(accs) > 1}
         if dups:
-            detail = "\n".join(f"UID {uid}: {', '.join(accs)}"
+            detail = "\n".join(f"  UID {uid}: {', '.join(accs)}"
                                for uid, accs in dups.items())
             self.vulnerable(cid, name, Severity.MEDIUM, desc,
-                            f"중복 UID {len(dups)}개:\n{detail}", rec)
+                            f"중복 UID {len(dups)}개:\n{detail}",
+                            rec, command=cmd,
+                            cmd_output="\n".join(
+                                l for l in out.splitlines()
+                                if l.split(":")[2] in dups
+                            ) if dups else out[:300])
         else:
-            self.safe(cid, name, Severity.MEDIUM, desc, "UID 중복 없음", rec)
+            self.safe(cid, name, Severity.MEDIUM, desc,
+                      "UID 중복 없음",
+                      rec, command=cmd, cmd_output="(중복 없음)")
 
     # ══════════════════════════════════════════════════════════
     # 2. 파일 시스템
@@ -479,173 +570,307 @@ class LinuxScanner(BaseScanner):
     def _b01(self):
         """2.1 사용자 UMASK 설정"""
         cid, name = "2.1", "사용자 UMASK 설정"
-        desc = "시스템 기본 UMASK가 022 이상으로 설정되어 있는지 점검합니다."
-        rec  = "/etc/profile 및 /etc/bashrc에 umask 022 (또는 027) 설정"
+        desc = ("시스템 내에서 사용자가 파일 또는 디렉터리 생성 시 적용받는 umask 값을 점검합니다.\n"
+                "umask 022(027) 권고")
+        rec  = ("/etc/profile 및 /etc/bashrc에 'umask 022' (또는 027) 추가\n"
+                "bash shell 미사용 시 /etc/profile에 설정 (Ubuntu는 /etc/profile 우선)")
 
+        cmd1 = "cat /etc/profile | grep -i 'umask' | grep -v '#'"
+        cmd2 = "cat /etc/security/user 2>/dev/null | grep -i 'umask' | grep -v '#'"
+        _, out1, _ = self._run_shell(cmd1)
+        _, out2, _ = self._run_shell(cmd2)
+        combined_cmd = f"# 방법1\n{cmd1}\n\n# 방법2\n{cmd2}"
+        combined_out = (f"[/etc/profile]\n{out1 or '(출력 없음)'}\n\n"
+                        f"[/etc/security/user]\n{out2 or '(파일 없음)'}")
+
+        # umask 값 추출 (awk '$2 >= 22' 기준: 022→22, 027→27 으로 10진수 비교)
         umask_val = None
-        for path in ("/etc/profile", "/etc/bashrc", "/etc/bash.bashrc"):
-            c = self._read_file(path) or ""
-            for line in c.splitlines():
-                s = line.strip()
-                if s.startswith("umask") and not s.startswith("#"):
-                    parts = s.split()
-                    if len(parts) >= 2:
-                        umask_val = parts[1]
-                        break
-            if umask_val:
+        for line in (out1 + "\n" + out2).splitlines():
+            parts = line.strip().split()
+            if len(parts) >= 2:
+                umask_val = parts[-1].lstrip("0") or "0"
                 break
+        if not umask_val:
+            for p in ("/etc/bashrc", "/etc/bash.bashrc"):
+                c = self._read_file(p) or ""
+                for line in c.splitlines():
+                    s = line.strip()
+                    if s.lower().startswith("umask") and not s.startswith("#"):
+                        pts = s.split()
+                        if len(pts) >= 2:
+                            umask_val = pts[1].lstrip("0") or "0"
+                            break
+                if umask_val:
+                    break
 
-        if umask_val in ("022", "027", "0022", "0027"):
-            self.safe(cid, name, Severity.MEDIUM, desc,
-                      f"UMASK = {umask_val} (양호)", rec)
-        elif umask_val:
-            self.vulnerable(cid, name, Severity.MEDIUM, desc,
-                            f"UMASK = {umask_val} (022 미만)", rec)
+        try:
+            uval = int(umask_val) if umask_val else None
+        except ValueError:
+            uval = None
+
+        if uval is not None and uval >= 22:
+            self.safe(cid, name, Severity.LOW, desc,
+                      f"UMASK = 0{umask_val} (양호)",
+                      rec, command=combined_cmd, cmd_output=combined_out)
+        elif uval is not None:
+            self.vulnerable(cid, name, Severity.LOW, desc,
+                            f"UMASK = 0{umask_val} (022 미만 — 취약)",
+                            rec, command=combined_cmd, cmd_output=combined_out)
         else:
-            self.vulnerable(cid, name, Severity.MEDIUM, desc,
-                            "UMASK 미설정 — 기본값(022)이 적용되나 명시적 설정 권고", rec)
+            self.vulnerable(cid, name, Severity.LOW, desc,
+                            "UMASK 미설정",
+                            rec, command=combined_cmd, cmd_output=combined_out)
 
     def _b02(self):
         """2.2 SUID·SGID 설정"""
         cid, name = "2.2", "SUID·SGID 설정"
-        desc = "불필요한 SUID/SGID 비트가 설정된 파일을 점검합니다."
-        rec  = "불필요한 파일에 chmod -s <파일> 적용"
+        desc = ("불필요한 SUID/SGID 비트가 설정된 파일을 점검합니다.\n"
+                "사양서 제거 대상 목록 파일의 SUID/SGID 존재 여부 확인")
+        rec  = ("# chmod -s [파일명] 으로 불필요한 SUID/SGID 제거\n"
+                "제거 전 OS 및 서비스 영향 확인 필요")
 
-        rc, out, err = self._run_cmd(
-            "find /usr/bin /usr/sbin /bin /sbin -perm /6000 -type f 2>/dev/null",
-            timeout=20)
-        if rc != 0 and not out:
-            self.manual(cid, name, Severity.HIGH, desc,
-                        f"find 실패 — {err[:100]}", rec)
-            return
+        # 사양서 지정 명령어
+        cmd = r"find / -user root -type f \( -perm -4000 -o -perm -2000 \) -exec ls -al {} \; 2>/dev/null"
+        # 실제 탐색 범위 제한 (전체 / 탐색 시 시스템 부하)
+        cmd_exec = r"find /usr /bin /sbin /opt -user root -type f \( -perm -4000 -o -perm -2000 \) -exec ls -al {} \; 2>/dev/null"
+        _, out, _ = self._run_shell(cmd_exec, timeout=30)
 
-        known_safe = {
-            "/usr/bin/passwd", "/usr/bin/sudo", "/usr/bin/su", "/bin/su",
-            "/usr/bin/chsh", "/usr/bin/chfn", "/usr/bin/newgrp",
-            "/usr/bin/gpasswd", "/usr/bin/at", "/usr/bin/crontab",
-            "/usr/sbin/unix_chkpwd", "/usr/bin/pkexec",
+        # 사양서 명시 제거 대상 목록
+        remove_targets = {
+            "/sbin/dump", "/usr/bin/lpq-lpd", "/usr/bin/newgrp",
+            "/sbin/restore", "/usr/bin/lpr", "/usr/sbin/lpc",
+            "/sbin/unix_chkpwd", "/usr/bin/lpr-lpd", "/usr/sbin/lpc-lpd",
+            "/usr/bin/at", "/usr/bin/lprm", "/usr/sbin/traceroute",
+            "/usr/bin/lpq", "/usr/bin/lprm-lpd",
         }
-        files = [f.strip() for f in out.splitlines() if f.strip()]
-        suspicious = [f for f in files if f not in known_safe]
+        files = []
+        for line in out.splitlines():
+            if line.strip():
+                parts = line.split()
+                if parts:
+                    files.append(parts[-1])
 
-        if suspicious:
-            self.vulnerable(cid, name, Severity.HIGH, desc,
-                            f"의심 SUID/SGID 파일 {len(suspicious)}개:\n" +
-                            "\n".join(suspicious[:20]), rec)
+        found_remove = [f for f in files if f in remove_targets]
+        if found_remove:
+            self.vulnerable(cid, name, Severity.LOW, desc,
+                            f"제거 권고 목록 해당 파일 {len(found_remove)}개:\n" +
+                            "\n".join(found_remove),
+                            rec, command=cmd, cmd_output=out[:1000] or "(출력 없음)")
+        elif files:
+            self.manual(cid, name, Severity.LOW, desc,
+                        f"SUID/SGID 파일 {len(files)}개 — 허용 여부 수동 확인 필요:\n" +
+                        "\n".join(files[:20]),
+                        rec, command=cmd, cmd_output=out[:1000] or "(출력 없음)")
         else:
-            self.safe(cid, name, Severity.HIGH, desc,
-                      f"SUID/SGID 파일 {len(files)}개 — 모두 일반 허용 범위", rec)
+            self.safe(cid, name, Severity.LOW, desc,
+                      "SUID/SGID 파일 미발견 (양호)",
+                      rec, command=cmd, cmd_output=out or "(출력 없음)")
 
     def _b03(self):
         """2.3 /etc/(x)inetd.conf 파일 권한 설정"""
         cid, name = "2.3", "/etc/(x)inetd.conf 파일 권한 설정"
-        for path in ("/etc/inetd.conf", "/etc/xinetd.conf"):
-            if os.path.exists(path):
-                self._chk_perm(cid, name, path, 0o600, Severity.HIGH,
-                               f"chown root {path} && chmod 600 {path}")
-                return
-        self.skipped(cid, name, Severity.HIGH,
-                     "inetd/xinetd 설정 파일 권한 점검",
-                     "inetd/xinetd 미설치 — N/A", "해당 서비스 미사용 시 해당 없음")
+        desc = ("/etc/(x)inetd.conf 파일 및 디렉터리의 권한 중 Other에 쓰기 권한이 "
+                "부여되어 있는지 점검합니다.")
+        rec  = ("chown root /etc/(x)inetd.conf && chmod o-w /etc/(x)inetd.conf\n"
+                "chmod o-w /etc/(x)inetd.d/*")
+
+        found_path = None
+        for p in ("/etc/inetd.conf", "/etc/xinetd.conf"):
+            if os.path.exists(p):
+                found_path = p
+                break
+
+        cmd1 = f"ls -al {found_path or '/etc/inetd.conf'} 2>/dev/null"
+        cmd2 = "ls -ald /etc/inetd.d 2>/dev/null; ls -ald /etc/xinetd.d 2>/dev/null"
+        combined_cmd = f"{cmd1}\n{cmd2}"
+        _, out1, _ = self._run_shell(cmd1)
+        _, out2, _ = self._run_shell(cmd2)
+        combined_out = f"{out1 or '(파일 없음)'}\n{out2 or ''}"
+
+        if not found_path:
+            self.skipped(cid, name, Severity.HIGH, desc,
+                         "inetd/xinetd 미설치 — N/A", rec,
+                         command=combined_cmd, cmd_output=combined_out)
+            return
+
+        r = self._stat(found_path)
+        if r:
+            perm, owner = r
+            issues = []
+            if int(perm, 8) & 0o002:
+                issues.append(f"{found_path}: Other 쓰기 권한 있음 ({perm})")
+            if owner != "root":
+                issues.append(f"{found_path}: 소유자 {owner} (root 권고)")
+            if issues:
+                self.vulnerable(cid, name, Severity.HIGH, desc, "\n".join(issues), rec,
+                                command=combined_cmd, cmd_output=combined_out)
+            else:
+                self.safe(cid, name, Severity.HIGH, desc,
+                          f"{found_path}: Other 쓰기 권한 없음, 소유자 root (양호)",
+                          rec, command=combined_cmd, cmd_output=combined_out)
+        else:
+            self.manual(cid, name, Severity.HIGH, desc,
+                        f"{found_path} stat 실패 — root 권한으로 재확인 필요",
+                        rec, command=combined_cmd, cmd_output=combined_out)
 
     def _b04(self):
         """2.4 .history 파일 권한 설정"""
         cid, name = "2.4", ".history 파일 권한 설정"
-        desc = "root 및 사용자 홈 디렉터리의 .bash_history 파일 권한이 600 이하인지 점검합니다."
-        rec  = "chmod 600 ~/.bash_history (소유자 본인만 읽기/쓰기)"
+        desc = ("로그인 계정의 .bash_history, .history, .sh_history 파일의 권한이 "
+                "600(소유자 본인)으로 설정되어 있는지 점검합니다.")
+        rec  = ("chmod 600 [홈 디렉터리]/.bash_history\n"
+                "chown <사용자ID> [홈 디렉터리]/.bash_history")
+
+        # 전체 계정 홈 디렉터리 확인
+        cmd_list = ("cat /etc/passwd | awk -F':' 'length($6) > 0 {print $6}' "
+                    "| sort -u | grep -v '/bin/false' | grep -v 'nologin' | grep -v '#'")
+        _, home_out, _ = self._run_shell(cmd_list)
+        home_dirs = [d.strip() for d in home_out.splitlines() if d.strip() and d.strip() != "/"]
 
         issues = []
-        check_files = ["/root/.bash_history", "/root/.history"]
-        passwd = self._read_file("/etc/passwd") or ""
-        for line in passwd.splitlines():
-            parts = line.split(":")
-            if len(parts) >= 6 and parts[5] and parts[5] != "/":
-                for hf in (".bash_history", ".history", ".sh_history"):
-                    p = os.path.join(parts[5], hf)
-                    if p not in check_files:
-                        check_files.append(p)
-
-        for path in check_files:
-            if not os.path.exists(path):
+        checked = []
+        for home in home_dirs:
+            if not os.path.isdir(home):
                 continue
-            r = self._stat(path)
-            if r:
-                perm, owner = r
-                try:
-                    if int(perm, 8) > 0o600:
-                        issues.append(f"{path}: {perm} ({owner})")
-                except ValueError:
-                    pass
+            for hf in (".bash_history", ".history", ".sh_history"):
+                p = os.path.join(home, hf)
+                if not os.path.exists(p):
+                    continue
+                checked.append(p)
+                r = self._stat(p)
+                if r:
+                    perm, owner = r
+                    try:
+                        if int(perm, 8) > 0o600:
+                            issues.append(f"{p}: 권한 {perm} (600 초과)")
+                    except ValueError:
+                        pass
+
+        combined_cmd = (f"# 전체 계정 홈 디렉터리 확인\n{cmd_list}\n\n"
+                        "# 각 계정에 대한 권한 확인\n"
+                        "ls -al [계정 디렉터리 경로]/.bash_history")
+        combined_out = (f"[홈 디렉터리 목록]\n{home_out or '(출력 없음)'}\n\n"
+                        f"[점검 파일 {len(checked)}개]\n" + "\n".join(checked[:20]))
 
         if issues:
             self.vulnerable(cid, name, Severity.MEDIUM, desc,
-                            f"권한 과다 history 파일 {len(issues)}개:\n" +
-                            "\n".join(issues), rec)
+                            f"권한 과다 history 파일 {len(issues)}개:\n" + "\n".join(issues),
+                            rec, command=combined_cmd, cmd_output=combined_out)
+        elif not checked:
+            self.safe(cid, name, Severity.MEDIUM, desc,
+                      "점검할 history 파일 없음 (양호)",
+                      rec, command=combined_cmd, cmd_output=combined_out)
         else:
             self.safe(cid, name, Severity.MEDIUM, desc,
-                      "history 파일 권한 양호", rec)
+                      f"history 파일 {len(checked)}개 — 모두 권한 600 이하 (양호)",
+                      rec, command=combined_cmd, cmd_output=combined_out)
 
     def _b05(self):
         """2.5 Crontab 파일 권한 설정 및 관리"""
         cid, name = "2.5", "Crontab 파일 권한 설정 및 관리"
-        desc = "/etc/crontab, /etc/cron.d/, /etc/cron.*/  권한·소유자를 점검합니다."
-        rec  = "chown root /etc/crontab && chmod 640 /etc/crontab; cron.d/ 도 동일 적용"
+        desc = ("Crontab 관련 파일의 소유자가 root이며, 타사용자의 권한이 제거되어 "
+                "있는지 점검합니다.")
+        rec  = ("chmod o-rwx /etc/crontab /etc/cron.daily/* /etc/cron.hourly/* "
+                "/etc/cron.monthly/* /etc/cron.weekly/* /var/spool/cron/*\n"
+                "chown root /etc/crontab")
+
+        cmd = ("ls -al /etc/crontab 2>/dev/null; "
+               "ls -al /etc/cron.daily/* 2>/dev/null; "
+               "ls -al /etc/cron.hourly/* 2>/dev/null; "
+               "ls -al /etc/cron.monthly/* 2>/dev/null; "
+               "ls -al /etc/cron.weekly/* 2>/dev/null; "
+               "ls -al /var/spool/cron/* 2>/dev/null")
+        _, out, _ = self._run_shell(cmd, timeout=15)
 
         issues = []
-        for path in ["/etc/crontab"]:
-            if not os.path.exists(path):
-                continue
-            r = self._stat(path)
+        # /etc/crontab 소유자 및 Other 권한 체크
+        if os.path.exists("/etc/crontab"):
+            r = self._stat("/etc/crontab")
             if r:
                 perm, owner = r
-                try:
-                    if int(perm, 8) > 0o640:
-                        issues.append(f"{path}: 권한 {perm}")
-                except ValueError:
-                    pass
                 if owner != "root":
-                    issues.append(f"{path}: 소유자 {owner}")
+                    issues.append(f"/etc/crontab: 소유자 {owner} (root 권고)")
+                if int(perm, 8) & 0o007:
+                    issues.append(f"/etc/crontab: Other 권한 있음 ({perm})")
 
-        for d in ("/etc/cron.d", "/etc/cron.daily", "/etc/cron.weekly",
-                  "/etc/cron.monthly"):
+        # cron 디렉터리 내 파일 Other 권한 체크
+        for d in ("/etc/cron.d", "/etc/cron.daily", "/etc/cron.hourly",
+                  "/etc/cron.monthly", "/etc/cron.weekly", "/var/spool/cron"):
             if not os.path.isdir(d):
                 continue
-            r = self._stat(d)
-            if r:
-                perm, owner = r
-                try:
-                    if int(perm, 8) > 0o755:
-                        issues.append(f"{d}/: 권한 {perm}")
-                except ValueError:
-                    pass
-                if owner != "root":
-                    issues.append(f"{d}/: 소유자 {owner}")
+            _, ww_out, _ = self._run_shell(
+                f"find {d} -maxdepth 1 -perm /007 -not -type d 2>/dev/null")
+            for f in ww_out.splitlines():
+                if f.strip():
+                    issues.append(f"{f.strip()}: Other 권한 있음")
 
         if issues:
-            self.vulnerable(cid, name, Severity.MEDIUM, desc,
-                            "\n".join(issues), rec)
+            self.vulnerable(cid, name, Severity.HIGH, desc,
+                            "\n".join(issues[:15]), rec,
+                            command=cmd, cmd_output=out[:800] or "(출력 없음)")
         else:
-            self.safe(cid, name, Severity.MEDIUM, desc,
-                      "crontab 파일·디렉터리 권한 양호", rec)
+            self.safe(cid, name, Severity.HIGH, desc,
+                      "crontab 파일 소유자 root, Other 권한 없음 (양호)",
+                      rec, command=cmd, cmd_output=out[:800] or "(출력 없음)")
 
     def _b06(self):
         """2.6 /etc/profile 파일 권한 설정"""
-        self._chk_perm("2.6", "/etc/profile 파일 권한 설정",
-                       "/etc/profile", 0o644, Severity.MEDIUM,
-                       "chown root /etc/profile && chmod 644 /etc/profile")
+        cid, name = "2.6", "/etc/profile 파일 권한 설정"
+        desc = "/etc/profile 파일의 권한 중 Other에 쓰기 권한이 부여되어 있는지 점검합니다."
+        rec  = "chown root /etc/profile && chmod o-w /etc/profile"
+
+        cmd = "ls -ald /etc/profile"
+        _, out, _ = self._run_shell(cmd)
+        r = self._stat("/etc/profile")
+        if r:
+            perm, owner = r
+            if int(perm, 8) & 0o002:
+                self.vulnerable(cid, name, Severity.MEDIUM, desc,
+                                f"/etc/profile: Other 쓰기 권한 있음 ({perm})", rec,
+                                command=cmd, cmd_output=out or "(출력 없음)")
+            else:
+                self.safe(cid, name, Severity.MEDIUM, desc,
+                          f"/etc/profile: Other 쓰기 권한 없음 ({perm}, {owner}) — 양호",
+                          rec, command=cmd, cmd_output=out or "(출력 없음)")
+        else:
+            self.manual(cid, name, Severity.MEDIUM, desc,
+                        "/etc/profile 확인 실패 — 수동 확인 필요",
+                        rec, command=cmd, cmd_output=out or "(출력 없음)")
 
     def _b07(self):
         """2.7 /etc/hosts 파일 권한 설정"""
-        self._chk_perm("2.7", "/etc/hosts 파일 권한 설정",
-                       "/etc/hosts", 0o644, Severity.MEDIUM,
-                       "chown root /etc/hosts && chmod 644 /etc/hosts")
+        cid, name = "2.7", "/etc/hosts 파일 권한 설정"
+        desc = "/etc/hosts 파일의 권한 중 Other에 쓰기 권한이 부여되어 있는지 점검합니다."
+        rec  = "chown root /etc/hosts && chmod o-w /etc/hosts"
+
+        cmd = "ls -ald /etc/hosts"
+        _, out, _ = self._run_shell(cmd)
+        r = self._stat("/etc/hosts")
+        if r:
+            perm, owner = r
+            if int(perm, 8) & 0o002:
+                self.vulnerable(cid, name, Severity.MEDIUM, desc,
+                                f"/etc/hosts: Other 쓰기 권한 있음 ({perm})", rec,
+                                command=cmd, cmd_output=out or "(출력 없음)")
+            else:
+                self.safe(cid, name, Severity.MEDIUM, desc,
+                          f"/etc/hosts: Other 쓰기 권한 없음 ({perm}, {owner}) — 양호",
+                          rec, command=cmd, cmd_output=out or "(출력 없음)")
+        else:
+            self.manual(cid, name, Severity.MEDIUM, desc,
+                        "/etc/hosts 확인 실패",
+                        rec, command=cmd, cmd_output=out or "(출력 없음)")
 
     def _b08(self):
         """2.8 /etc/issue 파일 권한 설정"""
         cid, name = "2.8", "/etc/issue 파일 권한 설정"
-        desc = "/etc/issue의 권한 설정 및 OS 버전 등 민감 정보 노출 여부를 점검합니다."
-        rec  = ("chmod 644 /etc/issue /etc/issue.net\n"
-                "내용을 법적 경고 문구로 교체 (OS 버전·커널 정보 제거)")
+        desc = ("/etc/issue, /etc/issue.net 파일의 권한 중 Other에 쓰기 권한이 "
+                "부여되어 있는지 점검합니다.")
+        rec  = ("chown root /etc/issue /etc/issue.net\n"
+                "chmod o-w /etc/issue /etc/issue.net")
+
+        cmd = "ls -al /etc/issue 2>/dev/null; ls -al /etc/issue.net 2>/dev/null"
+        _, out, _ = self._run_shell(cmd)
 
         issues = []
         for path in ("/etc/issue", "/etc/issue.net"):
@@ -654,31 +879,32 @@ class LinuxScanner(BaseScanner):
             r = self._stat(path)
             if r:
                 perm, owner = r
-                try:
-                    if int(perm, 8) > 0o644:
-                        issues.append(f"{path}: 권한 {perm}")
-                except ValueError:
-                    pass
-            content = (self._read_file(path) or "").lower()
-            sensitive = ["ubuntu", "debian", "centos", "red hat", "fedora",
-                         "kernel", "release", "version", "linux"]
-            found = [k for k in sensitive if k in content]
-            if found:
-                issues.append(f"{path}: 민감 정보 노출 ({', '.join(found)})")
+                if int(perm, 8) & 0o002:
+                    issues.append(f"{path}: Other 쓰기 권한 있음 ({perm})")
 
         if issues:
-            self.vulnerable(cid, name, Severity.LOW, desc,
-                            "\n".join(issues), rec)
+            self.vulnerable(cid, name, Severity.MEDIUM, desc, "\n".join(issues), rec,
+                            command=cmd, cmd_output=out or "(출력 없음)")
         else:
-            self.safe(cid, name, Severity.LOW, desc,
-                      "/etc/issue 권한·내용 양호", rec)
+            self.safe(cid, name, Severity.MEDIUM, desc,
+                      "/etc/issue, /etc/issue.net: Other 쓰기 권한 없음 (양호)",
+                      rec, command=cmd, cmd_output=out or "(출력 없음)")
 
     def _b09(self):
         """2.9 사용자 홈 디렉터리 및 파일 관리"""
         cid, name = "2.9", "사용자 홈 디렉터리 및 파일 관리"
-        desc = "홈 디렉터리 권한(other 쓰기 금지), .netrc·.rhosts 파일 존재 여부를 점검합니다."
-        rec  = ("chmod 750 <홈디렉터리> / rm -f ~/.netrc ~/.rhosts\n"
-                ".netrc는 평문 자격증명 저장 위험")
+        desc = ("홈 디렉터리 권한 중 Other에 쓰기 권한이 없어야 하며, "
+                "홈 디렉터리가 존재하지 않는 계정이 없어야 합니다.")
+        rec  = ("chmod o-rwx [홈 디렉터리]\n"
+                "chmod o-w [홈 디렉터리 내 환경변수 파일]")
+
+        cmd1 = "ls -ald /home/* 2>/dev/null"
+        cmd2 = "cat /etc/passwd | grep 'bash'"
+        _, out1, _ = self._run_shell(cmd1)
+        _, out2, _ = self._run_shell(cmd2)
+        combined_cmd = f"{cmd1}\n\n{cmd2}"
+        combined_out = (f"[홈 디렉터리 목록]\n{out1 or '(출력 없음)'}\n\n"
+                        f"[bash 사용 계정]\n{out2 or '(출력 없음)'}")
 
         issues = []
         passwd = self._read_file("/etc/passwd") or ""
@@ -686,260 +912,338 @@ class LinuxScanner(BaseScanner):
             parts = line.split(":")
             if len(parts) < 7:
                 continue
-            user, home = parts[0], parts[5]
-            if not home or home == "/" or not os.path.isdir(home):
+            user, shell, home = parts[0], parts[6].strip(), parts[5]
+            if "nologin" in shell or "false" in shell or not home or home == "/":
+                continue
+            if not os.path.isdir(home):
+                issues.append(f"{user}: 홈 디렉터리 {home} 없음")
                 continue
             r = self._stat(home)
             if r:
                 perm, _ = r
-                try:
-                    if int(perm, 8) & 0o002:
-                        issues.append(f"{home}: other 쓰기 가능 ({perm})")
-                except ValueError:
-                    pass
-            for danger in (".netrc", ".rhosts"):
-                p = os.path.join(home, danger)
-                if os.path.exists(p):
-                    issues.append(f"{p}: 위험 파일 존재")
+                if int(perm, 8) & 0o002:
+                    issues.append(f"{home}: Other 쓰기 권한 있음 ({perm})")
 
         if issues:
             self.vulnerable(cid, name, Severity.HIGH, desc,
-                            f"{len(issues)}건 발견:\n" + "\n".join(issues[:15]), rec)
+                            "\n".join(issues[:15]), rec,
+                            command=combined_cmd, cmd_output=combined_out)
         else:
             self.safe(cid, name, Severity.HIGH, desc,
-                      "홈 디렉터리 권한 및 위험 파일 점검 양호", rec)
+                      "홈 디렉터리 권한 양호 (Other 쓰기 없음, 홈 디렉터리 존재)",
+                      rec, command=combined_cmd, cmd_output=combined_out)
 
     def _b10(self):
         """2.10 중요 디렉터리 파일 권한 설정"""
         cid, name = "2.10", "중요 디렉터리 파일 권한 설정"
-        desc = "/tmp(sticky bit), /etc, /bin, /sbin, /usr 디렉터리 권한·소유자를 점검합니다."
-        rec  = "chmod 1777 /tmp; chmod 755 /etc /bin /sbin /usr; chown root ..."
+        desc = ("/sbin /etc/ /bin /usr/bin /usr/sbin /usr/lbin 디렉터리의 권한 중 "
+                "Other에 쓰기 권한이 부여되어 있는지 점검합니다.")
+        rec  = ("chown root [디렉터리명]\n"
+                "chmod o-w [디렉터리명]")
 
-        checks = [
-            ("/tmp",      0o1777, None),    # sticky bit 포함
-            ("/etc",      0o755,  "root"),
-            ("/bin",      0o755,  "root"),
-            ("/sbin",     0o755,  "root"),
-            ("/usr",      0o755,  "root"),
-            ("/usr/bin",  0o755,  "root"),
-            ("/usr/sbin", 0o755,  "root"),
-        ]
-        issues = []
-        for path, max_oct, req_owner in checks:
-            if not os.path.exists(path):
-                continue
-            r = self._stat(path)
-            if not r:
-                continue
-            perm, owner = r
-            try:
-                actual = int(perm, 8)
-                if path == "/tmp":
-                    if not (actual & 0o1000):
-                        issues.append(f"{path}: sticky bit 없음 ({perm})")
-                    if actual & 0o002 and not (actual & 0o1000):
-                        issues.append(f"{path}: world-writable & no sticky bit")
-                elif actual > max_oct:
-                    issues.append(f"{path}: 권한 {perm} ({oct(max_oct)[2:]} 초과)")
-            except ValueError:
-                pass
-            if req_owner and owner != req_owner:
-                issues.append(f"{path}: 소유자 {owner} ({req_owner} 권고)")
-
-        if issues:
-            self.vulnerable(cid, name, Severity.HIGH, desc,
-                            "\n".join(issues), rec)
-        else:
-            self.safe(cid, name, Severity.HIGH, desc,
-                      "중요 디렉터리 권한 양호", rec)
-
-    def _b11(self):
-        """2.11 PATH 환경변수 설정"""
-        cid, name = "2.11", "PATH 환경변수 설정"
-        desc = "PATH에 현재 디렉터리(. 또는 ::)가 포함되어 있으면 경로 조작 공격에 취약합니다."
-        rec  = "/etc/profile, /root/.bashrc에서 PATH에 '.' 제거"
+        cmd = "ls -ald /sbin /etc/ /bin /usr/bin /usr/sbin /usr/lbin 2>/dev/null"
+        _, out, _ = self._run_shell(cmd)
 
         issues = []
-        for path in ("/etc/profile", "/etc/bashrc", "/etc/bash.bashrc",
-                     "/root/.bashrc", "/root/.bash_profile", "/root/.profile"):
-            content = self._read_file(path) or ""
-            for line in content.splitlines():
-                s = line.strip()
-                if "PATH=" in s and not s.startswith("#"):
-                    val = s.split("PATH=")[-1].strip().strip('"').strip("'")
-                    path_parts = val.replace('"', '').replace("'", "").split(":")
-                    if "." in path_parts or "" in path_parts:
-                        issues.append(f"{path}: PATH에 '.' 또는 빈 항목 포함 ({s[:80]})")
-                        break
-
-        if issues:
-            self.vulnerable(cid, name, Severity.HIGH, desc,
-                            "\n".join(issues), rec)
-        else:
-            self.safe(cid, name, Severity.HIGH, desc,
-                      "PATH에 현재 디렉터리 미포함", rec)
-
-    def _b12(self):
-        """2.12 FTP 접근제어 파일 권한 설정"""
-        cid, name = "2.12", "FTP 접근제어 파일 권한 설정"
-        for path in ("/etc/ftpusers", "/etc/vsftpd/ftpusers",
-                     "/etc/vsftpd.ftpusers", "/etc/proftpd/ftpusers"):
-            if os.path.exists(path):
-                self._chk_perm(cid, name, path, 0o640, Severity.MEDIUM,
-                               f"chown root {path} && chmod 640 {path}")
-                return
-        self.skipped(cid, name, Severity.MEDIUM,
-                     "ftpusers 파일 권한 점검",
-                     "ftpusers 파일 없음 — FTP 미설치 N/A",
-                     "FTP 미사용 시 해당 없음")
-
-    def _b13(self):
-        """2.13 root 원격 접근제어 파일 권한 설정"""
-        cid, name = "2.13", "root 원격 접근제어 파일 권한 설정"
-        desc = "/etc/ssh/sshd_config 및 /etc/securetty 파일 권한이 적절한지 점검합니다."
-        rec  = "chmod 600 /etc/ssh/sshd_config /etc/securetty; chown root ..."
-
-        issues = []
-        for path, max_oct in [("/etc/ssh/sshd_config", 0o640),
-                               ("/etc/securetty",       0o640)]:
+        for path in ("/sbin", "/etc", "/bin", "/usr/bin", "/usr/sbin", "/usr/lbin"):
             if not os.path.exists(path):
                 continue
             r = self._stat(path)
             if r:
                 perm, owner = r
-                try:
-                    if int(perm, 8) > max_oct:
-                        issues.append(f"{path}: {perm} ({oct(max_oct)[2:]} 초과)")
-                except ValueError:
-                    pass
-                if owner != "root":
-                    issues.append(f"{path}: 소유자 {owner}")
+                if int(perm, 8) & 0o002:
+                    issues.append(f"{path}: Other 쓰기 권한 있음 ({perm})")
+                if owner not in ("root", "bin"):
+                    issues.append(f"{path}: 소유자 {owner} (root/bin 권고)")
 
         if issues:
-            self.vulnerable(cid, name, Severity.HIGH, desc,
-                            "\n".join(issues), rec)
+            self.vulnerable(cid, name, Severity.MEDIUM, desc, "\n".join(issues), rec,
+                            command=cmd, cmd_output=out or "(출력 없음)")
+        else:
+            self.safe(cid, name, Severity.MEDIUM, desc,
+                      "중요 디렉터리: Other 쓰기 권한 없음 (양호)",
+                      rec, command=cmd, cmd_output=out or "(출력 없음)")
+
+    def _b11(self):
+        """2.11 PATH 환경변수 설정"""
+        cid, name = "2.11", "PATH 환경변수 설정"
+        desc = ("root 계정의 PATH 환경변수에 '.'(현재 디렉터리)이 맨 앞이나 중간에 "
+                "포함되어 있는지 점검합니다. (디렉터리명 제외)")
+        rec  = "/etc/profile, root 환경변수 파일에서 PATH에 포함된 '.' 제거 또는 맨 끝으로 이동"
+
+        cmd1 = "env | grep PATH"
+        cmd2 = "cat /.profile 2>/dev/null | grep PATH"
+        cmd3 = "cat /etc/profile | grep PATH"
+        combined_cmd = f"{cmd1}\n{cmd2}\n{cmd3}"
+        _, out1, _ = self._run_shell(cmd1)
+        _, out2, _ = self._run_shell(cmd2)
+        _, out3, _ = self._run_shell(cmd3)
+        combined_out = (f"[env | grep PATH]\n{out1 or '(없음)'}\n\n"
+                        f"[/.profile | grep PATH]\n{out2 or '(없음)'}\n\n"
+                        f"[/etc/profile | grep PATH]\n{out3 or '(없음)'}")
+
+        issues = []
+        for src, content in [("env", out1), ("/.profile", out2), ("/etc/profile", out3)]:
+            for line in content.splitlines():
+                if "PATH=" in line and not line.strip().startswith("#"):
+                    val = line.split("PATH=")[-1].strip().strip('"').strip("'")
+                    parts = val.replace('"', '').replace("'", "").split(":")
+                    # '.'이 맨 앞이나 중간에 있는지 확인 (맨 끝 제외)
+                    if "." in parts[:-1] or (parts and parts[0] == "."):
+                        issues.append(f"{src}: PATH에 '.'이 앞/중간에 포함 ({line[:80]})")
+                    elif "" in parts[:-1]:
+                        issues.append(f"{src}: PATH에 빈 항목(::) 존재 — 현재 디렉터리 지칭")
+
+        if issues:
+            self.vulnerable(cid, name, Severity.MEDIUM, desc, "\n".join(issues), rec,
+                            command=combined_cmd, cmd_output=combined_out)
+        else:
+            self.safe(cid, name, Severity.MEDIUM, desc,
+                      "PATH에 현재 디렉터리('.')가 앞/중간에 없음 (양호)",
+                      rec, command=combined_cmd, cmd_output=combined_out)
+
+    def _b12(self):
+        """2.12 FTP 접근제어 파일 권한 설정"""
+        cid, name = "2.12", "FTP 접근제어 파일 권한 설정"
+        desc = "FTP 접근제어 설정 파일의 권한 중 Other에 쓰기 권한이 부여되어 있는지 점검합니다."
+        rec  = ("chown root /etc/ftpusers && chmod o-w /etc/ftpusers\n"
+                "vsftpd 사용 시: chown root /etc/vsftpd/user_list && chmod o-w")
+
+        cmd = ("ls -al /etc/ftpusers 2>/dev/null; "
+               "ls -al /etc/ftpd/ftpusers 2>/dev/null; "
+               "ls -al /etc/vsftpd/ftpusers 2>/dev/null")
+        _, out, _ = self._run_shell(cmd)
+
+        ftp_paths = ["/etc/ftpusers", "/etc/ftpd/ftpusers", "/etc/vsftpd/ftpusers",
+                     "/etc/vsftpd/user_list", "/etc/vsftpd.user_list"]
+        found_any = False
+        issues = []
+        for path in ftp_paths:
+            if not os.path.exists(path):
+                continue
+            found_any = True
+            r = self._stat(path)
+            if r:
+                perm, owner = r
+                if int(perm, 8) & 0o002:
+                    issues.append(f"{path}: Other 쓰기 권한 있음 ({perm})")
+
+        if not found_any:
+            self.skipped(cid, name, Severity.HIGH, desc,
+                         "ftpusers 파일 없음 — FTP 미설치 N/A", rec,
+                         command=cmd, cmd_output=out or "(파일 없음)")
+            return
+
+        if issues:
+            self.vulnerable(cid, name, Severity.HIGH, desc, "\n".join(issues), rec,
+                            command=cmd, cmd_output=out or "(출력 없음)")
         else:
             self.safe(cid, name, Severity.HIGH, desc,
-                      "접근제어 파일 권한 양호", rec)
+                      "FTP 접근제어 파일: Other 쓰기 권한 없음 (양호)",
+                      rec, command=cmd, cmd_output=out or "(출력 없음)")
+
+    def _b13(self):
+        """2.13 root 원격 접근제어 파일 권한 설정"""
+        cid, name = "2.13", "root 원격 접근제어 파일 권한 설정"
+        desc = ("/etc/pam.d/login, /etc/securetty 파일의 권한 중 "
+                "Other에 쓰기 권한이 부여되어 있는지 점검합니다.")
+        rec  = ("chown root /etc/pam.d/login /etc/securetty\n"
+                "chmod o-w /etc/pam.d/login && chmod o-w /etc/securetty")
+
+        cmd = ("ls -al /etc/security/user 2>/dev/null; "
+               "ls -al /etc/pam.d/login 2>/dev/null")
+        _, out, _ = self._run_shell(cmd)
+
+        issues = []
+        for path in ("/etc/pam.d/login", "/etc/securetty", "/etc/security/user"):
+            if not os.path.exists(path):
+                continue
+            r = self._stat(path)
+            if r:
+                perm, owner = r
+                if int(perm, 8) & 0o002:
+                    issues.append(f"{path}: Other 쓰기 권한 있음 ({perm})")
+
+        if issues:
+            self.vulnerable(cid, name, Severity.MEDIUM, desc, "\n".join(issues), rec,
+                            command=cmd, cmd_output=out or "(출력 없음)")
+        else:
+            self.safe(cid, name, Severity.MEDIUM, desc,
+                      "root 원격 접근제어 파일: Other 쓰기 권한 없음 (양호)",
+                      rec, command=cmd, cmd_output=out or "(출력 없음)")
 
     def _b14(self):
         """2.14 NFS 접근제어 파일 권한 설정"""
         cid, name = "2.14", "NFS 접근제어 파일 권한 설정"
-        if os.path.exists("/etc/exports"):
-            self._chk_perm(cid, name, "/etc/exports", 0o644, Severity.MEDIUM,
-                           "chown root /etc/exports && chmod 644 /etc/exports")
+        desc = ("/etc/exports 파일의 권한 중 Group, Other에 쓰기 권한이 "
+                "부여되어 있는지 점검합니다.")
+        rec  = "chown root /etc/exports && chmod go-w /etc/exports"
+
+        cmd = "ls -al /etc/exports 2>/dev/null"
+        _, out, _ = self._run_shell(cmd)
+
+        if not os.path.exists("/etc/exports"):
+            self.skipped(cid, name, Severity.HIGH, desc,
+                         "/etc/exports 없음 — NFS 미사용 N/A", rec,
+                         command=cmd, cmd_output="(파일 없음)")
+            return
+
+        r = self._stat("/etc/exports")
+        if r:
+            perm, owner = r
+            if int(perm, 8) & 0o022:
+                self.vulnerable(cid, name, Severity.HIGH, desc,
+                                f"/etc/exports: Group/Other 쓰기 권한 있음 ({perm})", rec,
+                                command=cmd, cmd_output=out or "(출력 없음)")
+            else:
+                self.safe(cid, name, Severity.HIGH, desc,
+                          f"/etc/exports: Group/Other 쓰기 권한 없음 (양호)",
+                          rec, command=cmd, cmd_output=out or "(출력 없음)")
         else:
-            self.skipped(cid, name, Severity.MEDIUM,
-                         "/etc/exports 파일 권한 점검",
-                         "/etc/exports 없음 — NFS 미사용 N/A",
-                         "NFS 미사용 시 해당 없음")
+            self.manual(cid, name, Severity.HIGH, desc,
+                        "/etc/exports stat 실패", rec,
+                        command=cmd, cmd_output=out or "(출력 없음)")
 
     def _b15(self):
         """2.15 /etc/services 파일 권한 설정"""
-        self._chk_perm("2.15", "/etc/services 파일 권한 설정",
-                       "/etc/services", 0o644, Severity.LOW,
-                       "chown root /etc/services && chmod 644 /etc/services")
+        cid, name = "2.15", "/etc/services 파일 권한 설정"
+        desc = ("/etc/services 파일의 권한 중 Group, Other에 쓰기 권한이 "
+                "부여되어 있는지 점검합니다.")
+        rec  = "chown root /etc/services && chmod go-w /etc/services"
+
+        cmd = "ls -al /etc/services 2>/dev/null"
+        _, out, _ = self._run_shell(cmd)
+
+        if not os.path.exists("/etc/services"):
+            self.skipped(cid, name, Severity.MEDIUM, desc,
+                         "/etc/services 없음", rec,
+                         command=cmd, cmd_output="(파일 없음)")
+            return
+
+        r = self._stat("/etc/services")
+        if r:
+            perm, owner = r
+            if int(perm, 8) & 0o022:
+                self.vulnerable(cid, name, Severity.MEDIUM, desc,
+                                f"/etc/services: Group/Other 쓰기 권한 있음 ({perm})", rec,
+                                command=cmd, cmd_output=out or "(출력 없음)")
+            else:
+                self.safe(cid, name, Severity.MEDIUM, desc,
+                          f"/etc/services: Group/Other 쓰기 권한 없음 (양호)",
+                          rec, command=cmd, cmd_output=out or "(출력 없음)")
+        else:
+            self.manual(cid, name, Severity.MEDIUM, desc,
+                        "/etc/services stat 실패", rec,
+                        command=cmd, cmd_output=out or "(출력 없음)")
 
     def _b16(self):
         """2.16 부팅 스크립트 파일 권한 설정"""
         cid, name = "2.16", "부팅 스크립트 파일 권한 설정"
-        desc = "/etc/init.d/ 또는 /etc/rc*.d/ 디렉터리 스크립트의 권한을 점검합니다."
-        rec  = "chown root /etc/init.d/* && chmod 755 /etc/init.d/*"
+        desc = ("/etc/rc*.d/* 및 /etc/inittab 파일의 권한 중 Other에 쓰기 권한이 "
+                "부여되어 있는지 점검합니다.")
+        rec  = "chmod o-w [파일명 또는 디렉터리명]"
+
+        cmd = "ls -al /etc/rc*.d/* 2>/dev/null; ls -al /etc/inittab 2>/dev/null"
+        _, out, _ = self._run_shell(cmd, timeout=15)
 
         issues = []
-        for search_dir in ("/etc/init.d", "/etc/rc.d/init.d"):
-            if not os.path.isdir(search_dir):
+        rc_dirs = glob.glob("/etc/rc*.d")
+        for d in rc_dirs:
+            if not os.path.isdir(d):
                 continue
-            rc, out, _ = self._run_cmd(
-                f"find {search_dir} -maxdepth 1 -type f -perm /022", timeout=10)
-            files = [f for f in out.splitlines() if f.strip()]
-            if files:
-                issues.extend(files[:10])
+            for entry in os.listdir(d):
+                fpath = os.path.join(d, entry)
+                real = os.path.realpath(fpath) if os.path.islink(fpath) else fpath
+                if not os.path.exists(real):
+                    continue
+                r = self._stat(real)
+                if r:
+                    perm, _ = r
+                    if int(perm, 8) & 0o002:
+                        issues.append(f"{real}: Other 쓰기 권한 있음 ({perm})")
+
+        if os.path.exists("/etc/inittab"):
+            r = self._stat("/etc/inittab")
+            if r:
+                perm, _ = r
+                if int(perm, 8) & 0o002:
+                    issues.append(f"/etc/inittab: Other 쓰기 권한 있음 ({perm})")
+
+        if not rc_dirs and not os.path.exists("/etc/inittab"):
+            self.skipped(cid, name, Severity.HIGH, desc,
+                         "rc*.d, inittab 없음 — systemd 환경 N/A", rec,
+                         command=cmd, cmd_output=out or "(파일 없음)")
+            return
 
         if issues:
-            self.vulnerable(cid, name, Severity.MEDIUM, desc,
-                            f"권한 과다 부팅 스크립트 {len(issues)}개:\n" +
-                            "\n".join(issues[:10]), rec)
+            self.vulnerable(cid, name, Severity.HIGH, desc,
+                            f"Other 쓰기 권한 파일 {len(issues)}개:\n" + "\n".join(issues[:10]),
+                            rec, command=cmd, cmd_output=out[:500] or "(출력 없음)")
         else:
-            # systemd 환경이면 init.d 자체가 없을 수 있음
-            if not any(os.path.isdir(d) for d in ("/etc/init.d", "/etc/rc.d/init.d")):
-                self.skipped(cid, name, Severity.MEDIUM, desc,
-                             "init.d 없음 — systemd 환경 N/A (systemd unit 파일 별도 점검)", rec)
-            else:
-                self.safe(cid, name, Severity.MEDIUM, desc,
-                          "부팅 스크립트 권한 양호", rec)
+            self.safe(cid, name, Severity.HIGH, desc,
+                      "부팅 스크립트: Other 쓰기 권한 없음 (양호)",
+                      rec, command=cmd, cmd_output=out[:500] or "(출력 없음)")
 
     def _b17(self):
         """2.17 /etc/hosts.allow, /etc/hosts.deny 설정"""
         cid, name = "2.17", "/etc/hosts.allow · /etc/hosts.deny 설정"
-        desc = "TCP Wrappers 설정 파일이 존재하고, hosts.deny에 기본 차단이 설정되어 있는지 점검합니다."
-        rec  = ("hosts.deny: ALL: ALL (기본 거부)\n"
-                "hosts.allow: 허용할 서비스·IP만 명시")
+        desc = ("hosts.deny에 ALL:ALL 설정이 되어 있고, hosts.allow에 접근 허용 호스트가 "
+                "설정되어 있는지 점검합니다.")
+        rec  = ("/etc/hosts.deny: ALL: ALL\n"
+                "/etc/hosts.allow: 허용할 서비스 및 호스트만 명시\n"
+                "RHEL/CentOS 8 이상: iptables로 접근 제어")
+
+        cmd = ("cat /etc/hosts.allow 2>/dev/null; echo '---'; "
+               "cat /etc/hosts.deny 2>/dev/null; echo '---'; "
+               "iptables -L 2>/dev/null | head -20")
+        _, out, _ = self._run_shell(cmd, timeout=15)
 
         allow_ex = os.path.exists("/etc/hosts.allow")
         deny_ex  = os.path.exists("/etc/hosts.deny")
 
         if not allow_ex and not deny_ex:
-            self.manual(cid, name, Severity.MEDIUM, desc,
-                        "hosts.allow / hosts.deny 없음 — TCP Wrappers 미사용 또는 방화벽 대체 여부 수동 확인", rec)
+            _, ipt_out, _ = self._run_shell("iptables -L 2>/dev/null | head -30")
+            if ipt_out and "DROP" in ipt_out:
+                self.safe(cid, name, Severity.LOW, desc,
+                          "hosts.allow/deny 없음 — iptables DROP 정책 확인됨",
+                          rec, command=cmd, cmd_output=out or ipt_out)
+            else:
+                self.manual(cid, name, Severity.LOW, desc,
+                            "hosts.allow/deny 없음 — TCP Wrappers 미사용, iptables 정책 수동 확인 필요",
+                            rec, command=cmd, cmd_output=out or "(출력 없음)")
             return
 
         deny_content = self._read_file("/etc/hosts.deny") or ""
         has_deny_all = any(
-            "ALL" in l and "ALL" in l and not l.strip().startswith("#")
+            "ALL" in l and not l.strip().startswith("#")
             for l in deny_content.splitlines()
         )
-        if not has_deny_all:
-            self.vulnerable(cid, name, Severity.MEDIUM, desc,
-                            "hosts.deny에 'ALL: ALL' 기본 차단 미설정",
-                            rec, deny_content[:300])
+        if has_deny_all:
+            self.safe(cid, name, Severity.LOW, desc,
+                      "hosts.deny에 ALL 기본 차단 설정됨 (양호)",
+                      rec, command=cmd, cmd_output=out or "(출력 없음)")
         else:
-            self.safe(cid, name, Severity.MEDIUM, desc,
-                      "hosts.allow/deny 설정됨, 기본 차단 적용", rec)
+            self.vulnerable(cid, name, Severity.LOW, desc,
+                            "hosts.deny에 'ALL: ALL' 기본 차단 미설정",
+                            rec, command=cmd, cmd_output=out or "(출력 없음)")
 
     def _b18(self):
         """2.18 기타 중요 파일 권한 설정"""
         cid, name = "2.18", "기타 중요 파일 권한 설정"
-        desc = "/etc/gshadow, SSH 호스트 키 등 중요 파일의 권한을 점검합니다."
-        rec  = ("chmod 400 /etc/gshadow; chmod 600 /etc/ssh/ssh_host_*_key\n"
-                "chown root for all")
-
-        issues = []
-        targets = [
-            ("/etc/gshadow",                0o400),
-            ("/etc/sudoers",                0o440),
-        ]
-        # SSH 호스트 개인키
-        for keyfile in glob.glob("/etc/ssh/ssh_host_*_key"):
-            targets.append((keyfile, 0o600))
-
-        for path, max_oct in targets:
-            if not os.path.exists(path):
-                continue
-            r = self._stat(path)
-            if not r:
-                continue
-            perm, owner = r
-            try:
-                if int(perm, 8) > max_oct:
-                    issues.append(f"{path}: {perm} ({oct(max_oct)[2:]} 초과)")
-            except ValueError:
-                pass
-            if owner != "root":
-                issues.append(f"{path}: 소유자 {owner}")
-
-        if issues:
-            self.vulnerable(cid, name, Severity.HIGH, desc,
-                            "\n".join(issues), rec)
-        else:
-            self.safe(cid, name, Severity.HIGH, desc,
-                      "중요 파일 권한 양호", rec)
+        self.skipped(cid, name, Severity.MEDIUM,
+                     "시스템 운영상 중요한 파일의 접근 권한을 점검합니다.",
+                     "N/A — 해당 OS는 체크리스트에 포함하지 않음 (사양서 명시)",
+                     "해당 없음")
 
     def _b19(self):
         """2.19 at 파일 소유자 및 권한 설정"""
         cid, name = "2.19", "at 파일 소유자 및 권한 설정"
-        desc = "/etc/at.allow, /etc/at.deny 파일의 소유자·권한을 점검합니다."
-        rec  = "chown root /etc/at.allow && chmod 640 /etc/at.allow"
+        desc = ("/etc/at.allow, /etc/at.deny 파일의 소유자가 root이고 권한이 640 이하인지 점검합니다.")
+        rec  = ("chown root /etc/at.allow && chmod 640 /etc/at.allow\n"
+                "chown root /etc/at.deny  && chmod 640 /etc/at.deny")
+
+        cmd = "ls -al /etc/at.allow 2>/dev/null; ls -al /etc/at.deny 2>/dev/null"
+        _, out, _ = self._run_shell(cmd)
 
         found_any = False
         issues = []
@@ -950,88 +1254,151 @@ class LinuxScanner(BaseScanner):
             r = self._stat(path)
             if r:
                 perm, owner = r
-                try:
-                    if int(perm, 8) > 0o640:
-                        issues.append(f"{path}: {perm}")
-                except ValueError:
-                    pass
                 if owner != "root":
-                    issues.append(f"{path}: 소유자 {owner}")
+                    issues.append(f"{path}: 소유자 {owner} (root 권고)")
+                if int(perm, 8) > 0o640:
+                    issues.append(f"{path}: 권한 {perm} (640 초과)")
 
         if not found_any:
-            self.skipped(cid, name, Severity.LOW, desc,
-                         "at.allow / at.deny 없음 — at 서비스 미사용 N/A", rec)
+            self.skipped(cid, name, Severity.MEDIUM, desc,
+                         "at.allow / at.deny 없음 — at 서비스 미사용 N/A", rec,
+                         command=cmd, cmd_output="(파일 없음)")
             return
+
         if issues:
-            self.vulnerable(cid, name, Severity.LOW, desc,
-                            "\n".join(issues), rec)
+            self.vulnerable(cid, name, Severity.MEDIUM, desc, "\n".join(issues), rec,
+                            command=cmd, cmd_output=out or "(출력 없음)")
         else:
-            self.safe(cid, name, Severity.LOW, desc, "at 파일 권한 양호", rec)
+            self.safe(cid, name, Severity.MEDIUM, desc,
+                      "at 파일: 소유자 root, 권한 640 이하 (양호)",
+                      rec, command=cmd, cmd_output=out or "(출력 없음)")
 
     def _b20(self):
         """2.20 hosts.lpd 파일 소유자 및 권한 설정"""
         cid, name = "2.20", "hosts.lpd 파일 소유자 및 권한 설정"
-        path = "/etc/hosts.lpd"
-        if os.path.exists(path):
-            self._chk_perm(cid, name, path, 0o600, Severity.LOW,
-                           f"chown root {path} && chmod 600 {path}")
-        else:
-            self.skipped(cid, name, Severity.LOW,
-                         "hosts.lpd 파일 권한 점검",
-                         "/etc/hosts.lpd 없음 — LPD 미사용 N/A",
-                         "프린터 서비스 미사용 시 해당 없음")
+        desc = "/etc/hosts.lpd 파일의 소유자가 root이고 권한이 600 이하인지 점검합니다."
+        rec  = "chown root /etc/hosts.lpd && chmod 600 /etc/hosts.lpd"
+
+        cmd = "ls -al /etc/hosts.lpd 2>/dev/null"
+        _, out, _ = self._run_shell(cmd)
+
+        if not os.path.exists("/etc/hosts.lpd"):
+            self.skipped(cid, name, Severity.LOW, desc,
+                         "/etc/hosts.lpd 없음 — LPD 미사용 N/A", rec,
+                         command=cmd, cmd_output="(파일 없음)")
+            return
+
+        r = self._stat("/etc/hosts.lpd")
+        if r:
+            perm, owner = r
+            issues = []
+            if owner != "root":
+                issues.append(f"소유자: {owner} (root 권고)")
+            if int(perm, 8) > 0o600:
+                issues.append(f"권한: {perm} (600 초과)")
+            if issues:
+                self.vulnerable(cid, name, Severity.LOW, desc, "\n".join(issues), rec,
+                                command=cmd, cmd_output=out or "(출력 없음)")
+            else:
+                self.safe(cid, name, Severity.LOW, desc,
+                          f"hosts.lpd: 소유자 root, 권한 {perm} (양호)",
+                          rec, command=cmd, cmd_output=out or "(출력 없음)")
 
     def _b21(self):
         """2.21 /etc/(r)syslog.conf 파일 소유자 및 권한 설정"""
         cid, name = "2.21", "/etc/(r)syslog.conf 파일 소유자 및 권한 설정"
-        for path in ("/etc/rsyslog.conf", "/etc/syslog.conf"):
-            if os.path.exists(path):
-                self._chk_perm(cid, name, path, 0o644, Severity.LOW,
-                               f"chown root {path} && chmod 644 {path}")
+        desc = ("/etc/syslog.conf 또는 /etc/rsyslog.conf 파일의 소유자가 root이고 "
+                "권한이 640 이하인지 점검합니다.")
+        rec  = "chown root /etc/rsyslog.conf && chmod 640 /etc/rsyslog.conf"
+
+        for path in ("/etc/syslog.conf", "/etc/rsyslog.conf"):
+            cmd = f"ls -al {path} 2>/dev/null"
+            _, out, _ = self._run_shell(cmd)
+            if not os.path.exists(path):
+                continue
+            r = self._stat(path)
+            if r:
+                perm, owner = r
+                issues = []
+                if owner != "root":
+                    issues.append(f"소유자: {owner} (root 권고)")
+                if int(perm, 8) > 0o640:
+                    issues.append(f"권한: {perm} (640 초과)")
+                if issues:
+                    self.vulnerable(cid, name, Severity.HIGH, desc, "\n".join(issues), rec,
+                                    command=cmd, cmd_output=out or "(출력 없음)")
+                else:
+                    self.safe(cid, name, Severity.HIGH, desc,
+                              f"{path}: 소유자 root, 권한 {perm} 이하 (양호)",
+                              rec, command=cmd, cmd_output=out or "(출력 없음)")
                 return
-        self.skipped(cid, name, Severity.LOW,
-                     "syslog 설정 파일 권한 점검",
-                     "rsyslog.conf / syslog.conf 없음 — N/A",
-                     "syslog 미설치 확인 필요")
+
+        self.skipped(cid, name, Severity.HIGH, desc,
+                     "rsyslog.conf / syslog.conf 없음 — N/A", rec,
+                     command="ls -al /etc/rsyslog.conf", cmd_output="(파일 없음)")
 
     def _b22(self):
         """2.22 world writable 파일 점검"""
         cid, name = "2.22", "world writable 파일 점검"
-        desc = "모든 사용자가 쓸 수 있는(world writable) 파일이 있는지 점검합니다."
-        rec  = "chmod o-w <파일> 로 other 쓰기 권한 제거"
+        desc = ("로그인 가능한 계정의 홈 디렉터리 내 world writable 파일이 있는지 점검합니다.")
+        rec  = "chmod o-w <파일명> 으로 other 쓰기 권한 제거 또는 rm -rf <파일명>"
 
-        rc, out, _ = self._run_cmd(
-            "find /etc /usr/bin /usr/sbin /bin /sbin -perm -002 -type f 2>/dev/null",
-            timeout=20)
-        files = [f.strip() for f in out.splitlines() if f.strip()]
-        if files:
+        # 로그인 가능 계정 확인
+        cmd1 = 'cat /etc/passwd | grep "bash"'
+        _, out1, _ = self._run_shell(cmd1)
+
+        # 홈 디렉터리별 world writable 파일 탐색
+        home_dirs = []
+        passwd = self._read_file("/etc/passwd") or ""
+        for line in passwd.splitlines():
+            parts = line.split(":")
+            if len(parts) >= 7 and "bash" in parts[6] and parts[5] and parts[5] != "/":
+                home_dirs.append(parts[5])
+
+        all_ww = []
+        cmd2_parts = []
+        for home in home_dirs[:5]:
+            if not os.path.isdir(home):
+                continue
+            cp = f"find {home}/ -type f -perm -2 -exec ls -l {{}} \\; 2>/dev/null"
+            cmd2_parts.append(cp)
+            _, ww_out, _ = self._run_shell(cp, timeout=15)
+            all_ww.extend(l for l in ww_out.splitlines() if l.strip())
+
+        cmd2 = "\n".join(cmd2_parts) if cmd2_parts else \
+               "find /home/ -type f -perm -2 -exec ls -l {} \\; 2>/dev/null"
+        combined_cmd = f"# 로그인 가능 계정 확인\n{cmd1}\n\n# world writable 파일 점검\n{cmd2}"
+        combined_out = (f"[bash 사용 계정]\n{out1 or '(없음)'}\n\n"
+                        f"[world writable 파일]\n" + ("\n".join(all_ww[:20]) if all_ww else "(없음)"))
+
+        if all_ww:
             self.vulnerable(cid, name, Severity.HIGH, desc,
-                            f"world writable 파일 {len(files)}개:\n" +
-                            "\n".join(files[:20]), rec)
+                            f"world writable 파일 {len(all_ww)}개:\n" + "\n".join(all_ww[:10]),
+                            rec, command=combined_cmd, cmd_output=combined_out)
         else:
             self.safe(cid, name, Severity.HIGH, desc,
-                      "world writable 파일 없음", rec)
+                      "world writable 파일 없음 (양호)",
+                      rec, command=combined_cmd, cmd_output=combined_out)
 
     def _b23(self):
         """2.23 /dev에 존재하지 않는 device 파일 점검"""
         cid, name = "2.23", "/dev에 존재하지 않는 device 파일 점검"
-        desc = "/dev 디렉터리에 장치 파일이 아닌 일반 파일이 있는지 점검합니다."
-        rec  = "/dev 내 일반 파일 삭제 (정상 장치 파일인지 확인 후 삭제)"
+        desc = ("/dev 디렉터리에 장치 파일(block/char)이 아닌 일반 파일(-type f)이 "
+                "존재하는지 점검합니다.")
+        rec  = "/dev 내 일반 파일 확인 후 불필요한 파일 삭제 (담당자 확인 후 조치)"
 
-        rc, out, _ = self._run_cmd(
-            "find /dev -maxdepth 2 -not -type b -not -type c -not -type d "
-            "-not -type l -not -type p -not -type s 2>/dev/null", timeout=10)
-        allowed = {"/dev/null", "/dev/full", "/dev/zero",
-                   "/dev/random", "/dev/urandom"}
-        suspicious = [f.strip() for f in out.splitlines()
-                      if f.strip() and f.strip() not in allowed]
-        if suspicious:
-            self.vulnerable(cid, name, Severity.MEDIUM, desc,
-                            f"/dev 내 비장치 파일 {len(suspicious)}개:\n" +
-                            "\n".join(suspicious[:15]), rec)
+        cmd = "find /dev -type f -exec ls -l {} \\; 2>/dev/null"
+        _, out, _ = self._run_shell(cmd, timeout=15)
+        files = [l.strip() for l in out.splitlines() if l.strip()]
+
+        if files:
+            self.vulnerable(cid, name, Severity.HIGH, desc,
+                            f"/dev 내 일반 파일 {len(files)}개:\n" + "\n".join(files[:15]),
+                            rec, command=cmd, cmd_output=out[:500] or "(출력 없음)")
         else:
-            self.safe(cid, name, Severity.MEDIUM, desc,
-                      "/dev 내 불필요한 파일 없음", rec)
+            self.safe(cid, name, Severity.HIGH, desc,
+                      "/dev 내 일반 파일 없음 (양호)",
+                      rec, command=cmd, cmd_output=out or "(출력 없음)")
 
     # ══════════════════════════════════════════════════════════
     # 3. 네트워크 서비스
@@ -1040,195 +1407,287 @@ class LinuxScanner(BaseScanner):
     def _c01(self):
         """3.1 RPC 서비스 제한"""
         cid, name = "3.1", "RPC 서비스 제한"
-        desc = "불필요한 RPC 서비스(rpcbind/portmapper)가 실행 중인지 점검합니다."
-        rec  = "NFS/NIS 미사용 시 systemctl disable --now rpcbind"
+        desc = ("불필요한 RPC 서비스(ttdb, cmsd, rstatd, sadmind, rexd 등)가 "
+                "실행 중인지 점검합니다.")
+        rec  = ("chkconfig --level 0123456 nfs off\n"
+                "chkconfig --level 0123456 portmap off (또는 rpcbind off)")
 
-        running, svc = self._service_up("rpcbind", "portmap")
-        if running:
+        cmd1 = ("cat /etc/inetd.conf 2>/dev/null | grep -v '^#' | "
+                "egrep 'ttdb|cmsd|rstartd|sadmind|rusersd|rexd|rwalld|sprayd|kcms_server|cachefsd'")
+        cmd2 = ("chkconfig --list 2>/dev/null | "
+                "egrep 'nfs|nfslock|portmap|rpcbind|rpcidmapd' | "
+                "egrep -v 'umountnfs.sh' | egrep ':on|:활성'")
+        combined_cmd = f"# inetd.conf RPC 서비스 확인\n{cmd1}\n\n# 부팅 스크립트 확인\n{cmd2}"
+        _, out1, _ = self._run_shell(cmd1)
+        _, out2, _ = self._run_shell(cmd2)
+
+        # 추가: ps로 실행 중인 RPC 프로세스 확인
+        _, ps_out, _ = self._run_shell(
+            "ps -ef 2>/dev/null | grep -E 'rpc\\.statd|rpcbind|portmap|nfsd' | grep -v grep")
+        combined_out = (f"[inetd.conf RPC 서비스]\n{out1 or '(없음)'}\n\n"
+                        f"[chkconfig RPC 서비스]\n{out2 or '(없음 또는 systemd 환경)'}\n\n"
+                        f"[실행 중 프로세스]\n{ps_out or '(없음)'}")
+
+        found = bool(out1.strip()) or bool(out2.strip()) or bool(ps_out.strip())
+        if found:
             self.vulnerable(cid, name, Severity.MEDIUM, desc,
-                            f"RPC 서비스 실행 중 ({svc}) — NFS/NIS 미사용 시 취약", rec)
+                            "RPC 관련 서비스 실행 중 — 미사용 서비스 제거 필요",
+                            rec, command=combined_cmd, cmd_output=combined_out)
         else:
-            self.safe(cid, name, Severity.MEDIUM, desc, "RPC 서비스 미실행", rec)
+            self.safe(cid, name, Severity.MEDIUM, desc,
+                      "RPC 서비스 미실행 (양호)",
+                      rec, command=combined_cmd, cmd_output=combined_out)
 
     def _c02(self):
         """3.2 NFS 제한"""
         cid, name = "3.2", "NFS 제한"
-        desc = "NFS 서비스 실행 여부 및 exports 와일드카드 공유를 점검합니다."
-        rec  = "systemctl disable --now nfs-server; /etc/exports 접근 IP 제한"
+        desc = ("NFS 서비스 실행 여부 및 /etc/exports의 everyone 공유 설정을 점검합니다.")
+        rec  = ("NFS 미사용 시: NFS 데몬(nfsd, statd, lockd) 중지\n"
+                "사용 시: /etc/exports에서 everyone(*) 마운트 제거, 인가된 IP만 허용")
 
-        running, svc = self._service_up("nfs-server", "nfs-kernel-server", "nfsd")
-        if not running:
-            self.safe(cid, name, Severity.HIGH, desc, "NFS 서비스 미실행", rec)
-            return
+        cmd1 = "ps -ef 2>/dev/null | grep nfsd | grep -v 'grep'"
+        cmd2 = "cat /etc/exports 2>/dev/null | grep -v '^#' | grep 'everyone'"
+        combined_cmd = f"{cmd1}\n{cmd2}"
+        _, out1, _ = self._run_shell(cmd1)
+        _, out2, _ = self._run_shell(cmd2)
+        combined_out = (f"[nfsd 프로세스]\n{out1 or '(없음)'}\n\n"
+                        f"[exports everyone 설정]\n{out2 or '(없음)'}")
 
-        content = self._read_file("/etc/exports") or ""
-        wild = [l for l in content.splitlines()
-                if not l.startswith("#") and l.strip() and " *(rw" in l]
-        if wild:
+        nfsd_running = bool(out1.strip())
+        everyone_set = bool(out2.strip())
+
+        if not nfsd_running:
+            self.safe(cid, name, Severity.HIGH, desc,
+                      "NFS 서비스(nfsd) 미실행 (양호)",
+                      rec, command=combined_cmd, cmd_output=combined_out)
+        elif everyone_set:
             self.vulnerable(cid, name, Severity.HIGH, desc,
-                            f"NFS 실행 중 + 와일드카드 공유 {len(wild)}개:\n" +
-                            "\n".join(wild), rec)
+                            "NFS 실행 중 + everyone으로 마운트 허용:\n" + out2,
+                            rec, command=combined_cmd, cmd_output=combined_out)
         else:
             self.manual(cid, name, Severity.HIGH, desc,
-                        f"NFS 실행 중 ({svc}) — exports 내용 수동 확인 필요", rec,
-                        content[:300])
+                        "NFS 실행 중 — everyone 마운트 없음, 인가된 시스템 목록 수동 확인 필요",
+                        rec, command=combined_cmd, cmd_output=combined_out)
 
     def _c03(self):
         """3.3 Automountd 서비스 제거"""
         cid, name = "3.3", "Automountd 서비스 제거"
-        desc = "자동 마운트 데몬(autofs/automountd)이 실행 중인지 점검합니다."
-        rec  = "systemctl disable --now autofs"
+        desc = "Automount 데몬(autofs/automountd)이 실행 중인지 점검합니다."
+        rec  = "chkconfig --level 0123456 autofs off (또는 systemctl disable --now autofs)"
 
-        running, svc = self._service_up("autofs", "automount")
-        if running:
-            self.vulnerable(cid, name, Severity.MEDIUM, desc,
-                            f"automountd 실행 중 ({svc})", rec)
+        cmd = r"ps -ef 2>/dev/null | grep 'automount\|autofs' | grep -v grep"
+        _, out, _ = self._run_shell(cmd)
+        if out.strip():
+            self.vulnerable(cid, name, Severity.LOW, desc,
+                            f"Automountd 서비스 실행 중:\n{out}",
+                            rec, command=cmd, cmd_output=out)
         else:
-            self.safe(cid, name, Severity.MEDIUM, desc, "automountd 미실행", rec)
+            self.safe(cid, name, Severity.LOW, desc,
+                      "Automountd 서비스 미실행 (양호)",
+                      rec, command=cmd, cmd_output=out or "(출력 없음)")
 
     def _c04(self):
         """3.4 NIS 제한"""
         cid, name = "3.4", "NIS 제한"
-        desc = "NIS(ypbind/ypserv) 서비스가 실행 중인지 점검합니다."
-        rec  = "systemctl disable --now ypbind ypserv yppasswdd"
+        desc = "NIS(ypbind/ypserv 등) 서비스가 실행 중인지 점검합니다."
+        rec  = "NIS 서비스 중지 및 부팅 스크립트에서 제거"
 
-        running, svc = self._service_up("ypbind", "ypserv", "yppasswdd")
-        if running:
+        cmd = r"ps -ef 2>/dev/null | grep -E 'Ypserv|Ypbind|rpc\.yppasswd|ypxfrd|rpc\.ypupdated' | grep -v grep"
+        _, out, _ = self._run_shell(cmd)
+        if out.strip():
             self.vulnerable(cid, name, Severity.HIGH, desc,
-                            f"NIS 서비스 실행 중 ({svc})", rec)
+                            f"NIS 서비스 실행 중:\n{out}",
+                            rec, command=cmd, cmd_output=out)
         else:
-            self.safe(cid, name, Severity.HIGH, desc, "NIS 서비스 미실행", rec)
+            self.safe(cid, name, Severity.HIGH, desc,
+                      "NIS 서비스 미실행 (양호)",
+                      rec, command=cmd, cmd_output=out or "(출력 없음)")
 
     def _c05(self):
         """3.5 'r' commands 서비스 제거"""
         cid, name = "3.5", "'r' commands 서비스 제거"
-        desc = "rsh, rlogin, rexec 등 r 계열 취약 서비스 실행 여부를 점검합니다."
-        rec  = "inetd.conf/xinetd에서 rsh·rlogin·rexec 제거, SSH 사용 권고"
+        desc = ("rsh, rlogin, rexec 등 'r' commands 서비스가 실행 중이거나 "
+                "hosts.equiv/.rhosts에 '+' 설정이 있는지 점검합니다.")
+        rec  = ("inetd.conf에서 rsh/rlogin/rexec 서비스 제거 또는 주석 처리\n"
+                "/etc/hosts.equiv: '+' 설정 제거, 소유자 root, 권한 400\n"
+                "$HOME/.rhosts: '+' 설정 제거, 소유자 root, 권한 400")
 
+        cmd1 = ("cat /etc/inetd.conf 2>/dev/null | grep -v '^ *#' | "
+                "egrep 'shell|rlogin|rexec' | egrep -v 'grep|klogin|kshell|kexec'")
+        cmd2 = "ls -al /etc/hosts.equiv 2>/dev/null"
+        cmd3 = "ls -al /root/.rhosts 2>/dev/null"
+        combined_cmd = (f"# r command 서비스 확인\n{cmd1}\n\n"
+                        f"# hosts.equiv 권한\n{cmd2}\n\n"
+                        f"# .rhosts 권한\n{cmd3}")
+        _, out1, _ = self._run_shell(cmd1)
+        _, out2, _ = self._run_shell(cmd2)
+        _, out3, _ = self._run_shell(cmd3)
+        combined_out = (f"[inetd.conf r command]\n{out1 or '(없음)'}\n\n"
+                        f"[hosts.equiv]\n{out2 or '(없음)'}\n\n"
+                        f"[.rhosts]\n{out3 or '(없음)'}")
+
+        issues = []
+        if out1.strip():
+            issues.append(f"inetd에 r 계열 서비스 설정:\n{out1.strip()}")
+
+        # hosts.equiv '+' 설정 확인
+        equiv_content = self._read_file("/etc/hosts.equiv") or ""
+        for line in equiv_content.splitlines():
+            if line.strip() == "+" or line.strip().startswith("+ "):
+                issues.append(f"/etc/hosts.equiv: '+' 설정 존재 ({line.strip()})")
+
+        # .rhosts '+' 설정 확인
+        rhosts_content = self._read_file("/root/.rhosts") or ""
+        for line in rhosts_content.splitlines():
+            if line.strip() == "+" or "+ " in line.strip():
+                issues.append(f"/root/.rhosts: '+' 설정 존재 ({line.strip()})")
+
+        # 포트로 r 서비스 확인
         ss = self._ss()
-        r_ports = {":512": "rexec", ":513": "rlogin", ":514": "rsh"}
-        found = [svc for port, svc in r_ports.items() if port in ss]
-        if found:
+        for port, svc in {":512": "rexec", ":513": "rlogin", ":514": "rsh"}.items():
+            if port in ss:
+                issues.append(f"r 계열 서비스 포트 열림: {svc}(port {port.lstrip(':')})")
+
+        if issues:
             self.vulnerable(cid, name, Severity.CRITICAL, desc,
-                            f"r 계열 서비스 실행 중: {', '.join(found)}", rec)
+                            "\n".join(issues), rec,
+                            command=combined_cmd, cmd_output=combined_out)
         else:
-            self.safe(cid, name, Severity.CRITICAL, desc, "r 계열 서비스 미실행", rec)
+            self.safe(cid, name, Severity.CRITICAL, desc,
+                      "r commands 서비스 미실행, hosts.equiv/.rhosts '+' 설정 없음 (양호)",
+                      rec, command=combined_cmd, cmd_output=combined_out)
 
     def _c06(self):
         """3.6 불필요한 서비스 제거"""
         cid, name = "3.6", "불필요한 서비스 제거"
-        desc = "telnet, ftp, echo, chargen, daytime 등 취약·불필요 서비스를 점검합니다."
-        rec  = "systemctl disable --now <서비스> 또는 inetd에서 제거; SSH로 대체"
+        desc = ("echo, chargen, finger, tftp 등 불필요·취약 서비스가 실행 중인지 점검합니다.\n"
+                "진단 방법: 담당자 인터뷰를 통한 불필요한 서비스 확인이 필요합니다.")
+        rec  = ("불필요한 서비스 제거:\n"
+                "chkconfig --level 0123456 [서비스명] off\n"
+                "또는 /etc/(x)inetd.conf에서 해당 서비스 주석 처리")
 
-        ss = self._ss()
+        cmd = "ss -tlnup 2>/dev/null || netstat -tlnup 2>/dev/null"
+        _, out, _ = self._run_shell(cmd)
+        ss = out
+
         dangerous = {
-            ":23":  "telnet",
-            ":21":  "ftp(평문)",
-            ":7":   "echo",
-            ":9":   "discard",
-            ":11":  "systat",
-            ":13":  "daytime",
-            ":19":  "chargen",
-            ":79":  "finger",
-            ":69":  "tftp",
+            ":7": "echo", ":9": "discard", ":13": "daytime",
+            ":19": "chargen", ":37": "time", ":69": "tftp",
+            ":79": "finger", ":119": "nntp", ":138": "netbios-dgm",
+            ":517": "talk", ":518": "ntalk", ":540": "uucp",
         }
-        found = [f"{svc}(:{port.lstrip(':')})"
-                 for port, svc in dangerous.items() if port in ss]
+        found = [f"{svc}(:{p.lstrip(':')})" for p, svc in dangerous.items() if p in ss]
         if found:
-            self.vulnerable(cid, name, Severity.HIGH, desc,
-                            f"불필요/취약 서비스: {', '.join(found)}", rec, ss[:500])
+            self.vulnerable(cid, name, Severity.MEDIUM, desc,
+                            f"불필요 서비스 실행 중: {', '.join(found)}\n담당자 확인 필요",
+                            rec, command=cmd, cmd_output=out[:500] or "(출력 없음)")
         else:
-            self.safe(cid, name, Severity.HIGH, desc,
-                      "주요 취약 서비스 미실행", rec)
+            self.manual(cid, name, Severity.MEDIUM, desc,
+                        "Black list 서비스 미발견 — 담당자 인터뷰를 통한 추가 확인 필요",
+                        rec, command=cmd, cmd_output=out[:500] or "(출력 없음)")
 
     def _c07(self):
         """3.7 서비스 Banner 관리"""
         cid, name = "3.7", "서비스 Banner 관리"
-        desc = ("로그인 배너(/etc/issue, /etc/issue.net)에 OS·버전 정보 노출 여부 및 "
-                "SSH 배너 설정 여부를 점검합니다.")
-        rec  = ("/etc/issue.net 내용을 경고 문구로 교체\n"
-                "sshd_config: Banner /etc/issue.net 설정")
+        desc = ("SSH, Telnet, FTP, SMTP, DNS 서비스 배너에 O/S 및 버전 정보가 "
+                "노출되는지 점검합니다.")
+        rec  = ("각 서비스 설정 파일에서 버전/OS 정보 제거 후 경고 문구 삽입\n"
+                "SSH: /etc/motd에 경고 문구 | Telnet: /etc/issue.net | "
+                "FTP: vsftpd.conf ftpd_banner 설정")
 
-        issues = []
+        cmd = ("echo '=== [SSH motd] ==='; cat /etc/motd 2>/dev/null; "
+               "echo '=== [Telnet issue.net] ==='; cat /etc/issue.net 2>/dev/null; "
+               "echo '=== [FTP vsftpd.conf] ==='; "
+               "grep -i 'ftpd_banner\\|serverident' /etc/vsftpd/vsftpd.conf 2>/dev/null; "
+               "echo '=== [SMTP sendmail.cf] ==='; "
+               "grep -i 'SmtpGreetingMessage' /etc/mail/sendmail.cf 2>/dev/null; "
+               "echo '=== [DNS named.conf] ==='; "
+               "grep -i 'version' /etc/named.conf 2>/dev/null | head -3")
+        _, out, _ = self._run_shell(cmd, timeout=10)
+
         sensitive = ["ubuntu", "debian", "centos", "red hat", "fedora",
                      "kernel", "release", "version", "linux"]
-        for path in ("/etc/issue", "/etc/issue.net"):
+        issues = []
+        for path in ("/etc/issue", "/etc/issue.net", "/etc/motd"):
             content = (self._read_file(path) or "").lower()
             found = [k for k in sensitive if k in content]
             if found:
-                issues.append(f"{path}: {', '.join(found)} 노출")
-
-        sshd = self._read_file("/etc/ssh/sshd_config") or ""
-        has_banner = any(
-            "Banner" in l and not l.strip().startswith("#")
-            for l in sshd.splitlines()
-        )
-        if not has_banner:
-            issues.append("sshd_config: Banner 미설정")
+                issues.append(f"{path}: {', '.join(found)} 정보 노출")
 
         if issues:
             self.vulnerable(cid, name, Severity.MEDIUM, desc,
-                            "\n".join(issues), rec)
+                            "\n".join(issues), rec,
+                            command=cmd, cmd_output=out[:800] or "(출력 없음)")
         else:
             self.safe(cid, name, Severity.MEDIUM, desc,
-                      "배너 정보 노출 없음, SSH 배너 설정됨", rec)
+                      "배너에 O/S 및 버전 정보 미노출 (양호)",
+                      rec, command=cmd, cmd_output=out[:800] or "(출력 없음)")
 
     def _c08(self):
         """3.8 session timeout 설정"""
         cid, name = "3.8", "session timeout 설정"
-        desc = "비활성 세션이 자동으로 종료되도록 TMOUT 및 SSH ClientAliveInterval을 점검합니다."
-        rec  = ("/etc/profile: export TMOUT=300\n"
-                "sshd_config: ClientAliveInterval 300, ClientAliveCountMax 3")
+        desc = "사용하지 않는 세션에 대한 timeout이 300초로 설정되어 있는지 점검합니다."
+        rec  = ("/etc/profile: TMOUT=300 및 export TMOUT 추가\n"
+                "csh/tcsh: /etc/.login에 set autologout=5")
+
+        cmd1 = "cat /etc/profile | grep 'TMOUT'"
+        cmd2 = "cat /etc/.login 2>/dev/null | grep 'autologout'"
+        combined_cmd = f"# sh/ksh/bash 세션 타임아웃\n{cmd1}\n\n# csh/tcsh 세션 타임아웃\n{cmd2}"
+        _, out1, _ = self._run_shell(cmd1)
+        _, out2, _ = self._run_shell(cmd2)
+        combined_out = (f"[/etc/profile TMOUT]\n{out1 or '(없음)'}\n\n"
+                        f"[/etc/.login autologout]\n{out2 or '(없음)'}")
 
         issues = []
-        # TMOUT
         tmout_set = False
-        for path in ("/etc/profile", "/etc/bashrc", "/etc/bash.bashrc",
-                     "/etc/profile.d/timeout.sh"):
-            content = self._read_file(path) or ""
-            for line in content.splitlines():
-                if "TMOUT" in line and not line.strip().startswith("#"):
-                    m = re.search(r"TMOUT\s*=\s*(\d+)", line)
-                    if m:
-                        val = int(m.group(1))
-                        if val <= 0 or val > 600:
-                            issues.append(f"TMOUT={val} (1~600 권고)")
-                        tmout_set = True
+        for line in out1.splitlines():
+            if "TMOUT" in line and not line.strip().startswith("#"):
+                m = re.search(r"TMOUT\s*=\s*(\d+)", line)
+                if m:
+                    val = int(m.group(1))
+                    if val != 300:
+                        issues.append(f"TMOUT={val} (300초 권고)")
+                    tmout_set = True
+
+        if not tmout_set:
+            for p in ("/etc/bashrc", "/etc/bash.bashrc", "/etc/profile.d/timeout.sh"):
+                c = self._read_file(p) or ""
+                if "TMOUT" in c:
+                    tmout_set = True
+                    break
+
         if not tmout_set:
             issues.append("TMOUT 미설정 — 세션 자동 종료 없음")
 
-        # SSH
-        sshd = self._read_file("/etc/ssh/sshd_config") or ""
-        settings = {}
-        for line in sshd.splitlines():
-            s = line.strip()
-            if s and not s.startswith("#"):
-                parts = s.split()
-                if len(parts) >= 2:
-                    settings[parts[0].lower()] = parts[1]
-
-        alive_interval = int(settings.get("clientaliveinterval", "0"))
-        if alive_interval == 0:
-            issues.append("SSH ClientAliveInterval 미설정")
-        elif alive_interval > 600:
-            issues.append(f"SSH ClientAliveInterval={alive_interval} (600 초과)")
-
-        if issues:
-            self.vulnerable(cid, name, Severity.MEDIUM, desc,
-                            "\n".join(issues), rec)
+        autologout_set = bool(out2.strip())
+        if issues and not autologout_set:
+            self.vulnerable(cid, name, Severity.LOW, desc,
+                            "\n".join(issues), rec,
+                            command=combined_cmd, cmd_output=combined_out)
         else:
-            self.safe(cid, name, Severity.MEDIUM, desc,
-                      f"세션 타임아웃 설정됨 (TMOUT, SSH ClientAliveInterval={alive_interval})", rec)
+            self.safe(cid, name, Severity.LOW, desc,
+                      f"세션 타임아웃 설정됨 (TMOUT {'설정' if tmout_set else '미설정'}, "
+                      f"autologout {'설정' if autologout_set else '미설정'})",
+                      rec, command=combined_cmd, cmd_output=combined_out)
 
     def _c09(self):
         """3.9 root 계정 telnet·SSH 접근 제한"""
         cid, name = "3.9", "root 계정 telnet·SSH 접근 제한"
-        desc = "root가 telnet/SSH로 직접 로그인할 수 없도록 제한되어 있는지 점검합니다."
-        rec  = ("sshd_config: PermitRootLogin no\n"
-                "/etc/securetty: tty 항목만 남기고 pts/N 제거")
+        desc = "원격 접속(telnet, ssh) 시 root의 직접 접속이 불가능하도록 설정되어 있는지 점검합니다."
+        rec  = ("[SSH] sshd_config: PermitRootLogin no 설정 후 sshd 재시작\n"
+                "[Telnet] /etc/pam.d/login: pam_securetty.so 활성화\n"
+                "/etc/securetty에서 pts 항목 제거")
+
+        cmd1 = "cat /etc/security/user 2>/dev/null | grep -v '^#' | grep -i 'rlogin' | grep -i 'false'"
+        cmd2 = "cat /etc/ssh/sshd_config 2>/dev/null | grep -v '^#' | grep -i 'PermitRootLogin' | grep -i 'no'"
+        combined_cmd = f"# Telnet root 접근 설정\n{cmd1}\n\n# SSH root 접근 설정\n{cmd2}"
+        _, out1, _ = self._run_shell(cmd1)
+        _, out2, _ = self._run_shell(cmd2)
+        combined_out = (f"[/etc/security/user rlogin]\n{out1 or '(없음)'}\n\n"
+                        f"[sshd_config PermitRootLogin no]\n{out2 or '(없음)'}")
 
         issues = []
-        # SSH
+        # SSH PermitRootLogin 확인
         sshd = self._read_file("/etc/ssh/sshd_config") or ""
         prl = None
         for line in sshd.splitlines():
@@ -1236,49 +1695,52 @@ class LinuxScanner(BaseScanner):
             if s.startswith("PermitRootLogin") and not s.startswith("#"):
                 prl = s.split()[-1].lower()
                 break
-        if prl in (None, "yes", "without-password", "prohibit-password"):
-            issues.append(f"SSH PermitRootLogin={prl or '미설정(기본 허용)'}")
+        if prl not in ("no", "forced-commands-only"):
+            issues.append(f"SSH PermitRootLogin={prl or '미설정(기본 허용)'} — no 권고")
 
-        # telnet: securetty 확인
+        # telnet: securetty pts 확인
         securetty = self._read_file("/etc/securetty") or ""
         pts_lines = [l for l in securetty.splitlines()
                      if l.startswith("pts/") and not l.startswith("#")]
         if pts_lines:
-            issues.append(f"/etc/securetty에 pts 항목 존재: {', '.join(pts_lines[:5])}")
+            issues.append(f"/etc/securetty에 pts 항목 존재 (root telnet 가능): {', '.join(pts_lines[:3])}")
 
         if issues:
             self.vulnerable(cid, name, Severity.CRITICAL, desc,
-                            "\n".join(issues), rec)
+                            "\n".join(issues), rec,
+                            command=combined_cmd, cmd_output=combined_out)
         else:
             self.safe(cid, name, Severity.CRITICAL, desc,
-                      "root 원격 접근 제한 적용됨", rec)
+                      "root 원격 직접 접속 제한 적용됨 (양호)",
+                      rec, command=combined_cmd, cmd_output=combined_out)
 
     def _c10(self):
         """3.10 DNS 보안 버전 패치"""
         cid, name = "3.10", "DNS 보안 버전 패치"
-        desc = "BIND DNS 서버가 실행 중인 경우 최신 보안 버전인지, version.bind 노출 여부를 점검합니다."
+        desc = ("DNS 서비스(BIND) 사용 여부 및 주기적 보안 패치 관리 여부를 점검합니다.\n"
+                "2022.01 기준 안전 버전: BIND 9.16.25 이상")
         rec  = ("최신 BIND 버전으로 업그레이드\n"
-                "named.conf: version \"unknown\"; 으로 버전 정보 숨김")
+                "named.conf: version \"unknown\"; 으로 버전 정보 숨김\n"
+                "참고: https://www.isc.org/bind/")
 
-        running, _ = self._service_up("named", "bind9")
-        if not running:
+        cmd1 = "ps -ef 2>/dev/null | grep named | grep -v grep"
+        cmd2 = "named -v 2>/dev/null"
+        combined_cmd = f"{cmd1}\n{cmd2}"
+        _, out1, _ = self._run_shell(cmd1)
+        _, out2, _ = self._run_shell(cmd2)
+        combined_out = (f"[named 프로세스]\n{out1 or '(없음)'}\n\n"
+                        f"[BIND 버전]\n{out2 or '(확인 불가)'}")
+
+        if not out1.strip():
             self.skipped(cid, name, Severity.HIGH, desc,
-                         "BIND DNS 미실행 — N/A", rec)
+                         "BIND DNS(named) 미실행 — N/A", rec,
+                         command=combined_cmd, cmd_output=combined_out)
             return
 
-        rc, ver, _ = self._run_cmd("named -v 2>&1")
-        # version.bind 쿼리로 노출 여부 확인
-        rc2, dig_out, _ = self._run_cmd(
-            "dig @localhost version.bind chaos txt +short 2>/dev/null", timeout=5)
-        issues = []
-        if rc2 == 0 and dig_out.strip():
-            issues.append(f"version.bind 응답 허용: {dig_out.strip()}")
-
         self.manual(cid, name, Severity.HIGH, desc,
-                    f"BIND 실행 중: {ver.strip() or '버전 확인 불가'}\n" +
-                    ("\n".join(issues) if issues else "version.bind 응답 없음(양호)") +
-                    "\n※ 최신 보안 버전 여부는 https://www.isc.org/bind/ 에서 수동 확인 필요",
-                    rec, ver)
+                    f"BIND 실행 중: {out2.strip() or '버전 확인 불가'}\n"
+                    "최신 보안 버전 여부는 https://www.isc.org/bind/ 에서 수동 확인 필요",
+                    rec, command=combined_cmd, cmd_output=combined_out)
 
     # ══════════════════════════════════════════════════════════
     # 4. 로그 관리
@@ -1288,79 +1750,94 @@ class LinuxScanner(BaseScanner):
         """4.1 (x)inetd Services 로그 설정"""
         cid, name = "4.1", "(x)inetd Services 로그 설정"
         desc = "inetd/xinetd 서비스의 로그 설정 여부를 점검합니다."
-        rec  = "xinetd: log_type = SYSLOG authpriv / inetd: syslog 통해 로깅"
+        rec  = "해당 OS는 체크리스트에 포함하지 않음"
 
-        xinetd_conf = self._read_file("/etc/xinetd.conf") or ""
-        if not xinetd_conf and not os.path.exists("/etc/inetd.conf"):
-            self.skipped(cid, name, Severity.LOW, desc,
-                         "inetd/xinetd 미설치 — N/A", rec)
-            return
-
-        if "log_type" in xinetd_conf:
-            self.safe(cid, name, Severity.LOW, desc,
-                      "xinetd log_type 설정됨", rec)
-        else:
-            self.vulnerable(cid, name, Severity.LOW, desc,
-                            "log_type 미설정", rec, xinetd_conf[:200])
+        self.skipped(cid, name, Severity.LOW, desc,
+                     "N/A — 해당 OS는 체크리스트에 포함하지 않음", rec)
 
     def _d02(self):
         """4.2 시스템 로그 설정"""
         cid, name = "4.2", "시스템 로그 설정"
-        desc = "rsyslog/syslog 서비스 실행 여부 및 auth, kern, cron 등 주요 facility 로깅 여부를 점검합니다."
-        rec  = "systemctl enable --now rsyslog; rsyslog.conf에 auth.* kern.* cron.* 설정"
+        desc = ("su 로그 설정, syslog 주요 facility 설정, 로그 파일 권한이 "
+                "적절한지 점검합니다.")
+        rec  = ("su 로그: /etc/login.defs SULOG_FILE 설정, "
+                "syslog: info/alert/notice/debug/emerg/err/crit facility 설정, "
+                "로그 파일 소유자 root, 권한 640 이하")
 
-        running, svc = self._service_up("rsyslog", "syslog", "syslogd")
+        # --- su 로그 설정 확인 ---
+        cmd1 = 'cat /etc/pam.conf 2>/dev/null | grep -i "^su" | grep -v "^#"'
+        _, out1, _ = self._run_shell(cmd1)
+
+        cmd2 = 'cat /etc/login.defs 2>/dev/null | grep "SULOG_FILE"'
+        _, out2, _ = self._run_shell(cmd2)
+
+        # --- syslog 주요 facility 설정 확인 ---
+        cmd3 = ('cat /etc/syslog.conf 2>/dev/null | '
+                'egrep "info|alert|notice|debug|emerg|err|crit" | '
+                'egrep "var|log" | egrep -v "#"')
+        _, out3, _ = self._run_shell(cmd3)
+
+        cmd4 = ('cat /etc/rsyslog.conf 2>/dev/null | '
+                'egrep "info|alert|notice|debug|emerg|err|crit" | '
+                'egrep "var|log" | egrep -v "#"')
+        _, out4, _ = self._run_shell(cmd4)
+
+        cmd_str = f"{cmd1}\n{cmd2}\n{cmd3}\n{cmd4}"
+        cmd_out = "\n".join(filter(None, [out1, out2, out3, out4]))
+
         issues = []
-        if not running:
-            issues.append("rsyslog/syslog 서비스 미실행")
 
-        content = ""
-        for p in ("/etc/rsyslog.conf", "/etc/syslog.conf"):
-            c = self._read_file(p)
-            if c:
-                content = c
-                break
+        # su 로그: pam.conf에 su 관련 설정 또는 login.defs에 SULOG_FILE 있어야 함
+        su_log_ok = bool(out1.strip() or out2.strip())
+        if not su_log_ok:
+            issues.append("su 로그 설정 없음 (/etc/pam.conf su 항목, /etc/login.defs SULOG_FILE 미설정)")
 
-        if content:
-            for facility in ("auth", "kern", "cron"):
-                if not any(facility in l and not l.strip().startswith("#")
-                           for l in content.splitlines()):
-                    issues.append(f"{facility} facility 로깅 미설정")
-        else:
-            issues.append("syslog 설정 파일 없음")
+        # syslog 주요 facility 설정
+        syslog_ok = bool(out3.strip() or out4.strip())
+        if not syslog_ok:
+            issues.append("syslog 주요 facility 미설정 (info/alert/notice 등 var/log 경로 없음)")
+
+        # 로그 파일 권한 확인 (/var/log 디렉터리 내 주요 파일)
+        perm_issues = []
+        log_files = ["/var/log/messages", "/var/log/secure", "/var/log/auth.log",
+                     "/var/log/syslog", "/var/log/kern.log"]
+        for lf in log_files:
+            if not os.path.exists(lf):
+                continue
+            try:
+                st = os.stat(lf)
+                owner = st.st_uid
+                perm = oct(st.st_mode & 0o777)[2:]
+                if owner != 0:
+                    perm_issues.append(f"{lf}: 소유자가 root가 아님 (uid={owner})")
+                elif int(perm, 8) > 0o640:
+                    perm_issues.append(f"{lf}: 권한 {perm} (640 초과)")
+            except Exception:
+                pass
+
+        if perm_issues:
+            issues.extend(perm_issues)
 
         if issues:
             self.vulnerable(cid, name, Severity.MEDIUM, desc,
-                            "\n".join(issues), rec)
+                            "\n".join(issues), rec,
+                            command=cmd_str, cmd_output=cmd_out)
         else:
+            details = "su 로그 설정, syslog 주요 facility 설정, 로그 파일 권한 양호"
             self.safe(cid, name, Severity.MEDIUM, desc,
-                      f"시스템 로그 설정 양호 ({svc} 실행 중)", rec)
+                      details, rec,
+                      command=cmd_str, cmd_output=cmd_out)
 
     def _d03(self):
         """4.3 로그 저장 주기"""
         cid, name = "4.3", "로그 저장 주기"
-        desc = "logrotate 설정이 있고, 로그 보관 기간이 적절한지(rotate ≥ 4 권고) 점검합니다."
-        rec  = "/etc/logrotate.conf: rotate 12 이상; weekly 또는 monthly 설정"
+        desc = ("로그 파일의 저장 기간 및 정기 백업 수행 여부를 점검합니다. "
+                "담당자 인터뷰를 통해 확인합니다.")
+        rec  = ("로그는 최소 1개월 이상 보관하고, 정기적으로 백업할 것. "
+                "logrotate 설정: rotate 12 이상 (monthly 기준)")
 
-        content = self._read_file("/etc/logrotate.conf")
-        if content is None:
-            self.vulnerable(cid, name, Severity.MEDIUM, desc,
-                            "logrotate.conf 없음 — 로그 순환 미설정", rec)
-            return
-
-        rotate_vals = re.findall(r"^\s*rotate\s+(\d+)", content, re.MULTILINE)
-        if rotate_vals:
-            min_rot = min(int(v) for v in rotate_vals)
-            if min_rot < 4:
-                self.vulnerable(cid, name, Severity.MEDIUM, desc,
-                                f"rotate={min_rot} (4 미만 — 보관 기간 부족)", rec,
-                                content[:300])
-            else:
-                self.safe(cid, name, Severity.MEDIUM, desc,
-                          f"logrotate rotate={min_rot} (양호)", rec)
-        else:
-            self.manual(cid, name, Severity.MEDIUM, desc,
-                        "rotate 값 파싱 불가 — logrotate.conf 수동 확인 필요", rec)
+        self.manual(cid, name, Severity.MEDIUM, desc,
+                    "담당자 인터뷰 필요 — 로그 저장 기간 및 정기 백업 수행 여부 확인", rec)
 
     # ══════════════════════════════════════════════════════════
     # 5. 주요 응용 설정

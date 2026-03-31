@@ -1,0 +1,171 @@
+"""
+원격 실행기 (SSH / AWS SSM)
+BaseScanner._run_cmd / _run_shell / _read_file 에 주입해 원격 진단에 사용
+"""
+from __future__ import annotations
+import io
+import time
+import json
+import shlex
+from typing import Optional
+
+
+# ══════════════════════════════════════════════════════
+# SSH Executor (paramiko 기반)
+# ══════════════════════════════════════════════════════
+
+class SSHExecutor:
+    """SSH를 통해 원격 호스트에서 명령 실행 및 파일 읽기"""
+
+    def __init__(
+        self,
+        host: str,
+        port: int = 22,
+        username: str = "ec2-user",
+        key_path: Optional[str] = None,
+        password: Optional[str] = None,
+    ):
+        try:
+            import paramiko
+        except ImportError:
+            raise RuntimeError("paramiko 미설치 — pip install paramiko")
+
+        self.host = host
+        self.username = username
+        self._client = paramiko.SSHClient()
+        self._client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+        connect_kwargs: dict = dict(
+            hostname=host, port=port, username=username, timeout=15,
+            allow_agent=True, look_for_keys=(key_path is None and password is None),
+        )
+        if key_path:
+            connect_kwargs["key_filename"] = key_path
+        if password:
+            connect_kwargs["password"] = password
+
+        self._client.connect(**connect_kwargs)
+
+    # ── 내부 실행 ────────────────────────────────────
+
+    def _exec(self, cmd: str, timeout: int) -> tuple[int, str, str]:
+        try:
+            stdin, stdout, stderr = self._client.exec_command(cmd, timeout=timeout)
+            rc   = stdout.channel.recv_exit_status()
+            out  = stdout.read().decode("utf-8", errors="replace").strip()
+            err  = stderr.read().decode("utf-8", errors="replace").strip()
+            return rc, out, err
+        except Exception as e:
+            return -1, "", str(e)
+
+    # ── public API (BaseScanner 인터페이스와 동일) ─────
+
+    def run_cmd(self, cmd: str, timeout: int = 10) -> tuple[int, str, str]:
+        """shlex.split 불필요 — SSH는 셸 문자열을 그대로 전달"""
+        return self._exec(cmd, timeout)
+
+    def run_shell(self, cmd: str, timeout: int = 10) -> tuple[int, str, str]:
+        return self._exec(cmd, timeout)
+
+    def read_file(self, path: str) -> Optional[str]:
+        rc, out, _ = self._exec(f"cat {shlex.quote(path)} 2>/dev/null", timeout=10)
+        return out if rc == 0 and out else None
+
+    def close(self):
+        self._client.close()
+
+    def __repr__(self):
+        return f"SSHExecutor({self.username}@{self.host})"
+
+
+# ══════════════════════════════════════════════════════
+# AWS SSM Executor (boto3 기반)
+# ══════════════════════════════════════════════════════
+
+class SSMExecutor:
+    """
+    AWS Systems Manager Run Command(send_command) 를 통해
+    EC2 인스턴스에서 명령 실행 및 파일 읽기.
+
+    사전 조건:
+      - 인스턴스에 SSM Agent 설치 및 AmazonSSMManagedInstanceCore 정책 부여
+      - 호출 측에 ssm:SendCommand / ssm:GetCommandInvocation 권한 필요
+    """
+
+    _POLL_INTERVAL = 1   # 결과 조회 간격(초)
+    _MAX_WAIT      = 60  # 최대 대기(초)
+
+    def __init__(
+        self,
+        instance_id: str,
+        region: str,
+        aws_access_key_id: Optional[str] = None,
+        aws_secret_access_key: Optional[str] = None,
+        aws_session_token: Optional[str] = None,
+    ):
+        try:
+            import boto3
+        except ImportError:
+            raise RuntimeError("boto3 미설치 — pip install boto3")
+
+        self.instance_id = instance_id
+        self.region = region
+
+        session_kwargs: dict = dict(region_name=region)
+        if aws_access_key_id:
+            session_kwargs["aws_access_key_id"]     = aws_access_key_id
+            session_kwargs["aws_secret_access_key"] = aws_secret_access_key
+        if aws_session_token:
+            session_kwargs["aws_session_token"] = aws_session_token
+
+        import boto3
+        self._ssm = boto3.client("ssm", **session_kwargs)
+
+    # ── 내부 실행 ────────────────────────────────────
+
+    def _exec(self, cmd: str, timeout: int) -> tuple[int, str, str]:
+        try:
+            resp = self._ssm.send_command(
+                InstanceIds=[self.instance_id],
+                DocumentName="AWS-RunShellScript",
+                Parameters={"commands": [cmd]},
+                TimeoutSeconds=max(timeout, 10),
+            )
+            cmd_id = resp["Command"]["CommandId"]
+
+            elapsed = 0
+            while elapsed < self._MAX_WAIT:
+                time.sleep(self._POLL_INTERVAL)
+                elapsed += self._POLL_INTERVAL
+                inv = self._ssm.get_command_invocation(
+                    CommandId=cmd_id,
+                    InstanceId=self.instance_id,
+                )
+                status = inv["Status"]
+                if status in ("Success", "Failed", "TimedOut", "Cancelled"):
+                    rc  = 0 if status == "Success" else 1
+                    out = inv.get("StandardOutputContent", "").strip()
+                    err = inv.get("StandardErrorContent", "").strip()
+                    return rc, out, err
+
+            return -1, "", f"SSM timeout after {self._MAX_WAIT}s"
+        except Exception as e:
+            return -1, "", str(e)
+
+    # ── public API ────────────────────────────────────
+
+    def run_cmd(self, cmd: str, timeout: int = 10) -> tuple[int, str, str]:
+        return self._exec(cmd, timeout)
+
+    def run_shell(self, cmd: str, timeout: int = 10) -> tuple[int, str, str]:
+        return self._exec(cmd, timeout)
+
+    def read_file(self, path: str) -> Optional[str]:
+        rc, out, _ = self._exec(f"cat {shlex.quote(path)} 2>/dev/null", timeout=10)
+        return out if rc == 0 and out else None
+
+    def close(self):
+        pass  # boto3 client는 별도 close 불필요
+
+    def __repr__(self):
+        return f"SSMExecutor({self.instance_id} @ {self.region})"

@@ -33,7 +33,9 @@ class CheckResult:
     description: str         # 점검 항목 설명
     details: str             # 실제 점검 결과 상세
     recommendation: str      # 조치 방안
-    evidence: str = ""       # 근거 (명령어 출력 등)
+    command: str = ""        # 진단에 사용한 명령어
+    cmd_output: str = ""     # 명령어 실제 출력값
+    evidence: str = ""       # 판정 근거 (요약)
     checked_at: str = field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
     def to_dict(self) -> dict:
@@ -46,6 +48,8 @@ class CheckResult:
             "description": self.description,
             "details": self.details,
             "recommendation": self.recommendation,
+            "command": self.command,
+            "cmd_output": self.cmd_output,
             "evidence": self.evidence,
             "checked_at": self.checked_at,
         }

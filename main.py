@@ -6,6 +6,7 @@
 import sys
 import os
 import platform
+import getpass
 
 # 프로젝트 루트를 PYTHONPATH에 추가
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -63,6 +64,12 @@ REPORT_FORMATS = {
     "3": ("전체 (Excel + Markdown)", None),
 }
 
+CONNECTION_MODES = {
+    "1": "로컬 (현재 시스템)",
+    "2": "SSH (원격 서버 / EC2 Key Pair)",
+    "3": "AWS SSM (EC2 Session Manager)",
+}
+
 # ── UI 헬퍼 ─────────────────────────────────────────────────────────────────
 
 def _hr(char="─", width=60):
@@ -83,6 +90,96 @@ def _ask(prompt: str, default: str = "") -> str:
     except (KeyboardInterrupt, EOFError):
         print("\n\n종료합니다.")
         sys.exit(0)
+
+def _ask_secret(prompt: str) -> str:
+    """비밀번호·시크릿 키 입력 (화면에 표시 안 함)"""
+    try:
+        return getpass.getpass(f"  {prompt} : ")
+    except (KeyboardInterrupt, EOFError):
+        print("\n\n종료합니다.")
+        sys.exit(0)
+
+def _select_connection() -> str:
+    print(BOLD("연결 방식 선택"))
+    _hr()
+    for key, label in CONNECTION_MODES.items():
+        print(f"  {BOLD(key)}) {label}")
+    print()
+    while True:
+        choice = _ask("번호 선택", "1")
+        if choice in CONNECTION_MODES:
+            return choice
+        print(RED("  잘못된 선택입니다."))
+
+
+def _build_executor(mode: str):
+    """연결 방식에 따라 SSH/SSM executor 또는 None(로컬) 반환"""
+    if mode == "1":
+        return None, "localhost"
+
+    if mode == "2":
+        # ── SSH ──────────────────────────────────────
+        print()
+        print(BOLD("SSH 연결 정보 입력"))
+        _hr()
+        host     = _ask("호스트 / IP")
+        port     = int(_ask("포트", "22"))
+        username = _ask("사용자명", "ec2-user")
+        print()
+        print("  인증 방식: 1) PEM 키 파일  2) 패스워드")
+        auth = _ask("번호 선택", "1")
+        key_path = password = None
+        if auth == "1":
+            key_path = _ask("PEM 키 파일 경로 (예: ~/.ssh/my-key.pem)")
+            key_path = os.path.expanduser(key_path)
+        else:
+            password = _ask_secret("패스워드")
+
+        print()
+        print(f"  {CYAN('→')} {username}@{host}:{port} 연결 중...")
+        try:
+            from core.remote import SSHExecutor
+            executor = SSHExecutor(host, port, username, key_path, password)
+            print(f"  {GREEN('✓')} SSH 연결 성공")
+            return executor, host
+        except Exception as e:
+            print(RED(f"  ✗ SSH 연결 실패: {e}"))
+            sys.exit(1)
+
+    if mode == "3":
+        # ── AWS SSM ───────────────────────────────────
+        print()
+        print(BOLD("AWS SSM 연결 정보 입력"))
+        _hr()
+        instance_id = _ask("EC2 인스턴스 ID (예: i-0123456789abcdef0)")
+        region      = _ask("AWS 리전", "ap-northeast-2")
+        print()
+        print("  자격증명: 1) IAM 액세스 키  2) IAM 역할 / 환경변수 / ~/.aws 자동 사용")
+        cred_mode = _ask("번호 선택", "2")
+
+        access_key = secret_key = session_token = None
+        if cred_mode == "1":
+            access_key    = _ask("Access Key ID")
+            secret_key    = _ask_secret("Secret Access Key")
+            use_token     = _ask("Session Token 사용? (y/n)", "n").lower()
+            if use_token == "y":
+                session_token = _ask_secret("Session Token")
+
+        print()
+        print(f"  {CYAN('→')} SSM 연결 확인 중 ({instance_id} / {region})...")
+        try:
+            from core.remote import SSMExecutor
+            executor = SSMExecutor(instance_id, region, access_key, secret_key, session_token)
+            # 간단한 ping 명령으로 연결 확인
+            rc, out, err = executor.run_shell("echo OK", timeout=30)
+            if rc != 0 or "OK" not in out:
+                raise RuntimeError(err or "응답 없음")
+            print(f"  {GREEN('✓')} SSM 연결 성공")
+            return executor, instance_id
+        except Exception as e:
+            print(RED(f"  ✗ SSM 연결 실패: {e}"))
+            sys.exit(1)
+
 
 def _select_module() -> dict:
     print(BOLD("진단 모듈 선택"))
@@ -188,9 +285,10 @@ def _collect_options(mod_name: str, target: str) -> dict:
 # ── 스캐너 실행 ───────────────────────────────────────────────────────────
 
 def _run_scan(mod: dict, opts: dict) -> ScanReport:
+    import inspect
     ScannerClass = mod["loader"]()
-    scanner = ScannerClass(**{k: v for k, v in opts.items()
-                              if k in ScannerClass.__init__.__code__.co_varnames})
+    valid_params = set(inspect.signature(ScannerClass.__init__).parameters) - {"self"}
+    scanner = ScannerClass(**{k: v for k, v in opts.items() if k in valid_params})
     return scanner.run()
 
 # ── 메인 ─────────────────────────────────────────────────────────────────────
@@ -198,8 +296,12 @@ def _run_scan(mod: dict, opts: dict) -> ScanReport:
 def main():
     _banner()
 
-    # 1. 진단 대상
-    target = _ask("진단 대상 호스트/IP", "localhost")
+    # 1. 연결 방식 선택
+    conn_mode = _select_connection()
+    print()
+    executor, target = _build_executor(conn_mode)
+    if conn_mode == "1":
+        target = _ask("진단 대상 호스트/IP (리포트 표시용)", "localhost")
 
     # 2. 모듈 선택
     print()
@@ -209,6 +311,8 @@ def main():
     # 3. 추가 옵션
     print()
     opts = _collect_options(mod["name"], target)
+    if executor is not None:
+        opts["executor"] = executor
 
     # 4. 리포트 형식
     formats = _select_report_format()
@@ -216,7 +320,12 @@ def main():
     # 5. 진단 실행
     print()
     _hr()
-    print(BOLD(f"  [{mod['name']}] 진단 시작..."))
+    conn_label = {
+        "1": "로컬",
+        "2": f"SSH → {target}",
+        "3": f"SSM → {target}",
+    }.get(conn_mode, target)
+    print(BOLD(f"  [{mod['name']}] 진단 시작... ({conn_label})"))
     _hr()
     report = _run_scan(mod, opts)
 
@@ -235,6 +344,13 @@ def main():
     for label, save_fn in formats:
         path = save_fn(report)
         print(f"  {GREEN('✓')} {label} 리포트 저장: {path}")
+
+    # 10. 원격 연결 종료
+    if executor is not None:
+        try:
+            executor.close()
+        except Exception:
+            pass
 
     print()
     again = _ask("다른 항목을 진단하시겠습니까? (y/n)", "n").lower()
