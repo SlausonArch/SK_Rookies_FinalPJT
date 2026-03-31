@@ -1,0 +1,11 @@
+export const USER_ACCESS_TOKEN_KEY = 'accessToken'
+export const USER_REFRESH_TOKEN_KEY = 'refreshToken'
+export const USER_TOKEN_COOKIE = 'vce_token'
+export const USER_LOGGED_OUT_SENTINEL = 'LOGGED_OUT'
+
+export const ADMIN_ACCESS_TOKEN_KEY = 'adminAccessToken'
+export const ADMIN_ROLE_KEY = 'adminRole'
+export const ADMIN_EMAIL_KEY = 'adminEmail'
+export const ADMIN_NAME_KEY = 'adminName'
+export const ADMIN_TOKEN_COOKIE = 'vce_admin_token'
+export const ADMIN_LOGGED_OUT_SENTINEL = 'ADMIN_LOGGED_OUT'
