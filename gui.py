@@ -106,7 +106,9 @@ class VulnScannerGUI:
         self.ssh_key    = tk.StringVar()
         self.ssh_pass   = tk.StringVar()
         self.ssm_id     = tk.StringVar()
+        self.ssm_id.trace_add("write", lambda *_: self._update_rds_cmd())
         self.ssm_region = tk.StringVar(value="ap-northeast-2")
+        self.ssm_region.trace_add("write", lambda *_: self._update_rds_cmd())
         self.ssm_cred   = tk.StringVar(value="2")
         self.ssm_ak     = tk.StringVar()
         self.ssm_sk     = tk.StringVar()
@@ -124,7 +126,9 @@ class VulnScannerGUI:
         self.db_pass    = tk.StringVar()
         self.ora_deploy = tk.StringVar(value="server")
         self.ora_host   = tk.StringVar(value="localhost")
+        self.ora_host.trace_add("write", lambda *_: self._update_rds_cmd())
         self.ora_port   = tk.StringVar(value="1521")
+        self.ora_port.trace_add("write", lambda *_: self._update_rds_cmd())
         self.ora_svc    = tk.StringVar(value="ORCL")
         self.ora_user   = tk.StringVar(value="system")
         self.ora_pass   = tk.StringVar()
@@ -464,7 +468,47 @@ class VulnScannerGUI:
         tk.Label(f6, text="배포 유형", bg=C_CARD, fg=C_SUB, font=(_UI,8)).pack(anchor=tk.W, padx=16, pady=(4,2))
         dpr = tk.Frame(f6, bg=C_CARD); dpr.pack(anchor=tk.W, padx=16)
         for v, l in [("server","서버"),("docker","Docker"),("rds","AWS RDS")]:
-            ttk.Radiobutton(dpr, text=l, variable=self.ora_deploy, value=v).pack(side=tk.LEFT, padx=(0,8))
+            ttk.Radiobutton(dpr, text=l, variable=self.ora_deploy,
+                            value=v, command=self._on_ora_deploy).pack(side=tk.LEFT, padx=(0,8))
+
+        # ── SSM 포트 포워딩 안내 (RDS 선택 시 표시) ──────────────────
+        self.f_rds_guide = tk.Frame(f6, bg=C_DEEP)
+        gi = tk.Frame(self.f_rds_guide, bg=C_DEEP); gi.pack(fill=tk.X, padx=16, pady=8)
+
+        # 제목
+        th = tk.Frame(gi, bg=C_DEEP); th.pack(fill=tk.X, pady=(0,6))
+        tk.Label(th, text="⚡", bg=C_DEEP, fg=C_GOLD, font=(_UI,10)).pack(side=tk.LEFT)
+        tk.Label(th, text="  SSM 포트 포워딩 사전 설정 필요", bg=C_DEEP, fg=C_GOLD,
+                 font=(_UI,9,"bold")).pack(side=tk.LEFT)
+
+        # 설명
+        tk.Label(gi, text="RDS는 직접 접근이 불가하므로, 진단 전 아래 명령을\n"
+                          "터미널에서 먼저 실행해 터널을 열어야 합니다.",
+                 bg=C_DEEP, fg=C_SUB, font=(_UI,8), justify=tk.LEFT).pack(anchor=tk.W, pady=(0,8))
+
+        # STEP 1
+        tk.Label(gi, text="STEP 1  —  터미널에서 실행",
+                 bg=C_DEEP, fg=C_TEAL, font=(_UI,8,"bold")).pack(anchor=tk.W)
+        cmd_box = tk.Frame(gi, bg=C_LINE); cmd_box.pack(fill=tk.X, pady=(3,8))
+        self.rds_cmd_txt = tk.Text(cmd_box, bg=C_LINE, fg=C_FG,
+                                   font=(_MONO,8), height=6,
+                                   relief=tk.FLAT, padx=10, pady=6,
+                                   state=tk.DISABLED, wrap=tk.NONE)
+        self.rds_cmd_txt.pack(fill=tk.X)
+        cp_btn = tk.Button(gi, text="📋  명령어 복사", bg=C_LINE, fg=C_TEAL,
+                           relief=tk.FLAT, font=(_UI,8), padx=8, pady=3,
+                           activebackground=C_LINE2, cursor="hand2",
+                           command=self._copy_rds_cmd)
+        cp_btn.pack(anchor=tk.W, pady=(0,8))
+
+        # STEP 2
+        tk.Label(gi, text="STEP 2  —  아래 접속 정보 입력 후 진단 시작",
+                 bg=C_DEEP, fg=C_TEAL, font=(_UI,8,"bold")).pack(anchor=tk.W, pady=(0,4))
+        tk.Label(gi, text="호스트: 127.0.0.1   /   포트: localPortNumber 값",
+                 bg=C_DEEP, fg=C_MUTE, font=(_UI,8)).pack(anchor=tk.W)
+
+        self._update_rds_cmd()   # 초기 렌더링
+
         self._field(f6, "DB 호스트 / IP", self.ora_host)
         ph = tk.Frame(f6, bg=C_CARD); ph.pack(fill=tk.X, padx=16)
         pf2 = tk.Frame(ph, bg=C_CARD); pf2.pack(side=tk.LEFT, padx=(0,8))
@@ -482,6 +526,50 @@ class VulnScannerGUI:
         for f in self.opt_frames.values(): f.pack_forget()
         k = self.mod_key.get()
         if k in self.opt_frames: self.opt_frames[k].pack(fill=tk.X)
+        if k == "6": self._on_ora_deploy()
+
+    def _on_ora_deploy(self):
+        if not hasattr(self, "f_rds_guide"): return
+        if self.ora_deploy.get() == "rds":
+            self._update_rds_cmd()
+            self.f_rds_guide.pack(fill=tk.X, padx=16, pady=(6,4))
+        else:
+            self.f_rds_guide.pack_forget()
+
+    def _get_rds_host(self) -> str:
+        """SSM 아이디가 있으면 실제 RDS 엔드포인트, 없으면 플레이스홀더"""
+        h = self.ora_host.get().strip()
+        return h if h and h != "localhost" else "your-rds-endpoint.rds.amazonaws.com"
+
+    def _update_rds_cmd(self):
+        if not hasattr(self, "rds_cmd_txt"): return
+        iid    = self.ssm_id.get().strip()     or "i-xxxxxxxxxxxxxxxxx"
+        region = self.ssm_region.get().strip() or "ap-northeast-2"
+        host   = self._get_rds_host()
+        port   = self.ora_port.get().strip()   or "1521"
+        local  = port   # localPort = remotePort (변경 가능)
+
+        cmd = (
+            f"aws ssm start-session \\\n"
+            f"    --region {region} \\\n"
+            f"    --target {iid} \\\n"
+            f"    --document-name AWS-StartPortForwardingSessionToRemoteHost \\\n"
+            f"    --parameters '{{"
+            f'"host":["{host}"],'
+            f'"portNumber":["{port}"],'
+            f'"localPortNumber":["{local}"]'
+            f"}}'"
+        )
+        self.rds_cmd_txt.config(state=tk.NORMAL)
+        self.rds_cmd_txt.delete("1.0", tk.END)
+        self.rds_cmd_txt.insert("1.0", cmd)
+        self.rds_cmd_txt.config(state=tk.DISABLED)
+
+    def _copy_rds_cmd(self):
+        cmd = self.rds_cmd_txt.get("1.0", tk.END).strip()
+        self.root.clipboard_clear()
+        self.root.clipboard_append(cmd)
+        messagebox.showinfo("복사 완료", "명령어가 클립보드에 복사되었습니다.")
 
     def _on_dbtype(self):
         self.db_port.set({"mysql":"3306","postgresql":"5432","mssql":"1433"}.get(
