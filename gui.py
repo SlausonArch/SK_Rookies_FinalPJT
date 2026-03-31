@@ -112,7 +112,9 @@ class VulnScannerGUI:
         self.ssm_sk     = tk.StringVar()
         self.ssm_tok    = tk.StringVar()
         self.ssm_os     = tk.StringVar(value="linux")
-        self.docker_ctn = tk.StringVar()
+        self.docker_ctn      = tk.StringVar()   # 로컬 Docker
+        self.ssh_docker_ctn  = tk.StringVar()   # SSH → Docker
+        self.ssm_docker_ctn  = tk.StringVar()   # SSM → Docker
         self.mod_key    = tk.StringVar(value="1")
         self.target     = tk.StringVar(value="localhost")
         self.nginx_conf = tk.StringVar()
@@ -316,7 +318,13 @@ class VulnScannerGUI:
 
         self.f_spwd = tk.Frame(f, bg=C_CARD)
         self._field(self.f_spwd, "패스워드", self.ssh_pass, show="●", bg=C_CARD)
-        tk.Frame(f, bg=C_CARD, height=6).pack()
+
+        # 원격 Docker 옵션
+        tk.Frame(f, bg=C_LINE, height=1).pack(fill=tk.X, padx=16, pady=(8, 0))
+        tk.Label(f, text="DOCKER  (선택 — EC2 안의 컨테이너 진단 시)", bg=C_CARD,
+                 fg=C_GOLD, font=(_UI, 7, "bold")).pack(anchor=tk.W, padx=16, pady=(6, 1))
+        self._field(f, "컨테이너 이름 / ID  (비워두면 EC2 직접 진단)", self.ssh_docker_ctn)
+        tk.Frame(f, bg=C_CARD, height=4).pack()
         return f
 
     def _make_f_ssm(self):
@@ -339,7 +347,13 @@ class VulnScannerGUI:
         for v, l in [("linux","🐧 Linux"), ("windows","🪟 Windows")]:
             ttk.Radiobutton(or_, text=l, variable=self.ssm_os,
                             value=v).pack(side=tk.LEFT, padx=(0,10))
-        tk.Frame(f, bg=C_CARD, height=8).pack()
+
+        # 원격 Docker 옵션
+        tk.Frame(f, bg=C_LINE, height=1).pack(fill=tk.X, padx=16, pady=(8, 0))
+        tk.Label(f, text="DOCKER  (선택 — EC2 안의 컨테이너 진단 시)", bg=C_CARD,
+                 fg=C_GOLD, font=(_UI, 7, "bold")).pack(anchor=tk.W, padx=16, pady=(6, 1))
+        self._field(f, "컨테이너 이름 / ID  (비워두면 EC2 직접 진단)", self.ssm_docker_ctn)
+        tk.Frame(f, bg=C_CARD, height=4).pack()
         return f
 
     def _make_f_docker(self):
@@ -620,9 +634,19 @@ class VulnScannerGUI:
             else:
                 pw = self.ssh_pass.get() or None
             print(f"\n  → SSH 연결 중 ({user}@{h}:{port})...")
-            from core.remote import SSHExecutor
+            from core.remote import SSHExecutor, RemoteDockerExecutor
             ex = SSHExecutor(h, port, user, kp, pw)
-            print("  ✓ SSH 연결 성공\n"); return ex
+            print("  ✓ SSH 연결 성공")
+            ctn = self.ssh_docker_ctn.get().strip()
+            if ctn:
+                rc, out, err = ex.run_shell(f"docker exec {ctn} echo OK", timeout=15)
+                if rc != 0 or "OK" not in out:
+                    raise RuntimeError(f"Docker 컨테이너 접근 실패: {err or '응답 없음'}\n"
+                                       f"  → docker ps 로 컨테이너 상태 확인")
+                ex = RemoteDockerExecutor(ex, ctn)
+                print(f"  ✓ Docker 컨테이너 연결 성공  ({ctn})")
+            print()
+            return ex
         if m == "3":
             iid = self.ssm_id.get().strip()
             if not iid: raise ValueError("EC2 인스턴스 ID를 입력하세요.")
@@ -651,7 +675,18 @@ class VulnScannerGUI:
                 raise RuntimeError(f"SSM 오류: {msg}")
             if rc != 0 or "OK" not in out:
                 raise RuntimeError(err or "SSM 응답 없음")
-            print("  ✓ SSM 연결 성공\n"); return ex
+            print("  ✓ SSM 연결 성공")
+            ctn = self.ssm_docker_ctn.get().strip()
+            if ctn:
+                rc2, out2, err2 = ex.run_shell(f"docker exec {ctn} echo OK", timeout=30)
+                if rc2 != 0 or "OK" not in out2:
+                    raise RuntimeError(f"Docker 컨테이너 접근 실패: {err2 or '응답 없음'}\n"
+                                       f"  → docker ps 로 컨테이너 상태 확인")
+                from core.remote import RemoteDockerExecutor
+                ex = RemoteDockerExecutor(ex, ctn)
+                print(f"  ✓ Docker 컨테이너 연결 성공  ({ctn})")
+            print()
+            return ex
         if m == "4":
             ctn = self.docker_ctn.get().strip()
             if not ctn: raise ValueError("컨테이너 이름 또는 ID를 입력하세요.")

@@ -218,3 +218,40 @@ class DockerExecutor:
 
     def __repr__(self):
         return f"DockerExecutor({self.container})"
+
+
+# ══════════════════════════════════════════════════════
+# Remote Docker Executor (SSH/SSM → docker exec 체이닝)
+# ══════════════════════════════════════════════════════
+
+class RemoteDockerExecutor:
+    """
+    SSH 또는 SSM Executor를 통해 원격 EC2 안의 Docker 컨테이너에서 명령 실행.
+    예: 로컬 → SSH → EC2 → docker exec nginx-container
+    """
+
+    def __init__(self, base_executor, container: str):
+        self._base      = base_executor
+        self.container  = container
+
+    def _wrap(self, cmd: str) -> str:
+        return f"docker exec {shlex.quote(self.container)} sh -c {shlex.quote(cmd)}"
+
+    def run_cmd(self, cmd: str, timeout: int = 10) -> tuple[int, str, str]:
+        return self._base.run_shell(self._wrap(cmd), timeout)
+
+    def run_shell(self, cmd: str, timeout: int = 10) -> tuple[int, str, str]:
+        return self._base.run_shell(self._wrap(cmd), timeout)
+
+    def read_file(self, path: str) -> Optional[str]:
+        rc, out, _ = self.run_shell(f"cat {shlex.quote(path)} 2>/dev/null", timeout=10)
+        return out if rc == 0 and out else None
+
+    def close(self):
+        try:
+            self._base.close()
+        except Exception:
+            pass
+
+    def __repr__(self):
+        return f"RemoteDockerExecutor({self.container} via {self._base})"
