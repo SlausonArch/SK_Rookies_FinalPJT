@@ -61,7 +61,7 @@ services:
         - NEXT_PUBLIC_EXCHANGE_FRONTEND_URL=http://localhost:55173
         - NEXT_PUBLIC_BANK_FRONTEND_URL=http://localhost:55174
     ports:
-      - "55173:3000"
+      - "55173:80"
     environment:
       - NEXT_PUBLIC_APP_MODE=exchange
       - NEXT_PUBLIC_API_BASE_URL=http://localhost:28080
@@ -79,7 +79,7 @@ services:
         - NEXT_PUBLIC_EXCHANGE_FRONTEND_URL=http://localhost:55173
         - NEXT_PUBLIC_BANK_FRONTEND_URL=http://localhost:55174
     ports:
-      - "55174:3000"
+      - "55174:80"
     environment:
       - NEXT_PUBLIC_APP_MODE=bank
       - NEXT_PUBLIC_API_BASE_URL=http://localhost:28080

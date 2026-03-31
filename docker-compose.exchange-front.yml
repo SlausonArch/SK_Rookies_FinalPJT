@@ -4,7 +4,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "15173:3000"
+      - "15173:80"
     env_file:
       - ./frontend/.env.exchange
     stdin_open: true

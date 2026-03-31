@@ -52,7 +52,7 @@ services:
   exchange-front:
     build: ./frontend
     ports:
-      - "${APP_BIND_IP:-0.0.0.0}:${HOST_EXCHANGE_FRONT_PORT:-15173}:3000"
+      - "${APP_BIND_IP:-0.0.0.0}:${HOST_EXCHANGE_FRONT_PORT:-15173}:80"
     environment:
       - VITE_API_BASE_URL=${VITE_API_BASE_URL}
       - VITE_EXCHANGE_FRONTEND_URL=${VITE_EXCHANGE_FRONTEND_URL}
@@ -65,7 +65,7 @@ services:
   bank-front:
     build: ./frontend
     ports:
-      - "${APP_BIND_IP:-0.0.0.0}:${HOST_BANK_FRONT_PORT:-15174}:3000"
+      - "${APP_BIND_IP:-0.0.0.0}:${HOST_BANK_FRONT_PORT:-15174}:80"
     environment:
       - VITE_API_BASE_URL=${VITE_API_BASE_URL}
       - VITE_EXCHANGE_FRONTEND_URL=${VITE_EXCHANGE_FRONTEND_URL}

@@ -9,7 +9,7 @@
     "build": "next build",
     "build:exchange": "NEXT_PUBLIC_APP_MODE=exchange next build",
     "build:bank": "NEXT_PUBLIC_APP_MODE=bank next build",
-    "start": "next start -p 3000",
+    "start": "next start -p 80",
     "lint": "next lint"
   },
   "dependencies": {
