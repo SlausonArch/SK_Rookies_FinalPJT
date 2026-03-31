@@ -156,7 +156,8 @@ class SSMExecutor:
 
             return -1, "", f"SSM timeout after {self._MAX_WAIT}s"
         except Exception as e:
-            return -1, "", str(e)
+            # InvalidInstanceId 는 호출 측에서 직접 처리하도록 재raise
+            raise
 
     # ── public API ────────────────────────────────────
 

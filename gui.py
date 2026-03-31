@@ -641,8 +641,23 @@ class VulnScannerGUI:
             print(f"\n  → SSM 연결 확인 중 ({iid} / {region} / {ost})...")
             from core.remote import SSMExecutor
             ex = SSMExecutor(iid, region, ak, sk, tok, platform=ost)
-            rc, out, err = ex.run_shell(ping, timeout=30)
-            if rc != 0 or "OK" not in out: raise RuntimeError(err or "SSM 응답 없음")
+            try:
+                rc, out, err = ex.run_shell(ping, timeout=30)
+            except Exception as ssm_err:
+                msg = str(ssm_err)
+                if "InvalidInstanceId" in msg:
+                    raise RuntimeError(
+                        "SSM 연결 실패: 인스턴스를 찾을 수 없습니다.\n\n"
+                        "점검 항목:\n"
+                        "  1) 인스턴스가 running 상태인지 확인\n"
+                        "  2) SSM Agent 설치·실행 여부 확인\n"
+                        "  3) IAM 역할에 AmazonSSMManagedInstanceCore 정책 부여 여부\n"
+                        "  4) 인스턴스 ID가 올바른지 확인\n\n"
+                        f"원본 오류: {msg}"
+                    )
+                raise RuntimeError(f"SSM 오류: {msg}")
+            if rc != 0 or "OK" not in out:
+                raise RuntimeError(err or "SSM 응답 없음")
             print("  ✓ SSM 연결 성공\n"); return ex
         return None
 
