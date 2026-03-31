@@ -49,8 +49,14 @@ class BaseScanner(ABC):
         )
         self.report.add(result)
         if self.verbose:
-            icon = {"취약": "✗", "양호": "✓", "수동점검": "?", "오류": "!", "미해당": "-"}.get(status.value, " ")
-            print(f"  [{icon}] [{check_id}] {name} → {status.value}")
+            label = {
+                "취약":    "[취약]",
+                "양호":    "[양호]",
+                "수동점검": "[검토]",
+                "오류":    "[검토]",
+                "미해당":  "[ N/A]",
+            }.get(status.value, "[    ]")
+            print(f"  {label} [{check_id}] {name}")
         return result
 
     def vulnerable(self, check_id, name, severity, description, details, recommendation, evidence=""):

@@ -58,6 +58,16 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+### Python / PyInstaller ###
+__pycache__/
+*.py[cod]
+.venv/
+dist/
+*.spec
+reports/*.json
+reports/*.html
+reports/*.csv
+
 ### Project Specific ###
 logs/
 uploads/

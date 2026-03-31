@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/opt/homebrew/bin/python3
 """
 취약점 진단 자동화 스크립트
 사용법: python main.py
@@ -58,10 +58,9 @@ MODULES = {
 }
 
 REPORT_FORMATS = {
-    "1": ("JSON", reporter.save_json),
-    "2": ("HTML", reporter.save_html),
-    "3": ("CSV",  reporter.save_csv),
-    "4": ("전체", None),
+    "1": ("Excel (.xlsx)", reporter.save_excel),
+    "2": ("Markdown (.md)", reporter.save_markdown),
+    "3": ("전체 (Excel + Markdown)", None),
 }
 
 # ── UI 헬퍼 ─────────────────────────────────────────────────────────────────
@@ -106,8 +105,8 @@ def _select_report_format() -> list[tuple[str, callable]]:
         print(f"  {BOLD(key)}) {label}")
     print()
     while True:
-        choice = _ask("번호 선택", "2")
-        if choice == "4":
+        choice = _ask("번호 선택", "1")
+        if choice == "3":
             return [(label, fn) for label, fn in REPORT_FORMATS.values() if fn]
         if choice in REPORT_FORMATS:
             label, fn = REPORT_FORMATS[choice]
@@ -125,11 +124,12 @@ def _print_summary(report: ScanReport):
     print(f"  시작   : {report.started_at}")
     print(f"  종료   : {report.finished_at}")
     print()
+    review = s['manual'] + s['error']
     print(f"  전체   : {BOLD(str(s['total']))}개")
-    print(f"  취약   : {RED(str(s['vulnerable']))}개")
-    print(f"  양호   : {GREEN(str(s['safe']))}개")
-    print(f"  수동   : {YELLOW(str(s['manual']))}개")
-    print(f"  오류   : {str(s['error'])}개")
+    print(f"  [취약] : {RED(str(s['vulnerable']))}개")
+    print(f"  [양호] : {GREEN(str(s['safe']))}개")
+    print(f"  [검토] : {YELLOW(str(review))}개   (수동확인 필요)")
+    print(f"  [ N/A] : {str(s['skipped'])}개   (해당 없음)")
     print()
     sev = s['by_severity']
     print(f"  위험   : {RED(str(sev['위험']))}개")
@@ -143,6 +143,7 @@ def _print_details(report: ScanReport):
     if show != "y":
         return
     vuln_items = [r for r in report.results if r.status.value == "취약"]
+
     if not vuln_items:
         print(GREEN("  취약 항목 없음"))
         return
@@ -225,12 +226,14 @@ def main():
     # 7. 상세 출력
     _print_details(report)
 
-    # 8. 리포트 저장
+    # 8. 로그 자동 저장 (항상)
+    log_path = reporter.save_log(report)
     print()
-    saved = []
+    print(f"  {GREEN('✓')} 로그 저장 (자동): {log_path}")
+
+    # 9. 리포트 저장
     for label, save_fn in formats:
         path = save_fn(report)
-        saved.append((label, path))
         print(f"  {GREEN('✓')} {label} 리포트 저장: {path}")
 
     print()
