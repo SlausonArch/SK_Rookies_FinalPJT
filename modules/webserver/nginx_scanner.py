@@ -65,7 +65,8 @@ class NginxScanner(BaseScanner):
     # ── 초기화 헬퍼 ───────────────────────────────────────────────
 
     def _find_conf(self) -> str:
-        """nginx.conf 경로를 자동 탐색 (로컬/원격 모두 지원)"""
+        """nginx.conf 경로를 자동 탐색 (로컬/원격/Docker 모두 지원)"""
+        # 1. 일반 경로 탐색
         for path in NGINX_CONF_CANDIDATES:
             if self.executor:
                 _, out, _ = self._run_shell(f"test -f {path} && echo YES")
@@ -74,11 +75,68 @@ class NginxScanner(BaseScanner):
             else:
                 if os.path.exists(path):
                     return path
-        # nginx -t 출력에서 파싱
+
+        # 2. nginx -t 출력에서 파싱
         _, out, _ = self._run_shell("nginx -t 2>&1")
         m = re.search(r"configuration file\s+(\S+)\s+test", out)
         if m:
             return m.group(1)
+
+        # 3. Docker 컨테이너 자동 탐색 (원격 executor가 있고 로컬이 아닐 때)
+        if self.executor:
+            found = self._find_conf_in_docker()
+            if found:
+                return found
+
+        return ""
+
+    def _find_conf_in_docker(self) -> str:
+        """
+        docker ps로 실행 중인 컨테이너를 순회하며 nginx.conf를 탐색.
+        찾으면 self.executor를 RemoteDockerExecutor로 교체하고 경로 반환.
+        """
+        print("  [*] EC2 직접 탐색 실패 → Docker 컨테이너 자동 탐색 중...")
+        _, out, _ = self._run_shell(
+            "docker ps --format '{{.Names}}\t{{.Image}}' 2>/dev/null")
+        if not out.strip():
+            print("  [!] 실행 중인 Docker 컨테이너 없음")
+            return ""
+
+        containers = []
+        for line in out.strip().splitlines():
+            parts = line.split("\t")
+            name  = parts[0].strip()
+            image = parts[1].strip() if len(parts) > 1 else ""
+            containers.append((name, image))
+            print(f"       발견: {name}  ({image})")
+
+        for name, image in containers:
+            for path in NGINX_CONF_CANDIDATES:
+                _, o, _ = self._run_shell(
+                    f"docker exec {name} test -f {path} && echo YES 2>/dev/null")
+                if "YES" in o:
+                    print(f"  [*] nginx.conf 발견: {name}:{path}")
+                    # executor를 RemoteDockerExecutor로 교체
+                    try:
+                        from core.remote import RemoteDockerExecutor
+                        self.executor = RemoteDockerExecutor(self.executor, name)
+                    except ImportError:
+                        pass
+                    return path
+            # nginx -t 로도 시도
+            _, o2, _ = self._run_shell(f"docker exec {name} nginx -t 2>&1")
+            m = re.search(r"configuration file\s+(\S+)\s+test", o2)
+            if m:
+                path = m.group(1)
+                print(f"  [*] nginx.conf 발견 (nginx -t): {name}:{path}")
+                try:
+                    from core.remote import RemoteDockerExecutor
+                    self.executor = RemoteDockerExecutor(self.executor, name)
+                except ImportError:
+                    pass
+                return path
+
+        print("  [!] Docker 컨테이너에서도 nginx.conf를 찾지 못했습니다.")
         return ""
 
     def _derive_nginx_dir(self) -> str:
