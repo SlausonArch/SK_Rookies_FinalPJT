@@ -57,9 +57,9 @@ class ScrollableFrame(tk.Frame):
         self.inner = tk.Frame(self._c, bg=bg)
         self.inner.bind("<Configure>",
             lambda e: self._c.configure(scrollregion=self._c.bbox("all")))
-        self._w = self._c.create_window((0, 0), window=self.inner, anchor="nw")
+        self._win_id = self._c.create_window((0, 0), window=self.inner, anchor="nw")
         self._c.configure(yscrollcommand=self._sb.set)
-        self._c.bind("<Configure>", lambda e: self._c.itemconfig(self._w, width=e.width))
+        self._c.bind("<Configure>", lambda e: self._c.itemconfig(self._win_id, width=e.width))
         self._c.bind("<Enter>", lambda e: self._c.bind_all("<MouseWheel>", self._scroll))
         self._c.bind("<Leave>", lambda e: self._c.unbind_all("<MouseWheel>"))
         self._c.pack(side="left", fill="both", expand=True)
@@ -464,6 +464,7 @@ class VulnScannerGUI:
         self.opt_frames["6"] = f6
 
     def _on_mod(self):
+        if not hasattr(self, "opt_frames"): return
         for f in self.opt_frames.values(): f.pack_forget()
         k = self.mod_key.get()
         if k in self.opt_frames: self.opt_frames[k].pack(fill=tk.X)
