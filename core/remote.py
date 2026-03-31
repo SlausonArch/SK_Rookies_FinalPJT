@@ -135,7 +135,7 @@ class SSMExecutor:
                 InstanceIds=[self.instance_id],
                 DocumentName=self._document,
                 Parameters={"commands": [cmd]},
-                TimeoutSeconds=max(timeout, 10),
+                TimeoutSeconds=max(timeout, 30),
             )
             cmd_id = resp["Command"]["CommandId"]
 
