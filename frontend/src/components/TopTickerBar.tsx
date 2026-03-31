@@ -206,7 +206,7 @@ function OneLineRollingTicker({
             <span className="tag">{it.kind === 'notice' ? '공지' : '뉴스'}</span>
 
             {it.kind === 'notice' ? (
-              <Link to={it.href}>{it.title}</Link>
+              <Link href={it.href}>{it.title}</Link>
             ) : (
               <a href={it.href} target="_blank" rel="noopener noreferrer">
                 {it.title}

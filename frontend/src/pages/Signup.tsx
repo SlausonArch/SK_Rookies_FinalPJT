@@ -123,7 +123,7 @@ const Signup: React.FC = () => {
         <Divider />
 
         <FooterLink>
-          <Link to="/login">로그인 화면으로 돌아가기</Link>
+          <Link href="/login">로그인 화면으로 돌아가기</Link>
         </FooterLink>
       </LoginBox>
     </Container>
