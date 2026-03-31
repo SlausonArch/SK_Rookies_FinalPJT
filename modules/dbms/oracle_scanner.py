@@ -87,15 +87,13 @@ class OracleScanner(BaseScanner):
     def _connect_oracledb(self, dsn) -> tuple:
         try:
             import oracledb
-            oracledb.init_oracle_client()   # thick mode (선택)
-        except Exception:
-            pass
-        try:
-            import oracledb
-            conn = oracledb.connect(user=self.db_user, password=self.db_password, dsn=dsn)
-            return conn, ""
         except ImportError:
             return None, "oracledb 미설치"
+        try:
+            # thin 모드: Oracle Client 불필요
+            conn = oracledb.connect(user=self.db_user, password=self.db_password,
+                                    dsn=dsn)
+            return conn, ""
         except Exception as e:
             return None, str(e)
 
