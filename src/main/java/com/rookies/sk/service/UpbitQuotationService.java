@@ -91,6 +91,10 @@ public class UpbitQuotationService {
             if (response.statusCode() >= 200 && response.statusCode() < 300) {
                 return response.body();
             }
+            if (response.statusCode() == 429) {
+                log.warn("Upbit quotation rate limited. url={}", url);
+                throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Upbit rate limit exceeded");
+            }
             log.warn("Upbit quotation call failed. status={}, url={}", response.statusCode(), url);
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Failed to fetch quotation data");
         } catch (ResponseStatusException e) {

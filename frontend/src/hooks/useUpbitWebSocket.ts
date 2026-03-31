@@ -118,6 +118,7 @@ export function useUpbitTicker(markets: string[]) {
           { ticket: 'vce-ticker' },
           { type: 'ticker', codes: wsCodes }
         ]));
+        stopPolling();
       };
 
       ws.onmessage = async (event) => {
