@@ -113,7 +113,7 @@ const ActionButton = styled.button<{ $variant?: 'bank' | 'crypto' }>`
 const Landing: React.FC = () => {
     const sceneRef = useRef<HTMLDivElement>(null);
     const router = useRouter();
-    const isLoggedIn = !!localStorage.getItem('accessToken');
+    const isLoggedIn = typeof window !== 'undefined' && !!localStorage.getItem('accessToken');
 
     useEffect(() => {
         if (!sceneRef.current) return;
