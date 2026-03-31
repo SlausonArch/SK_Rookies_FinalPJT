@@ -7,7 +7,13 @@ from collections import OrderedDict
 from datetime import datetime
 from core.result import ScanReport, Status, Severity
 
-REPORTS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "reports")
+import sys as _sys
+if getattr(_sys, "frozen", False):
+    # PyInstaller 실행 파일 → 바탕화면에 저장
+    REPORTS_DIR = os.path.join(os.path.expanduser("~"), "Desktop", "vuln-scanner-reports")
+else:
+    # 개발 환경 → 프로젝트 루트 reports/
+    REPORTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "reports")
 
 _SECTION_NAMES: dict[str, str] = {
     "1": "계정 관리",
@@ -26,12 +32,12 @@ _STATUS_FILL = {
     "오류":    "FFD9D9D9",
     "미해당":  "FFEDEDED",
 }
-_SEVERITY_FILL = {
-    "위험": "FFFF0000",
-    "높음": "FFFF6B6B",
-    "보통": "FFFFC000",
-    "낮음": "FFFFFF00",
-    "정보": "FF9DC3E6",
+_SEVERITY_COLOR = {
+    "위험": "FFC00000",  # 진한 빨강
+    "높음": "FFFF0000",  # 빨강
+    "보통": "FFED7D31",  # 주황
+    "낮음": "FF7F7F7F",  # 회색
+    "정보": "FF4472C4",  # 파랑
 }
 _STATUS_LABEL = {
     "취약":    "[취약]",
@@ -229,27 +235,29 @@ def save_excel(report: ScanReport) -> str:
 
     review = s["manual"] + s["error"]
     stat_rows = [
-        ("전체",    s["total"],          "FFD9EAD3"),
-        ("[취약]",  s["vulnerable"],     "FFEB9C9C"),
-        ("[양호]",  s["safe"],           "FFC6EFCE"),
-        ("[검토]",  review,              "FFFFEB9C"),
-        ("[ N/A]",  s["skipped"],        "FFEDEDED"),
-        ("",        "",                  ""),
-        ("위험",    s["by_severity"]["위험"], "FFFF0000"),
-        ("높음",    s["by_severity"]["높음"], "FFFF6B6B"),
-        ("보통",    s["by_severity"]["보통"], "FFFFC000"),
-        ("낮음",    s["by_severity"]["낮음"], "FFFFFF00"),
+        ("전체",    s["total"],               "FFD9EAD3", None),
+        ("[취약]",  s["vulnerable"],          "FFEB9C9C", None),
+        ("[양호]",  s["safe"],                "FFC6EFCE", None),
+        ("[검토]",  review,                   "FFFFEB9C", None),
+        ("[ N/A]",  s["skipped"],             "FFEDEDED", None),
+        ("",        "",                       "",         None),
+        ("위험",    s["by_severity"]["위험"], None, "FFC00000"),
+        ("높음",    s["by_severity"]["높음"], None, "FFFF0000"),
+        ("보통",    s["by_severity"]["보통"], None, "FFED7D31"),
+        ("낮음",    s["by_severity"]["낮음"], None, "FF7F7F7F"),
     ]
-    for i, (lbl, val, color) in enumerate(stat_rows, start=9):
+    for i, (lbl, val, color, txt_color) in enumerate(stat_rows, start=9):
         if not lbl:
             continue
         cl = ws_sum.cell(i, 1, lbl)
         cv = ws_sum.cell(i, 2, val)
-        cl.font = Font(name="맑은 고딕", bold=True, size=10)
-        cv.font = Font(name="맑은 고딕", bold=True, size=12)
+        fc = txt_color or "FF000000"
+        cl.font = Font(name="맑은 고딕", bold=True, size=10, color=fc)
+        cv.font = Font(name="맑은 고딕", bold=True, size=12, color=fc)
         cl.alignment = cv.alignment = center
-        fill = PatternFill("solid", fgColor=color)
-        cl.fill = cv.fill = fill
+        if color:
+            fill = PatternFill("solid", fgColor=color)
+            cl.fill = cv.fill = fill
         cl.border = cv.border = border
         ws_sum.row_dimensions[i].height = 22
 
@@ -278,6 +286,8 @@ def save_excel(report: ScanReport) -> str:
         ws.freeze_panes = "A2"
 
         for ri, r in enumerate(rows, start=2):
+            is_vuln = r.status == Status.VULNERABLE
+            row_font = Font(name="맑은 고딕", bold=is_vuln, size=9)
             data = [
                 r.check_id, r.category, r.name,
                 r.status.value, r.severity.value,
@@ -286,13 +296,16 @@ def save_excel(report: ScanReport) -> str:
             ]
             for ci, val in enumerate(data, start=1):
                 cell = ws.cell(ri, ci, val)
-                cell.font      = val_font
+                cell.font      = row_font
                 cell.alignment = left
                 cell.border    = border
-            # 결과 / 위험도 색상
+            # 결과 컬럼: 배경색 유지
             ws.cell(ri, 4).fill      = PatternFill("solid", fgColor=_STATUS_FILL.get(r.status.value, "FFFFFFFF"))
             ws.cell(ri, 4).alignment = center
-            ws.cell(ri, 5).fill      = PatternFill("solid", fgColor=_SEVERITY_FILL.get(r.severity.value, "FFFFFFFF"))
+            ws.cell(ri, 4).font      = Font(name="맑은 고딕", bold=is_vuln, size=9)
+            # 위험도 컬럼: 배경 없이 텍스트 색상만
+            sev_color = _SEVERITY_COLOR.get(r.severity.value, "FF000000")
+            ws.cell(ri, 5).font      = Font(name="맑은 고딕", bold=True, size=9, color=sev_color)
             ws.cell(ri, 5).alignment = center
             ws.row_dimensions[ri].height = 60
         return ws
