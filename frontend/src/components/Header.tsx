@@ -178,7 +178,7 @@ const Header: React.FC = () => {
   const mode = process.env.NEXT_PUBLIC_APP_MODE || 'exchange';
   const exchangeUrl = process.env.NEXT_PUBLIC_EXCHANGE_FRONTEND_URL || 'http://localhost:15173';
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:18080';
-  const [isLoggedIn, setIsLoggedIn] = useState(!!getUserAccessToken());
+  const [isLoggedIn, setIsLoggedIn] = useState(typeof window !== 'undefined' && !!getUserAccessToken());
 
   useEffect(() => {
     const checkAuth = () => {

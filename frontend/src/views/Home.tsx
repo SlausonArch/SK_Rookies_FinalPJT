@@ -322,7 +322,7 @@ const Home: React.FC = () => {
   const [notices, setNotices] = useState<NoticePost[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
   const [activeTab, setActiveTab] = useState<RankingTab>('popular');
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(!!localStorage.getItem('accessToken'));
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(typeof window !== 'undefined' && !!localStorage.getItem('accessToken'));
 
   const RANKING_TABS: { key: RankingTab; label: string }[] = [
     { key: 'popular', label: '인기' },
