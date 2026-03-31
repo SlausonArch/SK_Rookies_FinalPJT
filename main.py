@@ -55,7 +55,11 @@ MODULES = {
         "desc": "포트 노출, 기본 계정, 원격 root, 감사 로그, 데이터 디렉토리",
         "loader": lambda: __import__("modules.dbms.dbms_scanner", fromlist=["DBMSScanner"]).DBMSScanner,
     },
-    # "6": Web/API — 추후 추가 예정
+    "6": {
+        "name": "DBMS - Oracle (11g/12c/18c/19c/21c)",
+        "desc": "계정/권한/보안설정/환경파일/감사 — 서버·Docker·AWS RDS 지원",
+        "loader": lambda: __import__("modules.dbms.oracle_scanner", fromlist=["OracleScanner"]).OracleScanner,
+    },
 }
 
 REPORT_FORMATS = {
@@ -275,6 +279,17 @@ def _collect_options(mod_name: str, target: str) -> dict:
 
     elif "IIS" in mod_name:
         pass  # 추가 옵션 없음 (target 만 사용)
+
+    elif "Oracle" in mod_name:
+        print()
+        print("  배포 유형: 1) 서버(Linux/Windows)  2) Docker  3) AWS RDS")
+        dt = _ask("번호 선택", "1")
+        opts["deploy_type"] = {"1": "server", "2": "docker", "3": "rds"}.get(dt, "server")
+        opts["db_host"] = _ask("DB 호스트/IP", target)
+        opts["db_port"] = int(_ask("포트", "1521"))
+        opts["service_name"] = _ask("서비스명 또는 SID", "ORCL")
+        opts["db_user"] = _ask("접속 계정", "system")
+        opts["db_password"] = _ask_secret("DB 패스워드")
 
     elif "DBMS" in mod_name:
         print()
