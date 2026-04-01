@@ -57,15 +57,17 @@ export async function saveCommunityPostAction(
     }
   }
 
-  try {
-    const payload = {
-      attachmentUrl: attachmentUrl || null,
-      content,
-      notice,
-      title,
-    }
+  const payload = {
+    attachmentUrl: attachmentUrl || null,
+    content,
+    notice,
+    title,
+  }
 
-    const response = postId
+  let response: PostResponse
+
+  try {
+    response = postId
       ? await requestBackend<PostResponse>(`/api/community/posts/${postId}`, {
           auth: 'user',
           body: JSON.stringify(payload),
@@ -82,10 +84,6 @@ export async function saveCommunityPostAction(
           },
           method: 'POST',
         })
-
-    revalidatePath('/community')
-    revalidatePath(`/community/${response.postId}`)
-    redirect(`/community/${response.postId}`)
   } catch (error) {
     if (error instanceof BackendRequestError) {
       return { error: error.message }
@@ -93,4 +91,8 @@ export async function saveCommunityPostAction(
 
     return { error: '게시글 저장 중 오류가 발생했습니다.' }
   }
+
+  revalidatePath('/community')
+  revalidatePath(`/community/${response.postId}`)
+  redirect(`/community/${response.postId}`)
 }
