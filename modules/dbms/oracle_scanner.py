@@ -103,34 +103,34 @@ class OracleScanner(BaseScanner):
         except ImportError:
             return None, "oracledb 미설치"
 
-        # 시도 순서: 서비스명 → SID → PDB 기본명 → RDS 엔드포인트
+        def _desc(host, port, svc, server="DEDICATED"):
+            """SERVER=DEDICATED 강제 — SSM 터널 리다이렉트 우회용 DESCRIPTION DSN"""
+            return (f"(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST={host})(PORT={port}))"
+                    f"(CONNECT_DATA=(SERVICE_NAME={svc})(SERVER={server})))")
+
+        h, p, s = self.db_host, self.db_port, self.service_name
+        # 시도 순서: SERVER=DEDICATED DESCRIPTION → 기본 dsn → SID → PDB → 소문자
         attempts = [
-            {"dsn": dsn},  # service_name 방식 (host:port/service)
-            {"host": self.db_host, "port": self.db_port,
-             "service_name": self.service_name},           # 명시적 service_name
-            {"host": self.db_host, "port": self.db_port,
-             "sid": self.service_name},                    # SID 방식
-            {"host": self.db_host, "port": self.db_port,
-             "service_name": f"{self.service_name}PDB1"},  # CDB PDB 기본명
-            {"host": self.db_host, "port": self.db_port,
-             "service_name": self.service_name.lower()},   # 소문자
+            # ① 리다이렉트 차단 (SSM 터널 환경 필수)
+            {"dsn": _desc(h, p, s)},
+            {"dsn": _desc(h, p, s.lower())},
+            {"dsn": _desc(h, p, f"{s}PDB1")},
+            # ② 일반 Easy Connect
+            {"dsn": dsn},
+            {"host": h, "port": p, "service_name": s},
+            {"host": h, "port": p, "sid": s},
+            {"host": h, "port": p, "service_name": f"{s}PDB1"},
+            {"host": h, "port": p, "service_name": s.lower()},
         ]
-        # 127.0.0.1 대신 localhost 로도 시도 (IPv4/IPv6 차이 방지)
-        alt_host = "localhost" if self.db_host == "127.0.0.1" else self.db_host
-        if alt_host != self.db_host:
-            attempts.insert(1, {"host": alt_host, "port": self.db_port,
-                                 "service_name": self.service_name})
 
         # RDS: 엔드포인트 FQDN을 서비스명으로 시도 (RDS 리스너 등록 방식)
         if self.rds_endpoint:
-            attempts.append({"host": self.db_host, "port": self.db_port,
-                              "service_name": self.rds_endpoint})
-            short = self.rds_endpoint.split(".")[0]
-            if short.lower() != self.service_name.lower():
-                attempts.append({"host": self.db_host, "port": self.db_port,
-                                  "service_name": short})
-                attempts.append({"host": self.db_host, "port": self.db_port,
-                                  "service_name": short.upper()})
+            ep = self.rds_endpoint
+            attempts.insert(3, {"dsn": _desc(h, p, ep)})
+            short = ep.split(".")[0]
+            if short.lower() != s.lower():
+                attempts.append({"dsn": _desc(h, p, short)})
+                attempts.append({"dsn": _desc(h, p, short.upper())})
 
         last_err = ""
         for idx, kw in enumerate(attempts):
