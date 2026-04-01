@@ -52,6 +52,7 @@ class OracleScanner(BaseScanner):
         db_user: str = "system",
         db_password: str = "",
         deploy_type: str = "server",   # server | docker | rds
+        rds_endpoint: str = "",        # RDS 엔드포인트 FQDN (서비스명 후보)
     ):
         super().__init__(target, verbose, executor)
         self.db_host = db_host
@@ -60,6 +61,7 @@ class OracleScanner(BaseScanner):
         self.db_user = db_user
         self.db_password = db_password
         self.deploy_type = deploy_type.lower()
+        self.rds_endpoint = rds_endpoint
         self._conn = None
         self._conn_error: str = ""
         self._ora_major: int = 0   # 버전 (예: 19)
@@ -100,7 +102,7 @@ class OracleScanner(BaseScanner):
         except ImportError:
             return None, "oracledb 미설치"
 
-        # 시도 순서: 서비스명 → SID → PDB 기본명
+        # 시도 순서: 서비스명 → SID → PDB 기본명 → RDS 엔드포인트
         attempts = [
             {"dsn": dsn},  # service_name 방식 (host:port/service)
             {"host": self.db_host, "port": self.db_port,
@@ -110,6 +112,17 @@ class OracleScanner(BaseScanner):
             {"host": self.db_host, "port": self.db_port,
              "service_name": self.service_name.lower()},   # 소문자
         ]
+        # RDS: 엔드포인트 FQDN을 서비스명으로 시도 (RDS 리스너 등록 방식)
+        if self.rds_endpoint:
+            attempts.append({"host": self.db_host, "port": self.db_port,
+                              "service_name": self.rds_endpoint})
+            # 엔드포인트 앞부분만 (xxx.yyy.rds.amazonaws.com → xxx)
+            short = self.rds_endpoint.split(".")[0]
+            if short.lower() != self.service_name.lower():
+                attempts.append({"host": self.db_host, "port": self.db_port,
+                                  "service_name": short})
+                attempts.append({"host": self.db_host, "port": self.db_port,
+                                  "service_name": short.upper()})
         last_err = ""
         for kw in attempts:
             try:

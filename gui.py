@@ -925,15 +925,18 @@ class VulnScannerGUI:
                 # RDS: 터널 통해 127.0.0.1:localPort 로 접속
                 db_host = "127.0.0.1"
                 db_port = int(self.ora_local_port.get() or 11521)
+                rds_ep  = self.ora_rds_ep.get().strip()  # 실제 RDS 엔드포인트 (서비스명 후보)
             else:
                 db_host = self.ora_host.get().strip() or t
                 db_port = int(self.ora_port.get() or 1521)
+                rds_ep  = ""
             opts.update(deploy_type=deploy,
                         db_host=db_host,
                         db_port=db_port,
                         service_name=self.ora_svc.get().strip() or "ORCL",
                         db_user=self.ora_user.get().strip() or "system",
-                        db_password=self.ora_pass.get())
+                        db_password=self.ora_pass.get(),
+                        rds_endpoint=rds_ep)
         return opts
 
     @staticmethod
