@@ -1892,6 +1892,7 @@ const AdminDashboard = () => {
                     <th>제목</th>
                     <th>작성자</th>
                     <th>공지</th>
+                    <th>인기</th>
                     <th>작성일</th>
                     <th>삭제</th>
                   </tr>
@@ -1908,6 +1909,7 @@ const AdminDashboard = () => {
                       </td>
                       <td>{p.authorName}</td>
                       <td>{p.notice ? <Badge $tone="warn">공지</Badge> : '-'}</td>
+                      <td>{!p.notice && (p.likeCount >= 5 || p.viewCount >= 50) ? <Badge $tone="info">🔥 인기</Badge> : '-'}</td>
                       <td>{fmtDate(p.createdAt)}</td>
                       <td>
                         <GhostButton onClick={() => handleDeletePost(p.postId)}>삭제</GhostButton>
