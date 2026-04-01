@@ -3,9 +3,14 @@
 """
 import subprocess
 import shlex
+import threading
 from abc import ABC, abstractmethod
 from typing import Optional
 from core.result import CheckResult, ScanReport, Status, Severity
+
+
+class StopScan(Exception):
+    """진단 중단 요청 시 발생하는 예외"""
 
 
 class BaseScanner(ABC):
@@ -19,6 +24,12 @@ class BaseScanner(ABC):
         self.verbose = verbose
         self.executor = executor   # SSHExecutor | SSMExecutor | None
         self.report = ScanReport(target=target, scan_type=self.CATEGORY)
+        self._stop_event: threading.Event | None = None   # GUI에서 주입
+
+    def _check_stop(self):
+        """중단 요청이 있으면 StopScan 예외 발생"""
+        if self._stop_event and self._stop_event.is_set():
+            raise StopScan("사용자가 진단을 중단했습니다.")
 
     @abstractmethod
     def run(self) -> ScanReport:
@@ -39,6 +50,7 @@ class BaseScanner(ABC):
         cmd_output: str = "",
         evidence: str = "",
     ) -> CheckResult:
+        self._check_stop()   # 항목 기록 직전에 중단 체크
         result = CheckResult(
             check_id=check_id,
             category=self.CATEGORY,

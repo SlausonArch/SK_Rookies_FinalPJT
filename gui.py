@@ -60,13 +60,50 @@ class ScrollableFrame(tk.Frame):
         self._win_id = self._c.create_window((0, 0), window=self.inner, anchor="nw")
         self._c.configure(yscrollcommand=self._sb.set)
         self._c.bind("<Configure>", lambda e: self._c.itemconfig(self._win_id, width=e.width))
-        self._c.bind("<Enter>", lambda e: self._c.bind_all("<MouseWheel>", self._scroll))
-        self._c.bind("<Leave>", lambda e: self._c.unbind_all("<MouseWheel>"))
+
+        # 이 프레임 안의 모든 자식 위젯에서 마우스가 있으면 스크롤 동작
+        self.bind("<Enter>", self._attach_scroll)
+        self.bind("<Leave>", self._detach_scroll)
+        self.inner.bind("<Enter>", self._attach_scroll)
+        self.inner.bind("<Leave>", self._detach_scroll)
+
         self._c.pack(side="left", fill="both", expand=True)
         self._sb.pack(side="right", fill="y")
 
+        # 위젯 트리 전체에 바인딩 (자식 위젯 위에서도 동작)
+        self._c.bind("<Enter>", self._attach_scroll)
+        self._c.bind("<Leave>", self._detach_scroll)
+
+    def _attach_scroll(self, e=None):
+        self._c.bind_all("<MouseWheel>",       self._scroll)
+        self._c.bind_all("<Button-4>",         self._scroll_linux)
+        self._c.bind_all("<Button-5>",         self._scroll_linux)
+
+    def _detach_scroll(self, e=None):
+        # 마우스가 실제로 이 위젯 바깥으로 나갔을 때만 해제
+        try:
+            x, y = self._c.winfo_pointerxy()
+            wx = self._c.winfo_rootx(); wy = self._c.winfo_rooty()
+            ww = self._c.winfo_width(); wh = self._c.winfo_height()
+            if wx <= x <= wx + ww and wy <= y <= wy + wh:
+                return   # 아직 캔버스 안에 있음
+        except Exception:
+            pass
+        self._c.unbind_all("<MouseWheel>")
+        self._c.unbind_all("<Button-4>")
+        self._c.unbind_all("<Button-5>")
+
     def _scroll(self, e):
-        self._c.yview_scroll(int(-1 * (e.delta / 120)), "units")
+        # macOS: e.delta 는 픽셀 단위 (보통 ±120의 배수), Windows: ±120
+        delta = e.delta
+        if platform.system() == "Darwin":
+            self._c.yview_scroll(int(-1 * delta), "units")
+        else:
+            self._c.yview_scroll(int(-1 * (delta / 120)), "units")
+
+    def _scroll_linux(self, e):
+        # Linux: Button-4 = 위, Button-5 = 아래
+        self._c.yview_scroll(-1 if e.num == 4 else 1, "units")
 
 
 class StdoutQueue:
@@ -84,9 +121,10 @@ class VulnScannerGUI:
         self.root.minsize(1060, 680)
         self.root.configure(bg=C_BG)
 
-        self.output_q   = queue.Queue()
+        self.output_q    = queue.Queue()
         self.scan_thread = None
-        self._report    = None
+        self._report     = None
+        self._stop_event = threading.Event()
 
         self._init_vars()
         self._apply_style()
@@ -615,7 +653,13 @@ class VulnScannerGUI:
         tk.Button(tb, text="CLEAR", bg=C_DEEP, fg=C_MUTE, relief=tk.FLAT,
                   padx=10, pady=4, cursor="hand2", font=(_UI,8,"bold"),
                   activebackground=C_LINE, activeforeground=C_FG,
-                  command=self._clear).pack(side=tk.RIGHT, padx=8)
+                  command=self._clear).pack(side=tk.RIGHT, padx=(0,8))
+        self.stop_btn = tk.Button(tb, text="⏹  중단", bg=C_DEEP, fg=C_RED,
+                  relief=tk.FLAT, padx=10, pady=4, cursor="hand2",
+                  font=(_UI,8,"bold"), state=tk.DISABLED,
+                  activebackground=C_LINE, activeforeground=C_RED,
+                  command=self._request_stop)
+        self.stop_btn.pack(side=tk.RIGHT)
         tk.Frame(parent, bg=C_LINE, height=1).pack(fill=tk.X)
 
         tf = tk.Frame(parent, bg=C_BG); tf.pack(fill=tk.BOTH, expand=True)
@@ -699,7 +743,9 @@ class VulnScannerGUI:
     def _start_scan(self):
         if self.scan_thread and self.scan_thread.is_alive():
             messagebox.showwarning("진행 중", "이미 진단이 실행 중입니다."); return
+        self._stop_event.clear()
         self.run_btn.config(state=tk.DISABLED, bg=C_MUTE)
+        self.stop_btn.config(state=tk.NORMAL)
         self.status_var.set("SCANNING")
         self.status_badge.config(bg=C_GOLD, fg=C_BG)
         self.save_frame.pack_forget()
@@ -709,6 +755,14 @@ class VulnScannerGUI:
         self.progress.start(10)
         self.scan_thread = threading.Thread(target=self._worker, daemon=True)
         self.scan_thread.start()
+
+    def _request_stop(self):
+        if messagebox.askyesno("진단 중단", "진단을 중단하시겠습니까?"):
+            self._stop_event.set()
+            self.stop_btn.config(state=tk.DISABLED)
+            self.status_var.set("STOPPING")
+            self.status_badge.config(bg=C_WARN, fg=C_BG)
+            print("\n  [!] 중단 요청 — 현재 항목 완료 후 종료됩니다...")
 
     def _worker(self):
         old = sys.stdout; sys.stdout = StdoutQueue(self.output_q); executor = None
@@ -723,7 +777,9 @@ class VulnScannerGUI:
             k        = self.mod_key.get()
             Cls      = MODULES[k]["loader"]()
             valid    = set(inspect.signature(Cls.__init__).parameters) - {"self"}
-            report   = Cls(**{p: v for p, v in opts.items() if p in valid}).run()
+            scanner  = Cls(**{p: v for p, v in opts.items() if p in valid})
+            scanner._stop_event = self._stop_event   # 중단 신호 주입
+            report   = scanner.run()
             self._report = report
 
             saved = [f"로그: {reporter.save_log(report)}"]
@@ -735,9 +791,15 @@ class VulnScannerGUI:
             print("─"*60)
             self.root.after(0, lambda: self._on_done(report))
         except Exception as e:
-            import traceback
-            print(f"\n[오류] {e}\n{traceback.format_exc()}")
-            self.root.after(0, lambda m=str(e): self._on_error(m))
+            from core.base_scanner import StopScan
+            if isinstance(e, StopScan):
+                print("\n  ─── 진단 중단됨 ───")
+                self.root.after(0, lambda: self._on_done(scanner.report
+                    if 'scanner' in dir() else self._report or __import__('core.result', fromlist=['ScanReport']).ScanReport()))
+            else:
+                import traceback
+                print(f"\n[오류] {e}\n{traceback.format_exc()}")
+                self.root.after(0, lambda m=str(e): self._on_error(m))
         finally:
             sys.stdout = old
             if executor:
@@ -858,6 +920,27 @@ class VulnScannerGUI:
                         db_password=self.ora_pass.get())
         return opts
 
+    @staticmethod
+    def _find_aws_cli() -> str:
+        """aws CLI 실행 파일 경로를 반환. 없으면 빈 문자열."""
+        import shutil
+        # 1. 셸 PATH에서 탐색 (터미널 실행 시)
+        found = shutil.which("aws")
+        if found:
+            return found
+        # 2. macOS/Linux 일반 설치 경로 직접 탐색
+        candidates = [
+            "/usr/local/bin/aws",
+            "/opt/homebrew/bin/aws",     # Apple Silicon Homebrew
+            "/usr/bin/aws",
+            "/home/linuxbrew/.linuxbrew/bin/aws",
+            os.path.expanduser("~/.local/bin/aws"),
+        ]
+        for p in candidates:
+            if os.path.isfile(p) and os.access(p, os.X_OK):
+                return p
+        return ""
+
     def _start_ssm_tunnel(self):
         import subprocess, socket, time
         iid    = self.ssm_id.get().strip()
@@ -874,7 +957,17 @@ class VulnScannerGUI:
         params = (f'{{"host":["{ep}"],'
                   f'"portNumber":["{port}"],'
                   f'"localPortNumber":["{local}"]}}')
-        cmd = ["aws", "ssm", "start-session",
+        # .app 번들은 셸 PATH를 상속받지 못하므로 aws 경로를 직접 탐색
+        aws_bin = self._find_aws_cli()
+        if not aws_bin:
+            raise RuntimeError(
+                "aws CLI를 찾을 수 없습니다.\n\n"
+                "설치 확인:\n"
+                "  brew install awscli\n"
+                "또는  https://aws.amazon.com/cli/\n\n"
+                "설치 후 터미널에서 'which aws' 로 경로 확인")
+
+        cmd = [aws_bin, "ssm", "start-session",
                "--region", region,
                "--target", iid,
                "--document-name", "AWS-StartPortForwardingSessionToRemoteHost",
@@ -929,7 +1022,8 @@ class VulnScannerGUI:
 
     def _on_done(self, report):
         self.run_btn.config(state=tk.NORMAL, bg=C_GOLD)
-        self.status_var.set("DONE")
+        self.stop_btn.config(state=tk.DISABLED)
+        self.status_var.set("ABORTED" if self._stop_event.is_set() else "DONE")
         self.status_badge.config(bg=C_GREEN, fg=C_BG)
         self.progress.stop(); self.progress.pack_forget()
         s  = report.summary; sv = s["by_severity"]; rv = s["manual"] + s["error"]
@@ -944,6 +1038,7 @@ class VulnScannerGUI:
 
     def _on_error(self, msg):
         self.run_btn.config(state=tk.NORMAL, bg=C_GOLD)
+        self.stop_btn.config(state=tk.DISABLED)
         self.status_var.set("ERROR")
         self.status_badge.config(bg=C_RED, fg=C_FG)
         self.progress.stop(); self.progress.pack_forget()
