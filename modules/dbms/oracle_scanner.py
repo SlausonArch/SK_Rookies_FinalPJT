@@ -97,6 +97,7 @@ class OracleScanner(BaseScanner):
         print("      SQL 기반 점검은 수동 점검으로 처리됩니다.")
 
     def _connect_oracledb(self, dsn) -> tuple:
+        import time
         try:
             import oracledb
         except ImportError:
@@ -106,33 +107,51 @@ class OracleScanner(BaseScanner):
         attempts = [
             {"dsn": dsn},  # service_name 방식 (host:port/service)
             {"host": self.db_host, "port": self.db_port,
-             "sid": self.service_name},  # SID 방식
+             "service_name": self.service_name},           # 명시적 service_name
+            {"host": self.db_host, "port": self.db_port,
+             "sid": self.service_name},                    # SID 방식
             {"host": self.db_host, "port": self.db_port,
              "service_name": f"{self.service_name}PDB1"},  # CDB PDB 기본명
             {"host": self.db_host, "port": self.db_port,
              "service_name": self.service_name.lower()},   # 소문자
         ]
+        # 127.0.0.1 대신 localhost 로도 시도 (IPv4/IPv6 차이 방지)
+        alt_host = "localhost" if self.db_host == "127.0.0.1" else self.db_host
+        if alt_host != self.db_host:
+            attempts.insert(1, {"host": alt_host, "port": self.db_port,
+                                 "service_name": self.service_name})
+
         # RDS: 엔드포인트 FQDN을 서비스명으로 시도 (RDS 리스너 등록 방식)
         if self.rds_endpoint:
             attempts.append({"host": self.db_host, "port": self.db_port,
                               "service_name": self.rds_endpoint})
-            # 엔드포인트 앞부분만 (xxx.yyy.rds.amazonaws.com → xxx)
             short = self.rds_endpoint.split(".")[0]
             if short.lower() != self.service_name.lower():
                 attempts.append({"host": self.db_host, "port": self.db_port,
                                   "service_name": short})
                 attempts.append({"host": self.db_host, "port": self.db_port,
                                   "service_name": short.upper()})
+
         last_err = ""
-        for kw in attempts:
-            try:
-                label = kw.get("dsn") or kw.get("service_name") or kw.get("sid","")
-                print(f"  [*] 연결 시도: {label}")
-                conn = oracledb.connect(user=self.db_user,
-                                        password=self.db_password, **kw)
-                return conn, ""
-            except Exception as e:
-                last_err = str(e)
+        for idx, kw in enumerate(attempts):
+            label = kw.get("dsn") or kw.get("service_name") or kw.get("sid", "")
+            print(f"  [*] 연결 시도 ({idx+1}/{len(attempts)}): {label}")
+            # DPY-6001(서비스 미등록)은 SSM 터널 준비 지연일 수 있어 최대 3회 재시도
+            for retry in range(3):
+                try:
+                    conn = oracledb.connect(
+                        user=self.db_user, password=self.db_password,
+                        tcp_connect_timeout=15, **kw)
+                    return conn, ""
+                except Exception as e:
+                    err_str = str(e)
+                    if "DPY-6001" in err_str and retry < 2:
+                        print(f"      ↳ 서비스 미등록 응답 — {retry+1}회 재시도 중...")
+                        time.sleep(3)
+                        continue
+                    last_err = err_str
+                    print(f"      ↳ 실패: {err_str.split(chr(10))[0][:100]}")
+                    break
         return None, last_err
 
     def _connect_cxoracle(self, dsn) -> tuple:

@@ -1026,6 +1026,8 @@ class VulnScannerGUI:
                 f"  2) SSM 인스턴스 ID가 올바른지 확인\n"
                 f"  3) 인스턴스에 SSM Agent 및 RDS 접근 권한 확인")
 
+        # TCP 포트 열림 후 Oracle listener 준비까지 추가 대기
+        time.sleep(3)
         print(f"  ✓ SSM 터널 연결 완료 (127.0.0.1:{local})")
         self.root.after(0, lambda: self.tunnel_status_lbl.config(
             text=f"✓ 터널 열림  127.0.0.1:{local}", fg=C_GREEN))
