@@ -648,6 +648,19 @@ const Badge = styled.span<{ $tone: 'success' | 'danger' | 'warn' | 'info' | 'neu
             : COLORS.muted};
 `;
 
+const PopularBadge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  background: #ff4d4d;
+  color: #fff;
+  border-radius: 999px;
+  padding: 2px 7px;
+  margin-right: 6px;
+  vertical-align: middle;
+`;
+
 const LinkCell = styled.div`
   max-width: 340px;
   overflow: hidden;
@@ -1983,14 +1996,27 @@ const AdminDashboard = () => {
         );
 
       case 'community': {
-        const filteredPosts = posts.filter(p => {
-          const term = searchTerm.toLowerCase();
-          return (
-            (p.title?.toLowerCase() || '').includes(term) ||
-            (p.content?.toLowerCase() || '').includes(term) ||
-            (p.authorName?.toLowerCase() || '').includes(term)
-          );
-        });
+        const isPopularPost = (p: Post) => !p.notice && ((p.likeCount ?? 0) >= 5 || (p.viewCount ?? 0) >= 50);
+
+        const filteredPosts = posts
+          .filter(p => {
+            const term = searchTerm.toLowerCase();
+            return (
+              (p.title?.toLowerCase() || '').includes(term) ||
+              (p.content?.toLowerCase() || '').includes(term) ||
+              (p.authorName?.toLowerCase() || '').includes(term)
+            );
+          })
+          .sort((a, b) => {
+            // 1순위: 공지
+            const noticeOrder = (b.notice ? 1 : 0) - (a.notice ? 1 : 0);
+            if (noticeOrder !== 0) return noticeOrder;
+            // 2순위: 인기글
+            const popularOrder = (isPopularPost(b) ? 1 : 0) - (isPopularPost(a) ? 1 : 0);
+            if (popularOrder !== 0) return popularOrder;
+            // 3순위: 최신순
+            return (b.postId ?? 0) - (a.postId ?? 0);
+          });
 
         return (
           <Card>
@@ -2079,7 +2105,9 @@ const AdminDashboard = () => {
                     <th>ID</th>
                     <th>제목</th>
                     <th>작성자</th>
-                    <th>공지</th>
+                    <th>구분</th>
+                    <th>좋아요</th>
+                    <th>조회수</th>
                     <th>작성일</th>
                     <th>삭제</th>
                   </tr>
@@ -2089,13 +2117,21 @@ const AdminDashboard = () => {
                     <tr key={p.postId}>
                       <td>{p.postId}</td>
                       <td>
-                        {/* V-05: 모달 오픈 시 댓글 데이터 fetch (dangerouslySetInnerHTML 취약점 유발 목적) */}
                         <LinkCell onClick={() => { setSelectedPost(p); setPostComments([]); fetchPostComments(p.postId); }} title={p.title}>
+                          {isPopularPost(p) && <PopularBadge>🔥 인기</PopularBadge>}
                           {p.title}
                         </LinkCell>
                       </td>
                       <td>{p.authorName}</td>
-                      <td>{p.notice ? <Badge $tone="warn">공지</Badge> : '-'}</td>
+                      <td>
+                        {p.notice
+                          ? <Badge $tone="warn">공지</Badge>
+                          : isPopularPost(p)
+                            ? <Badge $tone="danger">인기</Badge>
+                            : <Badge $tone="neutral">일반</Badge>}
+                      </td>
+                      <td>{p.likeCount ?? 0}</td>
+                      <td>{p.viewCount ?? 0}</td>
                       <td>{fmtDate(p.createdAt)}</td>
                       <td>
                         <GhostButton onClick={() => handleDeletePost(p.postId)}>삭제</GhostButton>

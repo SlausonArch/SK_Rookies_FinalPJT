@@ -302,8 +302,15 @@ function Community() {
         : posts;
 
     return [...byTab].sort((a, b) => {
+      // 1순위: 공지사항
       const noticeOrder = (b.notice ? 1 : 0) - (a.notice ? 1 : 0);
       if (noticeOrder !== 0) return noticeOrder;
+
+      // 2순위: 인기글 (좋아요순 정렬 시에는 인기 그룹 분리 없이 수치로만 정렬)
+      if (sortBy !== 'likes') {
+        const popularOrder = (isPopular(b) ? 1 : 0) - (isPopular(a) ? 1 : 0);
+        if (popularOrder !== 0) return popularOrder;
+      }
 
       if (sortBy === 'likes' && b.likeCount !== a.likeCount) {
         return b.likeCount - a.likeCount;
