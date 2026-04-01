@@ -303,6 +303,8 @@ function Community() {
         ? posts.filter(post => !post.notice)
         : posts;
 
+    const isPopularPost = (p: Post) => !p.notice && (p.likeCount >= 5 || p.viewCount >= 50);
+
     return [...byTab].sort((a, b) => {
       const noticeOrder = (b.notice ? 1 : 0) - (a.notice ? 1 : 0);
       if (noticeOrder !== 0) return noticeOrder;
@@ -310,6 +312,9 @@ function Community() {
       if (sortBy === 'likes' && b.likeCount !== a.likeCount) {
         return b.likeCount - a.likeCount;
       }
+
+      const popularOrder = (isPopularPost(b) ? 1 : 0) - (isPopularPost(a) ? 1 : 0);
+      if (popularOrder !== 0) return popularOrder;
 
       const aTime = parseCreatedAt(a.createdAt);
       const bTime = parseCreatedAt(b.createdAt);
