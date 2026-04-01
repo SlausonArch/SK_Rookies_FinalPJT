@@ -79,8 +79,13 @@ class ScrollableFrame(tk.Frame):
             self._c.yview_scroll(-1 if e.num == 4 else 1, "units")
 
     def _bind_widget(self, w):
-        """위젯과 모든 자식에 마우스 스크롤 바인딩 (Entry 포함)"""
+        """위젯과 모든 자식에 마우스 스크롤 바인딩 (Entry·Text 제외)"""
         try:
+            # Entry/Text는 키 입력 이벤트가 막힐 수 있으므로 건너뜀
+            if isinstance(w, (tk.Entry, tk.Text, ttk.Entry)):
+                for child in w.winfo_children():
+                    self._bind_widget(child)
+                return
             w.bind("<MouseWheel>", self._do_scroll, add="+")
             w.bind("<Button-4>",   self._do_scroll, add="+")
             w.bind("<Button-5>",   self._do_scroll, add="+")
