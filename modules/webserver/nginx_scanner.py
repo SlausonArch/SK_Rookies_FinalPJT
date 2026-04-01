@@ -66,23 +66,35 @@ class NginxScanner(BaseScanner):
 
     def _find_conf(self) -> str:
         """nginx.conf 경로를 자동 탐색 (로컬/원격/Docker 모두 지원)"""
+        print("  [*] nginx.conf 탐색 중...")
+
         # 1. 일반 경로 탐색
         for path in NGINX_CONF_CANDIDATES:
             if self.executor:
                 _, out, _ = self._run_shell(f"test -f {path} && echo YES")
                 if "YES" in out:
+                    print(f"  [*] 발견 (인스턴스 직접): {path}")
                     return path
             else:
                 if os.path.exists(path):
+                    print(f"  [*] 발견 (로컬): {path}")
                     return path
 
+        if self.executor:
+            print(f"  [!] 인스턴스 직접 탐색 실패 ({len(NGINX_CONF_CANDIDATES)}개 경로)")
+        else:
+            print(f"  [!] 로컬 탐색 실패 ({len(NGINX_CONF_CANDIDATES)}개 경로)")
+
         # 2. nginx -t 출력에서 파싱
+        print("  [*] nginx -t 로 경로 확인 중...")
         _, out, _ = self._run_shell("nginx -t 2>&1")
         m = re.search(r"configuration file\s+(\S+)\s+test", out)
         if m:
+            print(f"  [*] 발견 (nginx -t): {m.group(1)}")
             return m.group(1)
+        print("  [!] nginx -t 에서도 찾지 못함")
 
-        # 3. Docker 컨테이너 자동 탐색 (원격 executor가 있고 로컬이 아닐 때)
+        # 3. Docker 컨테이너 자동 탐색 (원격 executor가 있을 때)
         if self.executor:
             found = self._find_conf_in_docker()
             if found:
@@ -220,10 +232,50 @@ class NginxScanner(BaseScanner):
 
     def run(self) -> ScanReport:
         print(f"\n[*] Nginx 취약점 진단 시작 → {self.target}")
+
         if not self.conf_path:
-            print("  [!] nginx.conf 를 찾을 수 없습니다. conf_path 를 직접 지정하세요.")
-        else:
-            print(f"  [*] 설정 파일: {self.conf_path}  |  설치 디렉터리: {self.nginx_dir}")
+            print()
+            print("  ══════════════════════════════════════════════════════")
+            print("  [!] nginx.conf 를 찾지 못했습니다.")
+            print()
+            print("  탐색한 경로:")
+            for p in NGINX_CONF_CANDIDATES:
+                print(f"    ✗  {p}")
+            print()
+            print("  해결 방법:")
+            print("  1) GUI → OPTIONS 패널에서 nginx.conf 경로를 직접 입력")
+            print("  2) nginx 가 Docker 에서 실행 중인 경우:")
+            print("     - SSH 연결 설정에서 DOCKER 컨테이너 이름 입력")
+            print("     - 또는 'docker ps' 로 컨테이너 이름 확인 후 입력")
+            print("  3) nginx -t 명령으로 경로 확인:")
+            print("     $ nginx -t 2>&1 | grep 'configuration file'")
+            print("  ══════════════════════════════════════════════════════")
+            print()
+            # 전 항목 수동점검으로 등록
+            all_checks = [
+                ("N-1.1","데몬 관리",Severity.HIGH),
+                ("N-1.2","관리 서버 디렉터리 권한",Severity.MEDIUM),
+                ("N-1.3","설정 파일 권한",Severity.HIGH),
+                ("N-1.4","디렉터리 검색 기능",Severity.MEDIUM),
+                ("N-1.5","로그 디렉터리/파일 권한",Severity.MEDIUM),
+                ("N-1.6","로그 포맷 설정",Severity.HIGH),
+                ("N-1.7","로그 저장 주기",Severity.HIGH),
+                ("N-1.8","헤더 정보 노출 방지",Severity.LOW),
+                ("N-1.9","HTTP Method 제한",Severity.LOW),
+                ("N-1.10","에러 메시지 관리",Severity.MEDIUM),
+                ("N-2.1","기본 문서명 사용 제한",Severity.LOW),
+                ("N-2.2","SSL v3.0 POODLE 취약점",Severity.HIGH),
+                ("N-3.1","보안 패치 적용",Severity.HIGH),
+            ]
+            for cid, name, sev in all_checks:
+                self.manual(cid, name, sev,
+                            f"Nginx {name} 점검",
+                            "nginx.conf 탐색 실패 — 수동 점검 필요",
+                            "nginx.conf 경로를 직접 지정하거나 Docker 컨테이너를 확인하세요.")
+            self.report.finish()
+            return self.report
+
+        print(f"  [*] 설정 파일: {self.conf_path}  |  설치 디렉터리: {self.nginx_dir}")
         print()
 
         print("  ─── 1. 설정 ────────────────────────────────────────────")
