@@ -60,50 +60,38 @@ class ScrollableFrame(tk.Frame):
         self._win_id = self._c.create_window((0, 0), window=self.inner, anchor="nw")
         self._c.configure(yscrollcommand=self._sb.set)
         self._c.bind("<Configure>", lambda e: self._c.itemconfig(self._win_id, width=e.width))
-
-        # 이 프레임 안의 모든 자식 위젯에서 마우스가 있으면 스크롤 동작
-        self.bind("<Enter>", self._attach_scroll)
-        self.bind("<Leave>", self._detach_scroll)
-        self.inner.bind("<Enter>", self._attach_scroll)
-        self.inner.bind("<Leave>", self._detach_scroll)
-
         self._c.pack(side="left", fill="both", expand=True)
         self._sb.pack(side="right", fill="y")
 
-        # 위젯 트리 전체에 바인딩 (자식 위젯 위에서도 동작)
-        self._c.bind("<Enter>", self._attach_scroll)
-        self._c.bind("<Leave>", self._detach_scroll)
+        # inner가 완전히 구성된 후 자식 위젯에 스크롤 바인딩
+        self.inner.bind("<Configure>", self._rebind_children, add="+")
 
-    def _attach_scroll(self, e=None):
-        self._c.bind_all("<MouseWheel>",       self._scroll)
-        self._c.bind_all("<Button-4>",         self._scroll_linux)
-        self._c.bind_all("<Button-5>",         self._scroll_linux)
+    def _do_scroll(self, e):
+        # Entry·Text 위젯에 포커스가 있으면 스크롤 무시 (입력 방해 방지)
+        focused = str(self._c.focus_get() or "")
+        if "entry" in focused.lower() or "text" in focused.lower():
+            return
+        if platform.system() == "Darwin":
+            self._c.yview_scroll(int(-1 * e.delta), "units")
+        elif platform.system() == "Windows":
+            self._c.yview_scroll(int(-1 * (e.delta / 120)), "units")
+        else:
+            self._c.yview_scroll(-1 if e.num == 4 else 1, "units")
 
-    def _detach_scroll(self, e=None):
-        # 마우스가 실제로 이 위젯 바깥으로 나갔을 때만 해제
+    def _bind_widget(self, w):
+        """위젯과 모든 자식에 마우스 스크롤 바인딩 (Entry 포함)"""
         try:
-            x, y = self._c.winfo_pointerxy()
-            wx = self._c.winfo_rootx(); wy = self._c.winfo_rooty()
-            ww = self._c.winfo_width(); wh = self._c.winfo_height()
-            if wx <= x <= wx + ww and wy <= y <= wy + wh:
-                return   # 아직 캔버스 안에 있음
+            w.bind("<MouseWheel>", self._do_scroll, add="+")
+            w.bind("<Button-4>",   self._do_scroll, add="+")
+            w.bind("<Button-5>",   self._do_scroll, add="+")
         except Exception:
             pass
-        self._c.unbind_all("<MouseWheel>")
-        self._c.unbind_all("<Button-4>")
-        self._c.unbind_all("<Button-5>")
+        for child in w.winfo_children():
+            self._bind_widget(child)
 
-    def _scroll(self, e):
-        # macOS: e.delta 는 픽셀 단위 (보통 ±120의 배수), Windows: ±120
-        delta = e.delta
-        if platform.system() == "Darwin":
-            self._c.yview_scroll(int(-1 * delta), "units")
-        else:
-            self._c.yview_scroll(int(-1 * (delta / 120)), "units")
-
-    def _scroll_linux(self, e):
-        # Linux: Button-4 = 위, Button-5 = 아래
-        self._c.yview_scroll(-1 if e.num == 4 else 1, "units")
+    def _rebind_children(self, e=None):
+        self._bind_widget(self._c)
+        self._bind_widget(self.inner)
 
 
 class StdoutQueue:
@@ -130,6 +118,7 @@ class VulnScannerGUI:
         self._apply_style()
         self._build_ui()
         self._poll_output()
+        self.root.after(200, self._rebind_all_scrollframes)
 
         self.root.bind("<F5>",             lambda e: self._start_scan())
         self.root.bind("<Control-Return>", lambda e: self._start_scan())
@@ -595,6 +584,7 @@ class VulnScannerGUI:
         k = self.mod_key.get()
         if k in self.opt_frames: self.opt_frames[k].pack(fill=tk.X)
         if k == "6": self._on_ora_deploy()
+        self.root.after(50, self._rebind_all_scrollframes)
 
     def _on_ora_deploy(self):
         if not hasattr(self, "f_rds_guide"): return
@@ -606,6 +596,8 @@ class VulnScannerGUI:
         else:
             self.f_rds_guide.pack_forget()
             self.f_nonrds.pack(fill=tk.X)
+        # 새로 pack된 위젯들에 스크롤 바인딩 갱신
+        self.root.after(50, self._rebind_all_scrollframes)
 
     def _on_auto_tunnel(self):
         if not hasattr(self, "f_auto_info"): return
@@ -640,6 +632,15 @@ class VulnScannerGUI:
         self.root.clipboard_clear()
         self.root.clipboard_append(cmd)
         messagebox.showinfo("복사 완료", "명령어가 클립보드에 복사되었습니다.")
+
+    def _rebind_all_scrollframes(self):
+        """모든 ScrollableFrame의 스크롤 바인딩을 갱신"""
+        def find_sf(w):
+            if isinstance(w, ScrollableFrame):
+                w._rebind_children()
+            for c in w.winfo_children():
+                find_sf(c)
+        find_sf(self.root)
 
     def _on_dbtype(self):
         self.db_port.set({"mysql":"3306","postgresql":"5432","mssql":"1433"}.get(
