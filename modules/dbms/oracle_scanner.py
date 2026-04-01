@@ -71,6 +71,7 @@ class OracleScanner(BaseScanner):
     def _connect(self):
         """oracledb(thin) 또는 cx_Oracle로 Oracle에 연결."""
         dsn = f"{self.db_host}:{self.db_port}/{self.service_name}"
+        errors = []
         for lib_name, connect_fn in [
             ("oracledb",  self._connect_oracledb),
             ("cx_Oracle", self._connect_cxoracle),
@@ -78,10 +79,19 @@ class OracleScanner(BaseScanner):
             conn, err = connect_fn(dsn)
             if conn:
                 self._conn = conn
+                print(f"  [*] Oracle DB 연결 성공 ({lib_name})")
                 return
-            self._conn_error = err
-        # 연결 실패 메시지 출력
+            if err and err != f"{lib_name} 미설치":
+                # 설치는 됐지만 연결 실패 → 실제 오류 메시지 기록 후 중단
+                self._conn_error = f"{lib_name}: {err}"
+                print(f"  [!] Oracle DB 연결 실패: {self._conn_error}")
+                print("      SQL 기반 점검은 수동 점검으로 처리됩니다.")
+                return
+            errors.append(f"{lib_name}: {err}")
+        # 둘 다 미설치
+        self._conn_error = " / ".join(errors)
         print(f"  [!] Oracle DB 연결 실패: {self._conn_error}")
+        print("      oracledb 설치: pip install oracledb")
         print("      SQL 기반 점검은 수동 점검으로 처리됩니다.")
 
     def _connect_oracledb(self, dsn) -> tuple:
