@@ -99,13 +99,28 @@ class OracleScanner(BaseScanner):
             import oracledb
         except ImportError:
             return None, "oracledb 미설치"
-        try:
-            # thin 모드: Oracle Client 불필요
-            conn = oracledb.connect(user=self.db_user, password=self.db_password,
-                                    dsn=dsn)
-            return conn, ""
-        except Exception as e:
-            return None, str(e)
+
+        # 시도 순서: 서비스명 → SID → PDB 기본명
+        attempts = [
+            {"dsn": dsn},  # service_name 방식 (host:port/service)
+            {"host": self.db_host, "port": self.db_port,
+             "sid": self.service_name},  # SID 방식
+            {"host": self.db_host, "port": self.db_port,
+             "service_name": f"{self.service_name}PDB1"},  # CDB PDB 기본명
+            {"host": self.db_host, "port": self.db_port,
+             "service_name": self.service_name.lower()},   # 소문자
+        ]
+        last_err = ""
+        for kw in attempts:
+            try:
+                label = kw.get("dsn") or kw.get("service_name") or kw.get("sid","")
+                print(f"  [*] 연결 시도: {label}")
+                conn = oracledb.connect(user=self.db_user,
+                                        password=self.db_password, **kw)
+                return conn, ""
+            except Exception as e:
+                last_err = str(e)
+        return None, last_err
 
     def _connect_cxoracle(self, dsn) -> tuple:
         try:
