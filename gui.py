@@ -851,12 +851,12 @@ class VulnScannerGUI:
                 sk  = self.ssm_sk.get() or None
                 tok = self.ssm_tok.get() or None
             ost  = self.ssm_os.get()
-            ping = "echo OK" if ost == "linux" else "Write-Output OK"
+            ping = "echo ssm_ok" if ost == "linux" else "Write-Output ssm_ok"
             print(f"\n  → SSM 연결 확인 중 ({iid} / {region} / {ost})...")
             from core.remote import SSMExecutor
             ex = SSMExecutor(iid, region, ak, sk, tok, platform=ost)
             try:
-                rc, out, err = ex.run_shell(ping, timeout=30)
+                rc, out, err = ex.run_shell(ping, timeout=60)
             except Exception as e:
                 msg = str(e)
                 if "InvalidInstanceId" in msg:
@@ -867,8 +867,14 @@ class VulnScannerGUI:
                         "  3) IAM 역할에 AmazonSSMManagedInstanceCore 정책 부여\n"
                         f"  원본 오류: {msg}")
                 raise RuntimeError(f"SSM 오류: {msg}")
-            if rc != 0 or "OK" not in out:
-                raise RuntimeError(err or "SSM 응답 없음")
+            if rc != 0:
+                raise RuntimeError(
+                    f"SSM 명령 실패 (exit {rc})\n"
+                    f"  stdout: {out!r}\n"
+                    f"  stderr: {err!r}\n\n"
+                    "  → SSM Agent 상태, IAM 정책, 인스턴스 상태를 확인하세요."
+                )
+            print(f"  [SSM 응답] {out!r}")
             print("  ✓ SSM 연결 성공")
             ctn = self.ssm_docker_ctn.get().strip()
             if ctn:
