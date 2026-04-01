@@ -1795,14 +1795,21 @@ const AdminDashboard = () => {
         );
 
       case 'community': {
-        const filteredPosts = posts.filter(p => {
-          const term = searchTerm.toLowerCase();
-          return (
-            (p.title?.toLowerCase() || '').includes(term) ||
-            (p.content?.toLowerCase() || '').includes(term) ||
-            (p.authorName?.toLowerCase() || '').includes(term)
-          );
-        });
+        const isPopularPost = (p: Post) => !p.notice && (p.likeCount >= 5 || p.viewCount >= 50);
+        const filteredPosts = posts
+          .filter(p => {
+            const term = searchTerm.toLowerCase();
+            return (
+              (p.title?.toLowerCase() || '').includes(term) ||
+              (p.content?.toLowerCase() || '').includes(term) ||
+              (p.authorName?.toLowerCase() || '').includes(term)
+            );
+          })
+          .sort((a, b) => {
+            if (a.notice !== b.notice) return a.notice ? -1 : 1;
+            if (isPopularPost(a) !== isPopularPost(b)) return isPopularPost(a) ? -1 : 1;
+            return 0;
+          });
 
         return (
           <Card>
