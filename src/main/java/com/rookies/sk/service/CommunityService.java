@@ -382,11 +382,18 @@ public class CommunityService {
         return communityLikeRepository.existsByTargetTypeAndTargetIdAndMember_MemberId("POST", postId, memberId);
     }
 
+    private boolean isPopular(Post p) {
+        long likes = p.getLikeCount() == null ? 0L : p.getLikeCount();
+        long views = p.getViewCount() == null ? 0L : p.getViewCount();
+        return !"Y".equals(p.getIsNotice()) && (likes >= 5 || views >= 50);
+    }
+
     private List<Post> sortPosts(List<Post> posts) {
         return posts.stream()
                 .sorted(
                         Comparator
                                 .comparing((Post p) -> "Y".equals(p.getIsNotice()) ? 0 : 1)
+                                .thenComparing((Post p) -> isPopular(p) ? 0 : 1)
                                 .thenComparing(Post::getCreatedAt,
                                         Comparator.nullsLast(Comparator.reverseOrder()))
                                 .thenComparing(Post::getPostId,
