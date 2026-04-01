@@ -152,6 +152,8 @@ class SSMExecutor:
                     rc  = 0 if status == "Success" else 1
                     out = inv.get("StandardOutputContent", "").strip()
                     err = inv.get("StandardErrorContent", "").strip()
+                    if rc != 0 and not err:
+                        err = f"[SSM Status={status}]"
                     return rc, out, err
 
             return -1, "", f"SSM timeout after {self._MAX_WAIT}s"
