@@ -42,6 +42,9 @@ export default defineConfig(({ mode }) => ({
       },
     },
   ],
+  build: {
+    sourcemap: false,
+  },
   server: {
     host: '0.0.0.0',
     port: mode === 'bank' ? 15174 : 15173,

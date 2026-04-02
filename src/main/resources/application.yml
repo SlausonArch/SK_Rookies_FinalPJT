@@ -73,6 +73,7 @@ app:
 
 server:
   port: ${SERVER_PORT:18080}
+  server-header:
   forward-headers-strategy: framework
   tomcat:
     max-http-form-post-size: 10MB
