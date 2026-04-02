@@ -8,6 +8,7 @@ SK Shieldus Oracle 11g/12c/18c/19c/21c 보안가이드라인 기반
   rds    : SQL 쿼리만 (리스너·sqlnet.ora·파일권한 모두 N/A)
 """
 from __future__ import annotations
+import os
 from core.base_scanner import BaseScanner
 from core.result import ScanReport, Severity
 
@@ -73,6 +74,8 @@ class OracleScanner(BaseScanner):
     def _connect(self):
         """oracledb(thin) 또는 cx_Oracle로 Oracle에 연결."""
         dsn = f"{self.db_host}:{self.db_port}/{self.service_name}"
+        if self.deploy_type == "rds":
+            print(f"  [*] RDS 접속 정보: {self.db_host}:{self.db_port}/{self.service_name}")
         errors = []
         for lib_name, connect_fn in [
             ("oracledb",  self._connect_oracledb),
@@ -87,6 +90,12 @@ class OracleScanner(BaseScanner):
                 # 설치는 됐지만 연결 실패 → 실제 오류 메시지 기록 후 중단
                 self._conn_error = f"{lib_name}: {err}"
                 print(f"  [!] Oracle DB 연결 실패: {self._conn_error}")
+                if self.deploy_type == "rds":
+                    if "DPY-6001" in err or "ORA-12514" in err:
+                        print("      Listener 응답은 확인되었습니다. SSM 터널/네트워크 경로는 살아 있을 가능성이 높습니다.")
+                        print("      현재 입력한 서비스명/SID가 RDS Oracle 에 등록된 값과 다릅니다.")
+                    print("      RDS는 서비스명/SID를 정확히 입력해야 합니다. RDS 엔드포인트는 서비스명이 아닙니다.")
+                    print("      예: 터널 성공 후 127.0.0.1:11521/ORCL 형태로 접속")
                 print("      SQL 기반 점검은 수동 점검으로 처리됩니다.")
                 return
             errors.append(f"{lib_name}: {err}")
@@ -96,6 +105,64 @@ class OracleScanner(BaseScanner):
         print("      oracledb 설치: pip install oracledb")
         print("      SQL 기반 점검은 수동 점검으로 처리됩니다.")
 
+    @staticmethod
+    def _try_init_thick_mode():
+        """Oracle Instant Client 라이브러리를 찾아 thick mode 초기화 시도."""
+        import oracledb, glob, platform as _pl, subprocess, shutil
+        try:
+            # 이미 초기화됐으면 성공으로 간주
+            if oracledb.is_thin_mode() is False:
+                return True
+        except Exception:
+            pass
+
+        # 후보 경로 목록
+        candidates = []
+        if _pl.system() == "Darwin":
+            candidates += [
+                "/opt/homebrew/lib",
+                "/opt/homebrew/Cellar/instantclient-basic",
+                "/usr/local/lib",
+            ]
+            candidates += glob.glob("/opt/homebrew/Cellar/instantclient-basic/*/lib")
+            candidates += glob.glob(os.path.expanduser("~/Downloads/instantclient*"))
+            candidates += glob.glob("/opt/oracle/instantclient*")
+        elif _pl.system() == "Linux":
+            candidates += glob.glob("/usr/lib/oracle/*/client64/lib")
+            candidates += glob.glob("/opt/oracle/instantclient*")
+            candidates += ["/usr/local/lib"]
+
+        # sqlplus 위치로 역추적
+        sqlplus = shutil.which("sqlplus")
+        if sqlplus:
+            sp_real = os.path.realpath(sqlplus)
+            candidates.insert(0, os.path.dirname(sp_real))
+            candidates.insert(0, os.path.join(os.path.dirname(os.path.dirname(sp_real)), "lib"))
+
+        # ORACLE_HOME 환경변수
+        oh = os.environ.get("ORACLE_HOME", "")
+        if oh:
+            candidates.insert(0, os.path.join(oh, "lib"))
+
+        for lib_dir in candidates:
+            if not os.path.isdir(lib_dir):
+                continue
+            try:
+                oracledb.init_oracle_client(lib_dir=lib_dir)
+                print(f"  [*] Oracle thick mode 초기화 성공: {lib_dir}")
+                return True
+            except Exception:
+                pass
+
+        # 경로 없이 시도 (LD_LIBRARY_PATH / DYLD_LIBRARY_PATH 에 있을 경우)
+        try:
+            oracledb.init_oracle_client()
+            print("  [*] Oracle thick mode 초기화 성공 (환경변수 경로)")
+            return True
+        except Exception as e:
+            print(f"  [경고] Oracle thick mode 초기화 실패 — thin mode로 계속: {e}")
+            return False
+
     def _connect_oracledb(self, dsn) -> tuple:
         import time
         try:
@@ -104,39 +171,30 @@ class OracleScanner(BaseScanner):
             return None, "oracledb 미설치"
 
         def _desc(host, port, svc, server="DEDICATED"):
-            """SERVER=DEDICATED 강제 — SSM 터널 리다이렉트 우회용 DESCRIPTION DSN"""
+            # SSM 포트포워딩 환경에서는 리다이렉트 없는 dedicated 연결이 더 안정적이다.
             return (f"(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST={host})(PORT={port}))"
                     f"(CONNECT_DATA=(SERVICE_NAME={svc})(SERVER={server})))")
 
+        # RDS/SSM 터널: ANE(Oracle Advanced Security) 때문에 thin mode 실패 가능
+        # → Instant Client 있으면 thick mode 사용 (sqlplus와 동일한 경로)
+        if self.deploy_type == "rds":
+            self._try_init_thick_mode()
+
         h, p, s = self.db_host, self.db_port, self.service_name
-        # 시도 순서: SERVER=DEDICATED DESCRIPTION → 기본 dsn → SID → PDB → 소문자
         attempts = [
-            # ① 리다이렉트 차단 (SSM 터널 환경 필수)
             {"dsn": _desc(h, p, s)},
             {"dsn": _desc(h, p, s.lower())},
-            {"dsn": _desc(h, p, f"{s}PDB1")},
-            # ② 일반 Easy Connect
             {"dsn": dsn},
             {"host": h, "port": p, "service_name": s},
+            {"host": h, "port": p, "service_name": s.lower()},
             {"host": h, "port": p, "sid": s},
             {"host": h, "port": p, "service_name": f"{s}PDB1"},
-            {"host": h, "port": p, "service_name": s.lower()},
         ]
-
-        # RDS: 엔드포인트 FQDN을 서비스명으로 시도 (RDS 리스너 등록 방식)
-        if self.rds_endpoint:
-            ep = self.rds_endpoint
-            attempts.insert(3, {"dsn": _desc(h, p, ep)})
-            short = ep.split(".")[0]
-            if short.lower() != s.lower():
-                attempts.append({"dsn": _desc(h, p, short)})
-                attempts.append({"dsn": _desc(h, p, short.upper())})
 
         last_err = ""
         for idx, kw in enumerate(attempts):
             label = kw.get("dsn") or kw.get("service_name") or kw.get("sid", "")
             print(f"  [*] 연결 시도 ({idx+1}/{len(attempts)}): {label}")
-            # DPY-6001(서비스 미등록)은 SSM 터널 준비 지연일 수 있어 최대 3회 재시도
             for retry in range(3):
                 try:
                     conn = oracledb.connect(
@@ -145,12 +203,13 @@ class OracleScanner(BaseScanner):
                     return conn, ""
                 except Exception as e:
                     err_str = str(e)
-                    if "DPY-6001" in err_str and retry < 2:
-                        print(f"      ↳ 서비스 미등록 응답 — {retry+1}회 재시도 중...")
-                        time.sleep(3)
-                        continue
                     last_err = err_str
-                    print(f"      ↳ 실패: {err_str.split(chr(10))[0][:100]}")
+                    first_line = err_str.split(chr(10))[0][:160]
+                    if "DPY-6001" in err_str and retry < 2:
+                        print(f"      ↳ 서비스 등록 대기 중으로 보여 재시도합니다... ({retry+1}/2)")
+                        time.sleep(2)
+                        continue
+                    print(f"      ↳ 실패: {first_line}")
                     break
         return None, last_err
 

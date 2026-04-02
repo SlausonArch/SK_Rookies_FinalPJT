@@ -20,6 +20,8 @@ MODULES = {
           "loader": lambda: __import__("modules.dbms.dbms_scanner",       fromlist=["DBMSScanner"]).DBMSScanner},
     "6": {"name": "Oracle  11g ~ 21c",    "tag": "ORA",   "desc": "계정/권한 · 보안설정 · 환경파일 · 감사 — 서버/Docker/RDS",
           "loader": lambda: __import__("modules.dbms.oracle_scanner",     fromlist=["OracleScanner"]).OracleScanner},
+    "7": {"name": "Cloud - AWS",          "tag": "AWS",   "desc": "IAM · 보안그룹 · S3 · RDS · CloudTrail · VPC · 백업 (SK Shieldus 가이드라인)",
+          "loader": lambda: __import__("modules.cloud.aws_scanner",       fromlist=["AWSScanner"]).AWSScanner},
 }
 
 # ── Binance-style palette ─────────────────────────────────────────────────────
@@ -169,8 +171,17 @@ class VulnScannerGUI:
         self.ora_rds_ep.trace_add("write", lambda *_: self._update_rds_cmd())
         self.ora_local_port = tk.StringVar(value="11521")  # 로컬 포워딩 포트
         self.ora_local_port.trace_add("write", lambda *_: self._update_rds_cmd())
+        self.ora_tunnel_iid  = tk.StringVar()               # 터널용 EC2 인스턴스 ID (RDS 전용)
+        self.ora_tunnel_iid.trace_add("write", lambda *_: self._update_rds_cmd())
         self.ora_auto_tunnel = tk.BooleanVar(value=True)   # 터널 자동 시작 여부
         self._ssm_proc       = None   # 실행 중인 SSM 터널 프로세스
+        self._ssm_output     = ""     # SSM 터널 시작 실패 시 진단용 출력
+        # AWS Cloud 진단 전용
+        self.aws_region  = tk.StringVar(value="ap-northeast-2")
+        self.aws_use_ssm = tk.BooleanVar(value=True)   # SSM 자격증명 재사용
+        self.aws_ak      = tk.StringVar()
+        self.aws_sk      = tk.StringVar()
+        self.aws_tok     = tk.StringVar()
         self.rpt_excel  = tk.BooleanVar(value=True)
         self.rpt_md     = tk.BooleanVar(value=False)
         self.status_var = tk.StringVar(value="IDLE")
@@ -248,28 +259,7 @@ class VulnScannerGUI:
         sf.pack(fill=tk.BOTH, expand=True)
         p = sf.inner
 
-        # ── CONNECTION ──────────────────────────────────────────────────────
-        self._shdr(p, "CONNECTION")
-
-        conn_row = tk.Frame(p, bg=C_CARD)
-        conn_row.pack(fill=tk.X, padx=16, pady=(4, 6))
-        self.conn_btns = {}
-        for val, label in [("1","로컬"), ("2","SSH"), ("3","AWS SSM"), ("4","Docker")]:
-            b = tk.Button(conn_row, text=label, bg=C_LINE, fg=C_SUB,
-                          relief=tk.FLAT, font=(_UI, 9), padx=12, pady=6,
-                          cursor="hand2", command=lambda v=val: self._set_conn(v))
-            b.pack(side=tk.LEFT, padx=(0, 3))
-            self.conn_btns[val] = b
-
-        self.conn_detail = tk.Frame(p, bg=C_CARD)
-        self.conn_detail.pack(fill=tk.X)
-        self.f_local  = self._make_f_local()
-        self.f_ssh    = self._make_f_ssh()
-        self.f_ssm    = self._make_f_ssm()
-        self.f_docker = self._make_f_docker()
-
         # ── TARGET ──────────────────────────────────────────────────────────
-        tk.Frame(p, bg=C_LINE, height=1).pack(fill=tk.X, pady=(4, 0))
         self._shdr(p, "TARGET")
         self._field(p, "진단 대상 호스트  (리포트 표시용)", self.target)
 
@@ -305,7 +295,6 @@ class VulnScannerGUI:
             command=self._start_scan)
         self.run_btn.pack(fill=tk.X)
 
-        self._set_conn("1")
         self._on_mod()
 
     # ── Section helpers ───────────────────────────────────────────────────────
@@ -378,7 +367,7 @@ class VulnScannerGUI:
                  font=(_UI,8)).pack(anchor=tk.W, padx=16, pady=(4,2))
         for v, l in [("1","🔑 IAM 키 입력"), ("2","🔄 환경변수 / ~/.aws")]:
             ttk.Radiobutton(f, text=l, variable=self.ssm_cred, value=v,
-                            command=self._on_cred).pack(anchor=tk.W, padx=16)
+                            command=self._on_any_cred).pack(anchor=tk.W, padx=16)
         self.f_ssm_key = tk.Frame(f, bg=C_DEEP)
         ki = tk.Frame(self.f_ssm_key, bg=C_DEEP); ki.pack(fill=tk.X, padx=8, pady=4)
         self._field(ki, "Access Key ID",        self.ssm_ak,  bg=C_DEEP)
@@ -473,6 +462,35 @@ class VulnScannerGUI:
 
     # ── Module options ────────────────────────────────────────────────────────
     def _build_opts(self):
+        # ── SHARED CONNECTION BLOCK (for modules 1-5 / Oracle server) ──────
+        self.conn_block = tk.Frame(self.opt_box, bg=C_CARD)
+
+        conn_hdr = tk.Frame(self.conn_block, bg=C_CARD)
+        conn_hdr.pack(fill=tk.X, padx=16, pady=(10, 4))
+        tk.Label(conn_hdr, text="연결 방법", bg=C_CARD, fg=C_GOLD,
+                 font=(_UI, 8, "bold")).pack(side=tk.LEFT)
+        tk.Frame(conn_hdr, bg=C_LINE, height=1).pack(side=tk.LEFT, fill=tk.X,
+                                                      expand=True, padx=(8, 0))
+
+        conn_btn_row = tk.Frame(self.conn_block, bg=C_CARD)
+        conn_btn_row.pack(fill=tk.X, padx=16, pady=(4, 6))
+        self.conn_btns = {}
+        for val, label in [("1", "로컬"), ("2", "SSH"), ("3", "AWS SSM"), ("4", "Docker")]:
+            b = tk.Button(conn_btn_row, text=label, bg=C_LINE, fg=C_SUB,
+                          relief=tk.FLAT, font=(_UI, 9), padx=12, pady=6,
+                          cursor="hand2", command=lambda v=val: self._set_conn(v))
+            b.pack(side=tk.LEFT, padx=(0, 3))
+            self.conn_btns[val] = b
+
+        self.conn_detail = tk.Frame(self.conn_block, bg=C_CARD)
+        self.conn_detail.pack(fill=tk.X)
+        self.f_local  = self._make_f_local()
+        self.f_ssh    = self._make_f_ssh()
+        self.f_ssm    = self._make_f_ssm()
+        self.f_docker = self._make_f_docker()
+
+        self._set_conn("1")
+
         self.opt_frames = {}
         for k in ("1","2","4"):
             f = tk.Frame(self.opt_box, bg=C_CARD)
@@ -520,6 +538,26 @@ class VulnScannerGUI:
         tk.Label(th, text="  AWS RDS  ·  SSM 포트 포워딩 자동화", bg=C_DEEP, fg=C_GOLD,
                  font=(_UI,9,"bold")).pack(side=tk.LEFT)
 
+        # ── SSM 터널 접속 설정 ─────────────────────────────────────
+        tk.Label(gi, text="SSM 터널 접속 설정", bg=C_DEEP, fg=C_GOLD,
+                 font=(_UI, 8, "bold")).pack(anchor=tk.W, pady=(0, 4))
+        self._field(gi, "EC2 인스턴스 ID", self.ssm_id, bg=C_DEEP)
+        self._field(gi, "AWS 리전", self.ssm_region, bg=C_DEEP)
+        tk.Label(gi, text="자격 증명", bg=C_DEEP, fg=C_SUB,
+                 font=(_UI, 8)).pack(anchor=tk.W, pady=(4, 2))
+        for v2, l2 in [("1", "🔑 IAM 키 입력"), ("2", "🔄 환경변수 / ~/.aws")]:
+            ttk.Radiobutton(gi, text=l2, variable=self.ssm_cred, value=v2,
+                            command=self._on_any_cred).pack(anchor=tk.W)
+        self.f_rds_ssm_key = tk.Frame(gi, bg=C_DEEP)
+        rki = tk.Frame(self.f_rds_ssm_key, bg=C_DEEP); rki.pack(fill=tk.X, pady=4)
+        self._field(rki, "Access Key ID",        self.ssm_ak,  bg=C_DEEP)
+        self._field(rki, "Secret Access Key",    self.ssm_sk,  show="●", bg=C_DEEP)
+        self._field(rki, "Session Token (선택)", self.ssm_tok, show="●", bg=C_DEEP)
+
+        tk.Frame(gi, bg=C_LINE2, height=1).pack(fill=tk.X, pady=(8, 0))
+        tk.Label(gi, text="RDS Oracle 접속 설정", bg=C_DEEP, fg=C_GOLD,
+                 font=(_UI, 8, "bold")).pack(anchor=tk.W, pady=(6, 4))
+
         # ── 입력 필드 ──────────────────────────────────────────────
         self._field(gi, "RDS 엔드포인트  (실제 RDS 호스트명)", self.ora_rds_ep, bg=C_DEEP)
 
@@ -543,8 +581,7 @@ class VulnScannerGUI:
                         command=self._on_auto_tunnel).pack(anchor=tk.W)
         self.f_auto_info = tk.Frame(gi, bg=C_DEEP)
         tk.Label(self.f_auto_info,
-                 text="  ✓  SSM 인스턴스 ID · 리전 → 왼쪽 CONNECTION 패널 AWS SSM 설정 사용\n"
-                      "  ✓  터널 연결 확인 후 자동으로 DB 진단 시작\n"
+                 text="  ✓  터널 연결 확인 후 자동으로 DB 진단 시작\n"
                       "  ✓  진단 완료 후 터널 자동 종료",
                  bg=C_DEEP, fg=C_TEAL, font=(_UI,8), justify=tk.LEFT).pack(anchor=tk.W)
         self.f_auto_info.pack(fill=tk.X)
@@ -583,25 +620,77 @@ class VulnScannerGUI:
 
         self.opt_frames["6"] = f6
 
+        # AWS Cloud
+        f7 = tk.Frame(self.opt_box, bg=C_CARD)
+        self._field(f7, "AWS 리전", self.aws_region)
+
+        tk.Label(f7, text="자격 증명", bg=C_CARD, fg=C_SUB,
+                 font=(_UI, 8)).pack(anchor=tk.W, padx=16, pady=(6, 2))
+        for v7, l7 in [(False, "🔑 IAM 키 직접 입력"), (True, "🔄 환경변수 / ~/.aws 사용")]:
+            ttk.Radiobutton(f7, text=l7, variable=self.aws_use_ssm, value=v7,
+                            command=self._on_aws_cred).pack(anchor=tk.W, padx=16)
+
+        self.f_aws_key = tk.Frame(f7, bg=C_DEEP)
+        ki7 = tk.Frame(self.f_aws_key, bg=C_DEEP); ki7.pack(fill=tk.X, padx=8, pady=4)
+        self._field(ki7, "Access Key ID",        self.aws_ak,  bg=C_DEEP)
+        self._field(ki7, "Secret Access Key",    self.aws_sk,  show="●", bg=C_DEEP)
+        self._field(ki7, "Session Token (선택)", self.aws_tok, show="●", bg=C_DEEP)
+
+        self.opt_frames["7"] = f7
+        self._on_aws_cred()
+
+    def _on_aws_cred(self):
+        if not hasattr(self, "f_aws_key"): return
+        if self.aws_use_ssm.get():
+            self.f_aws_key.pack_forget()
+        else:
+            self.f_aws_key.pack(fill=tk.X, padx=16, pady=4)
+
+    def _on_any_cred(self):
+        """SSM 자격증명 변경 시 모든 관련 키 패널 갱신"""
+        self._on_cred()
+        self._on_rds_cred()
+
+    def _on_rds_cred(self):
+        """RDS 패널 내 SSM 키 필드 표시/숨김"""
+        if not hasattr(self, "f_rds_ssm_key"): return
+        if self.ssm_cred.get() == "1":
+            self.f_rds_ssm_key.pack(fill=tk.X, pady=4)
+        else:
+            self.f_rds_ssm_key.pack_forget()
+
     def _on_mod(self):
         if not hasattr(self, "opt_frames"): return
-        for f in self.opt_frames.values(): f.pack_forget()
         k = self.mod_key.get()
+        for f in self.opt_frames.values(): f.pack_forget()
+        if hasattr(self, "conn_block"):
+            if k in ("1", "2", "3", "4", "5"):
+                self.conn_block.pack(fill=tk.X)
+            else:
+                self.conn_block.pack_forget()
         if k in self.opt_frames: self.opt_frames[k].pack(fill=tk.X)
         if k == "6": self._on_ora_deploy()
         self.root.after(50, self._rebind_all_scrollframes)
 
     def _on_ora_deploy(self):
         if not hasattr(self, "f_rds_guide"): return
-        is_rds = self.ora_deploy.get() == "rds"
+        deploy    = self.ora_deploy.get()
+        is_rds    = deploy == "rds"
+        is_server = deploy == "server"
+        # 서버 모드: 연결 방법 블록 표시 (SSH/SSM/로컬 선택 필요)
+        if hasattr(self, "conn_block"):
+            if is_server:
+                self.conn_block.pack(fill=tk.X, before=self.opt_frames["6"])
+            else:
+                self.conn_block.pack_forget()
         if is_rds:
             self._update_rds_cmd()
+            self._on_rds_cred()
             self.f_rds_guide.pack(fill=tk.X, pady=(4, 0))
             self.f_nonrds.pack_forget()
         else:
             self.f_rds_guide.pack_forget()
             self.f_nonrds.pack(fill=tk.X)
-        # 새로 pack된 위젯들에 스크롤 바인딩 갱신
         self.root.after(50, self._rebind_all_scrollframes)
 
     def _on_auto_tunnel(self):
@@ -937,6 +1026,21 @@ class VulnScannerGUI:
                         db_user=self.ora_user.get().strip() or "system",
                         db_password=self.ora_pass.get(),
                         rds_endpoint=rds_ep)
+        elif k == "7":
+            region = self.aws_region.get().strip() or "ap-northeast-2"
+            if self.aws_use_ssm.get():
+                # 환경변수 / ~/.aws 사용 — 빈 자격증명 전달
+                ak = sk = tok = ""
+            else:
+                ak  = self.aws_ak.get().strip()
+                sk  = self.aws_sk.get()
+                tok = self.aws_tok.get()
+            opts.update(region=region,
+                        aws_access_key_id=ak,
+                        aws_secret_access_key=sk,
+                        aws_session_token=tok)
+            # AWS 진단은 executor 불필요
+            opts.pop("executor", None)
         return opts
 
     @staticmethod
@@ -960,8 +1064,26 @@ class VulnScannerGUI:
                 return p
         return ""
 
+    @staticmethod
+    def _find_session_manager_plugin() -> str:
+        """session-manager-plugin 실행 파일 경로를 반환. 없으면 빈 문자열."""
+        import shutil
+        found = shutil.which("session-manager-plugin")
+        if found:
+            return found
+        candidates = [
+            "/usr/local/bin/session-manager-plugin",
+            "/opt/homebrew/bin/session-manager-plugin",
+            "/usr/bin/session-manager-plugin",
+            os.path.expanduser("~/.local/bin/session-manager-plugin"),
+        ]
+        for p in candidates:
+            if os.path.isfile(p) and os.access(p, os.X_OK):
+                return p
+        return ""
+
     def _start_ssm_tunnel(self):
-        import subprocess, socket, time
+        import os, pty, select, subprocess, socket, time
         iid    = self.ssm_id.get().strip()
         region = self.ssm_region.get().strip() or "ap-northeast-2"
         ep     = self.ora_rds_ep.get().strip()
@@ -998,33 +1120,66 @@ class VulnScannerGUI:
             if self.ssm_ak.get(): env["AWS_ACCESS_KEY_ID"]     = self.ssm_ak.get()
             if self.ssm_sk.get(): env["AWS_SECRET_ACCESS_KEY"]  = self.ssm_sk.get()
             if self.ssm_tok.get(): env["AWS_SESSION_TOKEN"]     = self.ssm_tok.get()
+        smp_bin = self._find_session_manager_plugin()
+        if smp_bin:
+            env["PATH"] = os.pathsep.join([
+                os.path.dirname(smp_bin),
+                env.get("PATH", ""),
+            ])
+
+        self._ssm_output = ""
+        local_port = int(local)
+        requested_local = local_port
+        local_port = self._pick_available_local_port(local_port)
+        if local_port != requested_local:
+            local = str(local_port)
+            self.ora_local_port.set(local)
+            print(f"  [!] 로컬 포트 {requested_local} 사용 불가 → {local} 로 자동 변경")
 
         print(f"  → SSM 터널 시작 중... (127.0.0.1:{local} → {ep}:{port})")
         self.root.after(0, lambda: self.tunnel_status_lbl.config(
             text="🔄 터널 연결 중...", fg=C_WARN))
 
-        self._ssm_proc = subprocess.Popen(cmd, env=env,
-                                           stdout=subprocess.DEVNULL,
-                                           stderr=subprocess.DEVNULL)
+        master_fd, slave_fd = pty.openpty()
+        self._ssm_proc = subprocess.Popen(
+            cmd,
+            env=env,
+            stdin=slave_fd,
+            stdout=slave_fd,
+            stderr=slave_fd,
+            close_fds=True,
+        )
+        os.close(slave_fd)
 
         # 포트가 열릴 때까지 최대 30초 대기
-        local_port = int(local)
         for i in range(30):
             time.sleep(1)
+            if self._ssm_proc.poll() is not None:
+                self._ssm_output = self._read_ssm_pty(master_fd).strip()
+                self._ssm_proc = None
+                os.close(master_fd)
+                raise RuntimeError(self._format_ssm_tunnel_error(
+                    ep=ep, port=port, local=local, region=region, iid=iid))
             try:
                 with socket.create_connection(("127.0.0.1", local_port), timeout=1):
+                    self._ssm_output = self._read_ssm_pty(master_fd).strip()
+                    os.close(master_fd)
                     break
             except OSError:
                 if i % 5 == 4:
                     print(f"  → 터널 대기 중... ({i+1}s)")
         else:
-            self._ssm_proc.terminate()
+            if self._ssm_proc and self._ssm_proc.poll() is None:
+                self._ssm_proc.terminate()
+                try:
+                    self._ssm_proc.wait(timeout=3)
+                except Exception:
+                    pass
+            self._ssm_output = self._read_ssm_pty(master_fd).strip()
             self._ssm_proc = None
-            raise RuntimeError(
-                f"SSM 터널 연결 시간 초과 (30s)\n\n"
-                f"  1) aws cli 가 설치·로그인 상태인지 확인\n"
-                f"  2) SSM 인스턴스 ID가 올바른지 확인\n"
-                f"  3) 인스턴스에 SSM Agent 및 RDS 접근 권한 확인")
+            os.close(master_fd)
+            raise RuntimeError(self._format_ssm_tunnel_error(
+                ep=ep, port=port, local=local, region=region, iid=iid, timeout=True))
 
         # TCP 포트 열림 후 Oracle listener 준비까지 추가 대기
         time.sleep(3)
@@ -1032,11 +1187,64 @@ class VulnScannerGUI:
         self.root.after(0, lambda: self.tunnel_status_lbl.config(
             text=f"✓ 터널 열림  127.0.0.1:{local}", fg=C_GREEN))
 
+    @staticmethod
+    def _read_ssm_pty(master_fd: int) -> str:
+        import os, select
+        chunks = []
+        while True:
+            ready, _, _ = select.select([master_fd], [], [], 0)
+            if not ready:
+                break
+            try:
+                data = os.read(master_fd, 4096)
+            except OSError:
+                break
+            if not data:
+                break
+            chunks.append(data.decode(errors="replace"))
+        return "".join(chunks)
+
+    @staticmethod
+    def _is_local_port_open(port: int) -> bool:
+        import socket
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=0.5):
+                return True
+        except OSError:
+            return False
+
+    def _pick_available_local_port(self, preferred_port: int) -> int:
+        if not self._is_local_port_open(preferred_port):
+            return preferred_port
+        for candidate in range(preferred_port + 1, preferred_port + 100):
+            if not self._is_local_port_open(candidate):
+                return candidate
+        raise RuntimeError(
+            f"로컬 포트 {preferred_port} 부근에서 사용 가능한 포트를 찾지 못했습니다.\n\n"
+            "  → Docker/기존 터널 프로세스를 종료하거나 다른 포트를 직접 지정하세요.")
+
+    def _format_ssm_tunnel_error(self, ep: str, port: str, local: str,
+                                 region: str, iid: str, timeout: bool = False) -> str:
+        msg = "SSM 터널 연결 시간 초과 (30s)" if timeout else "SSM 터널 시작 실패"
+        details = (self._ssm_output or "").strip()
+        hints = [
+            f"대상: 127.0.0.1:{local} -> {ep}:{port}",
+            f"리전/인스턴스: {region} / {iid}",
+            "1) 터미널에서 aws ssm start-session 명령이 직접 성공하는지 확인",
+            "2) EC2 인스턴스에 SSM Agent 와 AmazonSSMManagedInstanceCore 권한이 있는지 확인",
+            "3) EC2 에서 RDS 엔드포인트:1521 로 접속 가능한지 보안그룹/NACL 확인",
+            "4) session-manager-plugin 이 설치되어 있는지 확인",
+        ]
+        if details:
+            hints.append(f"원본 출력: {details.splitlines()[0][:240]}")
+        return msg + "\n\n" + "\n".join(f"  {line}" for line in hints)
+
     def _stop_ssm_tunnel(self):
         if self._ssm_proc and self._ssm_proc.poll() is None:
             self._ssm_proc.terminate()
             print("  ✓ SSM 터널 종료")
         self._ssm_proc = None
+        self._ssm_output = ""
         self.root.after(0, lambda: (
             hasattr(self, "tunnel_status_lbl") and
             self.tunnel_status_lbl.config(text="", fg=C_MUTE)))

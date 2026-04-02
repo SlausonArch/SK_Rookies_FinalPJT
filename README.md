@@ -1,3 +1,142 @@
+# VulnScanner — 취약점 진단 자동화 도구
+
+SK Shieldus 보안 가이드라인 기반의 취약점 진단 자동화 스크립트입니다.
+OS · WebServer · DBMS · Cloud(AWS) 진단을 GUI 또는 CLI로 실행할 수 있습니다.
+
+---
+
+## 요구사항
+
+| 항목 | 버전 |
+|------|------|
+| Python | 3.10 이상 |
+| pip 패키지 | 아래 설치 방법 참고 |
+| OS | macOS · Linux · Windows |
+
+---
+
+## 설치
+
+```bash
+git clone <repo-url>
+cd SK_Rookies_FinalPJT
+
+pip install -r requirements.txt
+```
+
+`requirements.txt` 가 없다면 직접 설치:
+
+```bash
+pip install paramiko boto3 openpyxl
+```
+
+> **Oracle 진단** 시 두꺼운 모드(Thick Mode)가 필요합니다.
+> macOS: `brew install instantclient-basic`
+> Linux: Oracle Instant Client 설치 후 `/opt/oracle/instantclient` 경로에 위치
+
+---
+
+## 실행
+
+### GUI 모드 (권장)
+
+```bash
+python3 gui.py
+```
+
+### CLI 모드 (터미널)
+
+```bash
+python3 main.py
+```
+
+---
+
+## 진단 모듈
+
+| 번호 | 모듈 | 점검 항목 |
+|------|------|-----------|
+| 1 | OS - Linux | 계정/패스워드, 파일 권한, SSH, 서비스, 로그, 커널 |
+| 2 | OS - Windows | 계정 정책, 레지스트리, 감사 정책, RDP, SMB |
+| 3 | WebServer - Nginx | 버전 노출, 디렉토리 리스팅, SSL/TLS, 보안 헤더 |
+| 4 | WebServer - IIS | 디렉토리 브라우징, 버전 노출, HTTP 메서드, 로그 |
+| 5 | DBMS (MySQL/PG/MSSQL) | 포트 노출, 기본 계정, 원격 root, 감사 로그 |
+| 6 | Oracle 11g~21c | 계정/권한, 보안설정, 환경파일, 감사 (서버/Docker/RDS) |
+| 7 | Cloud - AWS | IAM, 보안그룹, S3, RDS, CloudTrail, VPC, 백업 |
+
+---
+
+## 연결 방법
+
+| 방법 | 설명 |
+|------|------|
+| 로컬 | 현재 시스템을 직접 진단 |
+| SSH | PEM 키 또는 패스워드로 원격 서버 접속 |
+| AWS SSM | EC2 Session Manager로 접속 (키 불필요) |
+| Docker | 로컬 또는 원격 컨테이너 내부 진단 |
+
+---
+
+## AWS Cloud 진단 (모듈 7)
+
+boto3가 로컬 AWS 자격증명을 자동으로 사용합니다.
+별도 입력 없이 `~/.aws/credentials` 또는 환경변수가 적용됩니다.
+
+### 필요 IAM 권한
+
+진단 계정에 아래 중 하나를 부여하세요:
+
+```bash
+# 방법 1: AWS 관리형 정책 (권장)
+aws iam attach-user-policy \
+  --user-name <사용자명> \
+  --policy-arn arn:aws:iam::aws:policy/SecurityAudit
+
+# 방법 2: 그룹 경유
+aws iam add-user-to-group --user-name <사용자명> --group-name <SecurityAudit이 있는 그룹>
+```
+
+### 자격증명 확인
+
+```bash
+aws sts get-caller-identity      # 현재 연결된 계정 확인
+aws iam list-users               # IAM 권한 정상 여부 확인
+```
+
+---
+
+## 리포트 출력
+
+진단 완료 시 `reports/` 폴더에 자동 저장됩니다.
+
+| 형식 | 파일 |
+|------|------|
+| 로그 (.txt) | 항상 자동 저장 |
+| Excel (.xlsx) | 선택 시 저장 |
+| Markdown (.md) | 선택 시 저장 |
+
+---
+
+## 디렉토리 구조
+
+```
+SK_Rookies_FinalPJT/
+├── gui.py                  # GUI 진입점
+├── main.py                 # CLI 진입점
+├── core/
+│   ├── base_scanner.py     # 스캐너 기반 클래스
+│   ├── remote.py           # SSH / SSM / Docker 실행기
+│   ├── result.py           # 결과 데이터 모델
+│   └── reporter.py         # 리포트 생성
+└── modules/
+    ├── os/                 # Linux, Windows 스캐너
+    ├── webserver/          # Nginx, IIS 스캐너
+    ├── dbms/               # MySQL/PG/MSSQL, Oracle 스캐너
+    └── cloud/              # AWS 스캐너
+```
+
+---
+
 # 🚀 프로젝트 실행 가이드 (Quick Start)
 
 본 프로젝트는 Docker를 기반으로 Oracle DB, Spring Boot, React 환경을 한 번에 구축합니다.
