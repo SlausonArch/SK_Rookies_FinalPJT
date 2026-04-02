@@ -31,8 +31,9 @@ public class UpbitQuotationService {
         if (markets == null || markets.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "markets query is required");
         }
-        String encoded = URLEncoder.encode(markets, StandardCharsets.UTF_8);
-        return sendGet(UPBIT_API + "/ticker?markets=" + encoded);
+        // 쉼표는 쿼리 구분자로 그대로 유지, 마켓 코드 안전 문자만 허용
+        String safe = markets.replaceAll("[^A-Za-z0-9,\\-]", "");
+        return sendGet(UPBIT_API + "/ticker?markets=" + safe);
     }
 
     public String fetchMinuteCandles(String market, int unit, int count) {
@@ -56,8 +57,8 @@ public class UpbitQuotationService {
         if (markets == null || markets.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "markets query is required");
         }
-        String encoded = URLEncoder.encode(markets, StandardCharsets.UTF_8);
-        return sendGet(UPBIT_API + "/orderbook?markets=" + encoded);
+        String safe = markets.replaceAll("[^A-Za-z0-9,\\-]", "");
+        return sendGet(UPBIT_API + "/orderbook?markets=" + safe);
     }
 
     public String fetchTradeTicks(String market, int count) {
@@ -84,14 +85,20 @@ public class UpbitQuotationService {
                 .GET()
                 .timeout(Duration.ofSeconds(5))
                 .header("Accept", "application/json")
+                .header("User-Agent", "Mozilla/5.0")
                 .build();
 
         try {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() >= 200 && response.statusCode() < 300) {
+            int status = response.statusCode();
+            if (status >= 200 && status < 300) {
                 return response.body();
             }
-            log.warn("Upbit quotation call failed. status={}, url={}", response.statusCode(), url);
+            if (status == 429) {
+                log.warn("Upbit rate limit hit. url={}", url);
+                throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Upbit rate limit exceeded");
+            }
+            log.warn("Upbit quotation call failed. status={}, url={}", status, url);
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Failed to fetch quotation data");
         } catch (ResponseStatusException e) {
             throw e;
