@@ -294,6 +294,8 @@ function Community() {
     void loadPosts(keyword);
   }, [keyword]);
 
+  const isPopular = (post: Post) => !post.notice && (post.likeCount >= 5 || post.viewCount >= 50);
+
   const filteredPosts = useMemo(() => {
     const byTab = tab === 'notice'
       ? posts.filter(post => post.notice)
@@ -334,8 +336,6 @@ function Community() {
   const groupEnd = Math.min(groupStart + PAGE_GROUP_SIZE - 1, totalPages);
   const hasPrevGroup = groupStart > 1;
   const hasNextGroup = groupEnd < totalPages;
-
-  const isPopular = (post: Post) => !post.notice && (post.likeCount >= 5 || post.viewCount >= 50);
 
   useEffect(() => {
     setPage(1);

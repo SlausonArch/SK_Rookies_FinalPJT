@@ -71,16 +71,6 @@ const chunkMarkets = (markets: string[], size: number) => {
   return chunks;
 };
 
-async function fetchTickersSingle(market: string): Promise<UpbitTicker | null> {
-  try {
-    const { data } = await axios.get<UpbitTicker[]>(`${PROXY_API}/ticker`, {
-      params: { markets: market },
-    });
-    return data[0] ?? null;
-  } catch {
-    return null;
-  }
-}
 
 export async function fetchTickers(markets: string[]): Promise<UpbitTicker[]> {
   if (markets.length === 0) return [];
@@ -95,11 +85,7 @@ export async function fetchTickers(markets: string[]): Promise<UpbitTicker[]> {
       });
       merged.push(...data);
     } catch {
-      // 배치 요청 실패 시 개별 조회로 폴백 (유효하지 않은 코인 무시)
-      const results = await Promise.allSettled(chunk.map(m => fetchTickersSingle(m)));
-      results.forEach(r => {
-        if (r.status === 'fulfilled' && r.value) merged.push(r.value);
-      });
+      // 배치 요청 실패 시 무시 (개별 재시도 없음 — rate limit 방지)
     }
   }
 
