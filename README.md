@@ -1,54 +1,82 @@
 # VulnScanner — 취약점 진단 자동화 도구
 
-SK Shieldus 보안 가이드라인 기반의 취약점 진단 자동화 스크립트입니다.
-OS · WebServer · DBMS · Cloud(AWS) 진단을 GUI 또는 CLI로 실행할 수 있습니다.
+SK Shieldus 보안 가이드라인 기반 취약점 진단 자동화 앱입니다.
+OS · WebServer · DBMS · Cloud(AWS) 진단을 지원합니다.
 
 ---
 
-## 요구사항
+## 앱 실행 (빌드된 파일 사용)
 
-| 항목 | 버전 |
-|------|------|
-| Python | 3.10 이상 |
-| pip 패키지 | 아래 설치 방법 참고 |
-| OS | macOS · Linux · Windows |
+빌드된 앱 파일을 받아서 바로 실행합니다. Python 설치 불필요.
+
+| OS | 파일 | 실행 방법 |
+|----|------|-----------|
+| macOS | `VulnScanner.app` | 더블클릭 |
+| Windows | `VulnScanner.exe` | 더블클릭 |
+
+> **macOS 최초 실행 시**: 보안 경고가 뜨면
+> 시스템 환경설정 → 개인 정보 보호 및 보안 → "확인 없이 열기" 클릭
 
 ---
 
-## 설치
+## 앱 직접 빌드하기
+
+다른 컴퓨터용 앱을 만들 때 사용합니다.
+**macOS에서 빌드 → macOS 앱 / Windows에서 빌드 → Windows 앱** (크로스빌드 불가)
+
+### 1단계 — 준비
 
 ```bash
 git clone <repo-url>
 cd SK_Rookies_FinalPJT
 
+# Python 패키지 설치
 pip install -r requirements.txt
+pip install pyinstaller
 ```
 
-`requirements.txt` 가 없다면 직접 설치:
+> Python은 반드시 **python.org** 에서 설치하세요.
+> Microsoft Store Python은 tkinter가 없을 수 있습니다.
+
+### 2단계 — 빌드
 
 ```bash
-pip install paramiko boto3 openpyxl
+pyinstaller vuln-scanner-gui.spec
 ```
 
-> **Oracle 진단** 시 두꺼운 모드(Thick Mode)가 필요합니다.
-> macOS: `brew install instantclient-basic`
-> Linux: Oracle Instant Client 설치 후 `/opt/oracle/instantclient` 경로에 위치
+빌드 완료 후 `dist/` 폴더에 생성됩니다:
+- macOS: `dist/VulnScanner.app`
+- Windows: `dist/VulnScanner.exe`
 
 ---
 
-## 실행
+## Oracle RDS 진단 시 추가 설치
 
-### GUI 모드 (권장)
+앱 실행 컴퓨터에 Oracle Instant Client가 있어야 합니다.
 
+**macOS**
 ```bash
-python3 gui.py
+brew install instantclient-basic
 ```
 
-### CLI 모드 (터미널)
+**Windows**
+Oracle 공식 사이트에서 Instant Client Basic 다운로드 → `C:\oracle\instantclient` 에 압축 해제
 
+---
+
+## AWS SSM 터널 자동화 시 추가 설치
+
+Oracle RDS 진단에서 SSM 포트 포워딩을 자동으로 쓰려면:
+
+**macOS**
 ```bash
-python3 main.py
+brew install awscli
+brew install --cask session-manager-plugin
 ```
+
+**Windows**
+- AWS CLI: https://aws.amazon.com/cli/ 에서 MSI 설치
+- Session Manager Plugin: https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html
 
 ---
 

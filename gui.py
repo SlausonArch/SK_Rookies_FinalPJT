@@ -1047,18 +1047,24 @@ class VulnScannerGUI:
     def _find_aws_cli() -> str:
         """aws CLI 실행 파일 경로를 반환. 없으면 빈 문자열."""
         import shutil
-        # 1. 셸 PATH에서 탐색 (터미널 실행 시)
-        found = shutil.which("aws")
+        exe = "aws.cmd" if platform.system() == "Windows" else "aws"
+        found = shutil.which(exe) or shutil.which("aws")
         if found:
             return found
-        # 2. macOS/Linux 일반 설치 경로 직접 탐색
-        candidates = [
-            "/usr/local/bin/aws",
-            "/opt/homebrew/bin/aws",     # Apple Silicon Homebrew
-            "/usr/bin/aws",
-            "/home/linuxbrew/.linuxbrew/bin/aws",
-            os.path.expanduser("~/.local/bin/aws"),
-        ]
+        if platform.system() == "Windows":
+            candidates = [
+                r"C:\Program Files\Amazon\AWSCLIV2\aws.exe",
+                r"C:\Program Files (x86)\Amazon\AWSCLIV2\aws.exe",
+                os.path.expanduser(r"~\AppData\Local\Programs\Python\aws.exe"),
+            ]
+        else:
+            candidates = [
+                "/usr/local/bin/aws",
+                "/opt/homebrew/bin/aws",
+                "/usr/bin/aws",
+                "/home/linuxbrew/.linuxbrew/bin/aws",
+                os.path.expanduser("~/.local/bin/aws"),
+            ]
         for p in candidates:
             if os.path.isfile(p) and os.access(p, os.X_OK):
                 return p
@@ -1071,19 +1077,25 @@ class VulnScannerGUI:
         found = shutil.which("session-manager-plugin")
         if found:
             return found
-        candidates = [
-            "/usr/local/bin/session-manager-plugin",
-            "/opt/homebrew/bin/session-manager-plugin",
-            "/usr/bin/session-manager-plugin",
-            os.path.expanduser("~/.local/bin/session-manager-plugin"),
-        ]
+        if platform.system() == "Windows":
+            candidates = [
+                r"C:\Program Files\Amazon\SessionManagerPlugin\bin\session-manager-plugin.exe",
+                r"C:\Program Files (x86)\Amazon\SessionManagerPlugin\bin\session-manager-plugin.exe",
+            ]
+        else:
+            candidates = [
+                "/usr/local/bin/session-manager-plugin",
+                "/opt/homebrew/bin/session-manager-plugin",
+                "/usr/bin/session-manager-plugin",
+                os.path.expanduser("~/.local/bin/session-manager-plugin"),
+            ]
         for p in candidates:
             if os.path.isfile(p) and os.access(p, os.X_OK):
                 return p
         return ""
 
     def _start_ssm_tunnel(self):
-        import os, pty, select, subprocess, socket, time
+        import subprocess, socket, time, threading
         iid    = self.ssm_id.get().strip()
         region = self.ssm_region.get().strip() or "ap-northeast-2"
         ep     = self.ora_rds_ep.get().strip()
@@ -1091,22 +1103,20 @@ class VulnScannerGUI:
         local  = self.ora_local_port.get().strip() or "11521"
 
         if not iid:
-            raise ValueError("SSM 인스턴스 ID를 입력하세요.\n(CONNECTION → AWS SSM → EC2 인스턴스 ID)")
+            raise ValueError("SSM 인스턴스 ID를 입력하세요.")
         if not ep:
-            raise ValueError("RDS 엔드포인트를 입력하세요.\n(Oracle 옵션 → RDS 엔드포인트)")
+            raise ValueError("RDS 엔드포인트를 입력하세요.")
 
         params = (f'{{"host":["{ep}"],'
                   f'"portNumber":["{port}"],'
                   f'"localPortNumber":["{local}"]}}')
-        # .app 번들은 셸 PATH를 상속받지 못하므로 aws 경로를 직접 탐색
+
         aws_bin = self._find_aws_cli()
         if not aws_bin:
-            raise RuntimeError(
-                "aws CLI를 찾을 수 없습니다.\n\n"
-                "설치 확인:\n"
-                "  brew install awscli\n"
-                "또는  https://aws.amazon.com/cli/\n\n"
-                "설치 후 터미널에서 'which aws' 로 경로 확인")
+            install_hint = ("  choco install awscli  또는  https://aws.amazon.com/cli/"
+                            if platform.system() == "Windows"
+                            else "  brew install awscli  또는  https://aws.amazon.com/cli/")
+            raise RuntimeError(f"aws CLI를 찾을 수 없습니다.\n\n{install_hint}")
 
         cmd = [aws_bin, "ssm", "start-session",
                "--region", region,
@@ -1114,18 +1124,14 @@ class VulnScannerGUI:
                "--document-name", "AWS-StartPortForwardingSessionToRemoteHost",
                "--parameters", params]
 
-        # IAM 키 직접 입력인 경우 환경변수 주입
         env = os.environ.copy()
         if self.ssm_cred.get() == "1":
-            if self.ssm_ak.get(): env["AWS_ACCESS_KEY_ID"]     = self.ssm_ak.get()
-            if self.ssm_sk.get(): env["AWS_SECRET_ACCESS_KEY"]  = self.ssm_sk.get()
-            if self.ssm_tok.get(): env["AWS_SESSION_TOKEN"]     = self.ssm_tok.get()
+            if self.ssm_ak.get():  env["AWS_ACCESS_KEY_ID"]     = self.ssm_ak.get()
+            if self.ssm_sk.get():  env["AWS_SECRET_ACCESS_KEY"]  = self.ssm_sk.get()
+            if self.ssm_tok.get(): env["AWS_SESSION_TOKEN"]      = self.ssm_tok.get()
         smp_bin = self._find_session_manager_plugin()
         if smp_bin:
-            env["PATH"] = os.pathsep.join([
-                os.path.dirname(smp_bin),
-                env.get("PATH", ""),
-            ])
+            env["PATH"] = os.pathsep.join([os.path.dirname(smp_bin), env.get("PATH", "")])
 
         self._ssm_output = ""
         local_port = int(local)
@@ -1140,30 +1146,38 @@ class VulnScannerGUI:
         self.root.after(0, lambda: self.tunnel_status_lbl.config(
             text="🔄 터널 연결 중...", fg=C_WARN))
 
-        master_fd, slave_fd = pty.openpty()
-        self._ssm_proc = subprocess.Popen(
-            cmd,
+        # Windows: CREATE_NO_WINDOW 플래그로 콘솔 창 숨김
+        popen_kwargs: dict = dict(
             env=env,
-            stdin=slave_fd,
-            stdout=slave_fd,
-            stderr=slave_fd,
-            close_fds=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
         )
-        os.close(slave_fd)
+        if platform.system() == "Windows":
+            popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
+        else:
+            popen_kwargs["close_fds"] = True
+
+        self._ssm_proc = subprocess.Popen(cmd, **popen_kwargs)
+
+        # 출력을 백그라운드 스레드로 읽어 _ssm_output 에 축적
+        output_buf: list[str] = []
+        def _reader():
+            for line in self._ssm_proc.stdout:
+                output_buf.append(line.decode(errors="replace"))
+        threading.Thread(target=_reader, daemon=True).start()
 
         # 포트가 열릴 때까지 최대 30초 대기
         for i in range(30):
             time.sleep(1)
             if self._ssm_proc.poll() is not None:
-                self._ssm_output = self._read_ssm_pty(master_fd).strip()
+                self._ssm_output = "".join(output_buf).strip()
                 self._ssm_proc = None
-                os.close(master_fd)
                 raise RuntimeError(self._format_ssm_tunnel_error(
                     ep=ep, port=port, local=local, region=region, iid=iid))
             try:
                 with socket.create_connection(("127.0.0.1", local_port), timeout=1):
-                    self._ssm_output = self._read_ssm_pty(master_fd).strip()
-                    os.close(master_fd)
+                    self._ssm_output = "".join(output_buf).strip()
                     break
             except OSError:
                 if i % 5 == 4:
@@ -1175,34 +1189,15 @@ class VulnScannerGUI:
                     self._ssm_proc.wait(timeout=3)
                 except Exception:
                     pass
-            self._ssm_output = self._read_ssm_pty(master_fd).strip()
+            self._ssm_output = "".join(output_buf).strip()
             self._ssm_proc = None
-            os.close(master_fd)
             raise RuntimeError(self._format_ssm_tunnel_error(
                 ep=ep, port=port, local=local, region=region, iid=iid, timeout=True))
 
-        # TCP 포트 열림 후 Oracle listener 준비까지 추가 대기
         time.sleep(3)
         print(f"  ✓ SSM 터널 연결 완료 (127.0.0.1:{local})")
         self.root.after(0, lambda: self.tunnel_status_lbl.config(
             text=f"✓ 터널 열림  127.0.0.1:{local}", fg=C_GREEN))
-
-    @staticmethod
-    def _read_ssm_pty(master_fd: int) -> str:
-        import os, select
-        chunks = []
-        while True:
-            ready, _, _ = select.select([master_fd], [], [], 0)
-            if not ready:
-                break
-            try:
-                data = os.read(master_fd, 4096)
-            except OSError:
-                break
-            if not data:
-                break
-            chunks.append(data.decode(errors="replace"))
-        return "".join(chunks)
 
     @staticmethod
     def _is_local_port_open(port: int) -> bool:
