@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import styled from 'styled-components';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -9,6 +9,19 @@ import Footer from '../components/Footer';
 import { clearUserSession, getUserAccessToken } from '../utils/auth';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+
+interface Asset {
+  assetType: string;
+  balance: number;
+  lockedBalance: number;
+  availableBalance: number;
+  averageBuyPrice: number;
+}
+
+const toNumber = (value: unknown) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+};
 
 const Container = styled.div`
   min-height: 100vh;
@@ -209,18 +222,13 @@ const Balances = () => {
 
   // 자산 정보
   const [krwBalance, setKrwBalance] = useState(0);
-  const [assets, setAssets] = useState<any[]>([]);
+  const [assets, setAssets] = useState<Asset[]>([]);
 
   // 투자 원금 및 수익률
   const [, setTotalInvestment] = useState(0);
 
   // 실시간 코인 시세
-  const [coinPrices, setCoinPrices] = useState({
-    BTC: 0,
-    ETH: 0,
-    XRP: 0,
-    DOGE: 0,
-  });
+  const [coinPrices, setCoinPrices] = useState<Record<string, number>>({});
 
   // 지갑 폼 지정
   const [selectedDepositCoin, setSelectedDepositCoin] = useState('BTC');
@@ -253,7 +261,14 @@ const Balances = () => {
       }
 
       const assetsData = Array.isArray(assetsResponse.data) ? assetsResponse.data : [];
-      setAssets(assetsData);
+      const normalizedAssets: Asset[] = assetsData.map((asset: any) => ({
+        assetType: String(asset.assetType ?? ''),
+        balance: toNumber(asset.balance),
+        lockedBalance: toNumber(asset.lockedBalance),
+        availableBalance: toNumber(asset.availableBalance),
+        averageBuyPrice: toNumber(asset.averageBuyPrice),
+      }));
+      setAssets(normalizedAssets);
 
       // 투자원금 및 KRW 잔고 조회
       const summaryResponse = await axios.get(`${API_BASE}/api/assets/summary`, { headers });
@@ -263,7 +278,7 @@ const Balances = () => {
       if (summary.krwBalance !== undefined) {
         setKrwBalance(summary.krwBalance);
       } else {
-        const krw = assetsData.find((a: any) => a.assetType === 'KRW');
+        const krw = normalizedAssets.find(asset => asset.assetType === 'KRW');
         setKrwBalance(krw?.balance || 0);
       }
 
@@ -294,7 +309,7 @@ const Balances = () => {
 
       try {
         const coinTypes = assets
-          .map((a: any) => a.assetType)
+          .map(asset => asset.assetType)
           .filter((type: string) => type !== 'KRW');
 
         if (coinTypes.length === 0) return;
@@ -304,7 +319,7 @@ const Balances = () => {
 
         const tickers: UpbitTicker[] = await fetchTickers(markets);
 
-        const prices: any = {};
+        const prices: Record<string, number> = {};
         tickers.forEach(ticker => {
           const symbol = ticker.market.replace('KRW-', '');
           prices[symbol] = ticker.trade_price;
@@ -338,19 +353,25 @@ const Balances = () => {
       });
   }, [selectedDepositCoin]);
 
-  const holdingAssets = assets.filter((a: any) => a.assetType !== 'KRW' && Number(a.balance) > 0);
+  const holdingAssets = useMemo(
+    () => assets.filter(asset => asset.assetType !== 'KRW' && asset.balance > 0),
+    [assets],
+  );
 
-  const totalCoinValue = holdingAssets.reduce((sum, asset) => {
-    const price = coinPrices[asset.assetType as keyof typeof coinPrices] || 0;
-    return sum + (asset.balance * price);
-  }, 0);
+  const totalCoinValue = useMemo(
+    () => holdingAssets.reduce((sum, asset) => {
+      const currentPrice = coinPrices[asset.assetType] || asset.averageBuyPrice;
+      return sum + (asset.balance * currentPrice);
+    }, 0),
+    [holdingAssets, coinPrices],
+  );
 
   const totalAssets = krwBalance + totalCoinValue;
 
-  const totalCoinBuyAmount = holdingAssets.reduce((sum, asset) => {
-    const avgPrice = asset.averageBuyPrice || 0;
-    return sum + (asset.balance * avgPrice);
-  }, 0);
+  const totalCoinBuyAmount = useMemo(
+    () => holdingAssets.reduce((sum, asset) => sum + (asset.balance * asset.averageBuyPrice), 0),
+    [holdingAssets],
+  );
 
   const totalEvaluationProfit = totalCoinValue - totalCoinBuyAmount;
 
@@ -401,7 +422,7 @@ const Balances = () => {
     return code || fallback;
   };
 
-  const availableWithdrawAmount = assets.find((a: any) => a.assetType === selectedWithdrawCoin)?.balance || 0;
+  const availableWithdrawAmount = assets.find(asset => asset.assetType === selectedWithdrawCoin)?.balance || 0;
 
   const handleCoinTransfer = async () => {
     const token = getUserAccessToken();
@@ -555,20 +576,21 @@ const Balances = () => {
               </Tr>
             </Thead>
             <Tbody>
-              {holdingAssets.map((asset: any) => {
+              {holdingAssets.map((asset) => {
                 const symbol = asset.assetType;
                 const balance = asset.balance;
-                const price = coinPrices[symbol as keyof typeof coinPrices] || 0;
-                const value = balance * price;
                 const avgPrice = asset.averageBuyPrice || 0;
-                const profitRate = avgPrice > 0 ? ((price - avgPrice) / avgPrice * 100) : 0;
+                const currentPrice = coinPrices[symbol] || avgPrice;
+                const value = balance * currentPrice;
+                const totalInvest = balance * avgPrice;
+                const profitRate = totalInvest > 0 ? ((value - totalInvest) / totalInvest * 100) : 0;
 
                 return (
                   <Tr key={symbol}>
                     <Td><strong>{symbol}</strong></Td>
                     <Td>{formatCoinAmount(balance)} {symbol}</Td>
                     <Td>{formatAverageBuyPrice(avgPrice)}</Td>
-                    <Td>{formatKrwPrice(price)} KRW</Td>
+                    <Td>{formatKrwPrice(currentPrice)} KRW</Td>
                     <Td>{formatKrwValue(value)} KRW</Td>
                     <Td style={{ color: profitRate > 0 ? '#d60000' : profitRate < 0 ? '#0051c7' : '#333' }}>
                       {profitRate > 0 ? '+' : ''}{profitRate.toFixed(2)}%
