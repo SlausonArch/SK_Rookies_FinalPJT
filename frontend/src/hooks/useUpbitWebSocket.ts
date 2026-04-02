@@ -133,10 +133,16 @@ export function useUpbitTicker(markets: string[]) {
       };
 
       ws.onmessage = async (event) => {
-        const data = await decodeJson(event.data);
-        if (!data || (data as TickerWS).type !== 'ticker' || !(data as TickerWS).code) return;
-        // 바로 setState 대신 pending 버퍼에 누적
-        pendingRef.current.set((data as TickerWS).code, data as TickerWS);
+        try {
+          const data = await decodeJson(event.data);
+          if (!data) return;
+          // 업비트 에러 응답(403 등) 무시
+          if ((data as any).status === 'error' || (data as any).code != null && (data as any).type == null) return;
+          if ((data as TickerWS).type !== 'ticker' || !(data as TickerWS).code) return;
+          pendingRef.current.set((data as TickerWS).code, data as TickerWS);
+        } catch {
+          // ignore
+        }
       };
 
       ws.onerror = () => startPolling();
@@ -220,9 +226,15 @@ export function useUpbitOrderbook(market: string) {
       };
 
       ws.onmessage = async (event) => {
-        const data = await decodeJson(event.data);
-        if (!data || (data as OrderbookWS).type !== 'orderbook') return;
-        setOrderbook(data as OrderbookWS);
+        try {
+          const data = await decodeJson(event.data);
+          if (!data) return;
+          if ((data as any).status === 'error' || (data as any).code != null && (data as any).type == null) return;
+          if ((data as OrderbookWS).type !== 'orderbook') return;
+          setOrderbook(data as OrderbookWS);
+        } catch {
+          // ignore
+        }
       };
 
       ws.onerror = () => startPolling();
@@ -309,9 +321,15 @@ export function useUpbitTrades(market: string) {
       };
 
       ws.onmessage = async (event) => {
-        const data = await decodeJson(event.data);
-        if (!data || (data as TradeWS).type !== 'trade') return;
-        setTrades((prev) => [data as TradeWS, ...prev].slice(0, 50));
+        try {
+          const data = await decodeJson(event.data);
+          if (!data) return;
+          if ((data as any).status === 'error' || (data as any).code != null && (data as any).type == null) return;
+          if ((data as TradeWS).type !== 'trade') return;
+          setTrades((prev) => [data as TradeWS, ...prev].slice(0, 50));
+        } catch {
+          // ignore
+        }
       };
 
       ws.onerror = () => startPolling();
