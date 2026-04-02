@@ -33,7 +33,8 @@ public class UpbitQuotationService {
         }
         // 쉼표는 쿼리 구분자로 그대로 유지, 마켓 코드 안전 문자만 허용
         String safe = markets.replaceAll("[^A-Za-z0-9,\\-]", "");
-        return sendGet(UPBIT_API + "/ticker?markets=" + safe);
+        // 일부 마켓이 상장폐지 등으로 404 반환 시 빈 배열 반환 (전체 실패 방지)
+        return sendGetWithFallback(UPBIT_API + "/ticker?markets=" + safe, "[]");
     }
 
     public String fetchMinuteCandles(String market, int unit, int count) {
@@ -77,6 +78,19 @@ public class UpbitQuotationService {
     private void validateCount(int count) {
         if (count <= 0 || count > 500) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "count must be between 1 and 500");
+        }
+    }
+
+    private String sendGetWithFallback(String url, String fallback) {
+        try {
+            return sendGet(url);
+        } catch (ResponseStatusException e) {
+            if (e.getStatusCode() == HttpStatus.BAD_GATEWAY ||
+                e.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS) {
+                log.warn("Upbit ticker fallback to '{}'. url={}", fallback, url);
+                return fallback;
+            }
+            throw e;
         }
     }
 
