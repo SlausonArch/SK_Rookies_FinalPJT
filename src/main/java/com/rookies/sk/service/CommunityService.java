@@ -14,11 +14,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import jakarta.persistence.EntityManager;
 import org.jsoup.Jsoup;
 import org.jsoup.safety.Safelist;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -30,58 +30,51 @@ public class CommunityService {
     private final CommentRepository commentRepository;
     private final CommunityLikeRepository communityLikeRepository;
     private final MemberRepository memberRepository;
-    private final EntityManager entityManager;
 
     @Transactional(readOnly = true)
     public List<PostResponseDto> getPosts(String keyword, String currentEmail) {
         Member currentMember = findCurrentMemberOrNull(currentEmail);
         boolean isAdmin = currentMember != null && hasCommunitySuperRole(currentMember);
         Long currentMemberId = currentMember != null ? currentMember.getMemberId() : null;
+        String normalizedKeyword = normalizeKeyword(keyword);
 
         // 로그 인젝션 방지: CRLF 제거 후 DEBUG 레벨로만 기록 (CWE-117)
         if (log.isDebugEnabled()) {
-            String safeKeyword = keyword == null ? "" : keyword.replaceAll("[\r\n\t]", " ");
+            String safeKeyword = normalizedKeyword == null ? "" : normalizedKeyword.replaceAll("[\r\n\t]", " ");
             log.debug("Community search keyword: [{}]", safeKeyword);
         }
 
         List<Post> posts;
 
-        if (keyword == null || keyword.isBlank()) {
+        if (normalizedKeyword == null) {
             if (isAdmin) {
                 posts = postRepository.findAll();
             } else {
                 posts = postRepository.findByIsHidden("N");
             }
         } else {
-            String escapedKeyword = keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
-            String likePattern = "%" + escapedKeyword + "%";
+            List<Post> sourcePosts = isAdmin
+                    ? postRepository.findAll()
+                    : postRepository.findByIsHidden("N");
 
-            String jpql;
-            if (isAdmin) {
-                jpql = "SELECT p FROM Post p WHERE LOWER(p.title) LIKE LOWER(:pattern) ESCAPE '\\' " +
-                       "OR p.content LIKE :pattern ESCAPE '\\' " +
-                       "ORDER BY CASE WHEN p.isNotice = 'Y' THEN 0 ELSE 1 END, p.createdAt DESC";
-            } else {
-                jpql = "SELECT p FROM Post p WHERE (LOWER(p.title) LIKE LOWER(:pattern) ESCAPE '\\' " +
-                       "OR p.content LIKE :pattern ESCAPE '\\') " +
-                       "AND p.isHidden = 'N' " +
-                       "ORDER BY CASE WHEN p.isNotice = 'Y' THEN 0 ELSE 1 END, p.createdAt DESC";
-            }
-
-            try {
-                posts = entityManager.createQuery(jpql, Post.class)
-                        .setParameter("pattern", likePattern)
-                        .getResultList();
-            } catch (Exception e) {
-                log.error("QUERY ERROR: {}", e.getMessage());
-                posts = List.of();
-            }
+            String keywordLower = normalizedKeyword.toLowerCase(Locale.ROOT);
+            posts = sourcePosts.stream()
+                    .filter(post -> containsIgnoreCase(post.getTitle(), keywordLower)
+                            || containsIgnoreCase(post.getContent(), keywordLower))
+                    .collect(Collectors.toList());
         }
         posts = sortPosts(posts);
 
         return posts.stream()
                 .map(post -> toPostResponse(post, currentMemberId, isAdmin))
                 .collect(Collectors.toList());
+    }
+
+    private boolean containsIgnoreCase(String value, String keywordLower) {
+        if (value == null || keywordLower == null) {
+            return false;
+        }
+        return value.toLowerCase(Locale.ROOT).contains(keywordLower);
     }
 
     @Transactional
