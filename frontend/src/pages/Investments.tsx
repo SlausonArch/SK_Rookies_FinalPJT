@@ -797,8 +797,9 @@ const Investments = () => {
 
   const totalCoinValue = useMemo(
     () => holdingAssets.reduce((sum, asset) => {
-      const info = coinPrices[asset.assetType] || { price: 0, changePrice: 0 };
-      return sum + (asset.balance * info.price);
+      // 가격 조회 실패 시 평단가로 fallback (손익 0 처리)
+      const price = coinPrices[asset.assetType]?.price || asset.averageBuyPrice;
+      return sum + (asset.balance * price);
     }, 0),
     [holdingAssets, coinPrices],
   );
@@ -1339,7 +1340,8 @@ const Investments = () => {
                   const balance = asset.balance;
                   const avgPrice = asset.averageBuyPrice || 0;
                   const coinInfo = coinPrices[symbol] || { price: 0, changePrice: 0 };
-                  const currentPrice = coinInfo.price;
+                  // 가격 조회 실패 시 평단가로 fallback (손익 0 처리)
+                  const currentPrice = coinInfo.price || avgPrice;
                   const valuation = balance * currentPrice;
                   const totalInvest = balance * avgPrice;
                   const profit = valuation - totalInvest;
