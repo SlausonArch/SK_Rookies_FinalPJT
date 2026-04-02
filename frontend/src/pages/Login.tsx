@@ -58,23 +58,6 @@ const SocialButton = styled.a<{ provider: string }>`
   }
 `;
 
-const Divider = styled.div`
-  margin: 30px 0;
-  border-top: 1px solid #e1e4e8;
-  position: relative;
-
-  &:after {
-    content: "또는";
-    position: absolute;
-    top: -10px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: white;
-    padding: 0 10px;
-    color: #999;
-    font-size: 13px;
-  }
-`;
 
 const ErrorMsg = styled.div`
   margin-top: 8px;
@@ -194,9 +177,7 @@ const Login: React.FC = () => {
           네이버로 시작하기
         </SocialButton>
 
-        <Divider />
-
-        {error && <ErrorMsg>{error}</ErrorMsg>}
+        {error && <ErrorMsg style={{ marginTop: 20 }}>{error}</ErrorMsg>}
 
       </LoginBox>
     </Container>
