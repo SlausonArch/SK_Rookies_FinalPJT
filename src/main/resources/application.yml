@@ -17,10 +17,10 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: true
+    show-sql: false
     properties:
       hibernate:
-        format_sql: true
+        format_sql: false
         dialect: org.hibernate.dialect.OracleDialect
   security:
     oauth2:
@@ -58,10 +58,10 @@ spring:
 
 logging:
   level:
-    org.hibernate.SQL: DEBUG
-    org.springframework.security: DEBUG
-    org.springframework.web: DEBUG
-    com.rookies.sk: DEBUG
+    org.hibernate.SQL: WARN
+    org.springframework.security: INFO
+    org.springframework.web: INFO
+    com.rookies.sk: INFO
 
 jwt:
   secret: ${JWT_SECRET:your-very-secure-secret-key-at-least-256-bits-long}
