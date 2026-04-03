@@ -86,6 +86,7 @@ public class SecurityConfig {
                                                 .requestMatchers(HttpMethod.TRACE, "/**").denyAll()
                                                 // 관리자 API: 실제 사용하지 않는 취약 메소드 차단
                                                 .requestMatchers(HttpMethod.HEAD, "/api/admin/**").denyAll()
+                                                .requestMatchers(HttpMethod.DELETE, "/api/admin/**").denyAll()
                                                 .requestMatchers(HttpMethod.PUT, "/api/admin/**").denyAll()
                                                 .requestMatchers(HttpMethod.HEAD, "/api/auth/admin/**").denyAll()
                                                 // PUT/DELETE 취약 메소드 차단

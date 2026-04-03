@@ -67,6 +67,9 @@ public class Transaction {
     @Column(name = "ACCOUNT_NUMBER", length = 100)
     private String accountNumber;
 
+    @Column(name = "NOTE", length = 500)
+    private String note;
+
     @Column(name = "STATUS", length = 20)
     @Builder.Default
     private String status = "COMPLETED"; // e.g., PENDING, COMPLETED, FAILED

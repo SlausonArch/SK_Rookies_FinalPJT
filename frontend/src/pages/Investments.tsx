@@ -208,7 +208,15 @@ const Badge = styled.span<{ type: string }>`
   border-radius: 12px;
   font-size: 12px;
   font-weight: 600;
-  background: ${props => props.type === 'BUY' ? '#d60000' : props.type === 'SELL' ? '#0051c7' : props.type === 'EVENT_REWARD' ? '#7c3aed' : '#666'};
+  background: ${props => props.type === 'BUY'
+    ? '#d60000'
+    : props.type === 'SELL'
+      ? '#0051c7'
+      : props.type === 'ADMIN_RECLAIM'
+        ? '#b91c1c'
+        : props.type === 'EVENT_REWARD'
+          ? '#7c3aed'
+          : '#666'};
   color: white;
 `;
 
@@ -488,6 +496,7 @@ interface Transaction {
   txHash?: string;
   bankName?: string;
   accountNumber?: string;
+  note?: string;
   status?: string;
 }
 
@@ -519,7 +528,7 @@ interface RealizedByCoinRow {
   sellQty: number;
 }
 
-type SortKey = 'txDate' | 'txType' | 'assetType' | 'amount' | 'price' | 'totalValue' | 'fee';
+type SortKey = 'txDate' | 'txType' | 'assetType' | 'amount' | 'price' | 'totalValue' | 'note';
 type SortOrder = 'asc' | 'desc';
 type SubSectionKey = 'holdings' | 'performance' | 'history' | 'openOrders' | 'pendingTransfers';
 type PerformancePeriod = 'monthly' | 'yearly';
@@ -657,6 +666,7 @@ const Investments = () => {
           txHash: tx.txHash,
           bankName: tx.bankName,
           accountNumber: tx.accountNumber,
+          note: typeof tx.note === 'string' ? tx.note : '',
           status: tx.status,
         }));
         setTransactions(normalizedTransactions);
@@ -752,6 +762,24 @@ const Investments = () => {
     setSortOrder('desc');
   };
 
+  function getTransactionRemark(tx: Transaction) {
+    const trimmedNote = tx.note?.trim();
+    if (trimmedNote) {
+      return trimmedNote;
+    }
+
+    if (tx.txType === 'DEPOSIT' || tx.txType === 'WITHDRAW') {
+      if (tx.assetType === 'KRW') {
+        return `${tx.bankName || '계좌정보 없음'} ${tx.accountNumber || ''}`.trim();
+      }
+      return tx.txType === 'WITHDRAW'
+        ? `To: ${tx.toAddress || '미상'}`
+        : `From: ${tx.fromAddress || '미상'}`;
+    }
+
+    return tx.fee > 0 ? `수수료 ${formatDetailKrw(tx.fee)} KRW` : '-';
+  }
+
   const sortedTrades = useMemo(() => {
     const data = [...transactions];
     const direction = sortOrder === 'asc' ? 1 : -1;
@@ -763,9 +791,9 @@ const Investments = () => {
         return (aTime - bTime) * direction;
       }
 
-      if (sortKey === 'txType' || sortKey === 'assetType') {
-        const aText = String(a[sortKey] ?? '');
-        const bText = String(b[sortKey] ?? '');
+      if (sortKey === 'txType' || sortKey === 'assetType' || sortKey === 'note') {
+        const aText = sortKey === 'note' ? getTransactionRemark(a) : String(a[sortKey] ?? '');
+        const bText = sortKey === 'note' ? getTransactionRemark(b) : String(b[sortKey] ?? '');
         return aText.localeCompare(bText, 'ko-KR') * direction;
       }
 
@@ -1585,7 +1613,7 @@ const Investments = () => {
                     <SortTh onClick={() => onSort('amount')}>수량{sortMark('amount')}</SortTh>
                     <SortTh onClick={() => onSort('price')}>거래가{sortMark('price')}</SortTh>
                     <SortTh onClick={() => onSort('totalValue')}>총액{sortMark('totalValue')}</SortTh>
-                    <SortTh onClick={() => onSort('fee')}>비고{sortMark('fee')}</SortTh>
+                    <SortTh onClick={() => onSort('note')}>비고{sortMark('note')}</SortTh>
                   </Tr>
                 </Thead>
                 <Tbody>
@@ -1597,8 +1625,9 @@ const Investments = () => {
                           {tx.txType === 'BUY' ? <><TrendingUp size={14} /> 매수</> :
                             tx.txType === 'SELL' ? <><TrendingDown size={14} /> 매도</> :
                               tx.txType === 'DEPOSIT' ? <><Download size={14} /> 입금</> :
-                                tx.txType === 'EVENT_REWARD' ? <>🎁 이벤트 보상</> :
-                                  <><Upload size={14} /> 출금</>}
+                                tx.txType === 'ADMIN_RECLAIM' ? <><Upload size={14} /> 회수</> :
+                                  tx.txType === 'EVENT_REWARD' ? <>🎁 이벤트 보상</> :
+                                    <><Upload size={14} /> 출금</>}
                         </Badge>
                       </Td>
                       <Td><strong>{tx.assetType}</strong></Td>
@@ -1607,14 +1636,7 @@ const Investments = () => {
                         {(tx.txType === 'DEPOSIT' || tx.txType === 'WITHDRAW') ? '-' : `${formatDetailKrw(tx.price)} KRW`}
                       </Td>
                       <Td>{formatDetailKrw(tx.totalValue)} KRW</Td>
-                      <Td>
-                        {tx.txType === 'DEPOSIT' || tx.txType === 'WITHDRAW'
-                          ? (tx.assetType === 'KRW'
-                            ? `${tx.bankName || '가상은행'} ${tx.accountNumber || ''}`
-                            : (tx.txType === 'WITHDRAW' ? `To: ${tx.toAddress || '외부'}` : `From: ${tx.fromAddress || '외부'}`)
-                          )
-                          : (tx.fee > 0 ? `수수료 ${formatDetailKrw(tx.fee)} KRW` : '-')}
-                      </Td>
+                      <Td>{getTransactionRemark(tx)}</Td>
                     </Tr>
                   ))}
                 </Tbody>

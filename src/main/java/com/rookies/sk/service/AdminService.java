@@ -3,10 +3,12 @@ package com.rookies.sk.service;
 import com.rookies.sk.entity.*;
 import com.rookies.sk.repository.*;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DataAccessException;
 import org.springframework.web.server.ResponseStatusException;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -28,10 +30,12 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class AdminService {
 
     private static final int ASSET_SCALE = 8;
+    private static final int TRANSACTION_NOTE_MAX_LENGTH = 500;
     private static final BigDecimal EPSILON = new BigDecimal("0.00000001");
 
     private final MemberRepository memberRepository;
@@ -41,6 +45,7 @@ public class AdminService {
     private final InquiryRepository inquiryRepository;
     private final AuditLogRepository auditLogRepository;
     private final PasswordEncoder passwordEncoder;
+    private final ActiveSessionService activeSessionService;
 
     /**
      * VCESYS_CORE 이외의 역할(MGMT, EMP 등)이거나 인증 정보가 없으면 true 반환.
@@ -264,13 +269,14 @@ public class AdminService {
 
         String normalizedAssetType = normalizeAssetType(assetType);
         BigDecimal reclaimAmount = normalizeAmount(amount);
+        String normalizedReason = normalizeTransactionNote(reason);
         if (isBlank(normalizedAssetType)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "자산 코드를 입력해 주세요.");
         }
         if (reclaimAmount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "회수 수량은 0보다 커야 합니다.");
         }
-        if (isBlank(reason)) {
+        if (isBlank(normalizedReason)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "회수 사유를 입력해 주세요.");
         }
 
@@ -297,10 +303,19 @@ public class AdminService {
                 .txType("ADMIN_RECLAIM")
                 .assetType(normalizedAssetType)
                 .amount(reclaimAmount)
-                .totalValue(reclaimAmount)
+                .totalValue(BigDecimal.ZERO)
                 .fee(BigDecimal.ZERO)
+                .note(normalizedReason)
                 .build();
-        transactionRepository.save(tx);
+        try {
+            transactionRepository.save(tx);
+        } catch (DataAccessException ex) {
+            log.error("Failed to save admin reclaim transaction. memberId={}, assetType={}, amount={}, reason={}",
+                    memberId, normalizedAssetType, reclaimAmount, normalizedReason, ex);
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "자산 회수 이력 저장 중 오류가 발생했습니다. 수수료 등급 데이터(FEE_TIERS)를 확인해 주세요.");
+        }
 
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("assetType", normalizedAssetType);
@@ -368,6 +383,7 @@ public class AdminService {
                     map.put("price", manager ? BigDecimal.ZERO : tx.getPrice());
                     map.put("totalValue", manager ? BigDecimal.ZERO : tx.getTotalValue());
                     map.put("fee", tx.getFee());
+                    map.put("note", tx.getNote());
                     map.put("txDate", tx.getTxDate());
                     return map;
                 }).collect(Collectors.toList());
@@ -479,6 +495,7 @@ public class AdminService {
                     map.put("price", manager ? BigDecimal.ZERO : tx.getPrice());
                     map.put("totalValue", manager ? BigDecimal.ZERO : tx.getTotalValue());
                     map.put("fee", tx.getFee());
+                    map.put("note", tx.getNote());
                     map.put("txDate", tx.getTxDate());
                     return map;
                 })
@@ -501,6 +518,7 @@ public class AdminService {
                 Member.Role.VCESYS_CORE, Member.Role.VCESYS_MGMT, Member.Role.VCESYS_EMP);
         return memberRepository.findAll().stream()
                 .filter(m -> staffRoles.contains(m.getRole()))
+                .filter(m -> m.getStatus() != Member.Status.WITHDRAWN)
                 .sorted(Comparator.comparing(
                         m -> m.getCreatedAt() != null ? m.getCreatedAt() : LocalDateTime.MIN))
                 .map(m -> {
@@ -533,13 +551,30 @@ public class AdminService {
 
         validateAdminPassword(password);
 
-        if (memberRepository.existsByEmail(email.trim())) {
+        String normalizedEmail = email.trim();
+        Member existing = memberRepository.findByEmail(normalizedEmail).orElse(null);
+        if (existing != null) {
+            if (existing.getStatus() == Member.Status.WITHDRAWN && isStaffRole(existing.getRole())) {
+                existing.setPassword(sha256Hex(password));
+                existing.setName(name.trim());
+                existing.setRole(Member.Role.valueOf(upperRole));
+                existing.setStatus(Member.Status.ACTIVE);
+                existing.setLoginFailCount(0);
+                memberRepository.save(existing);
+
+                Map<String, Object> map = new LinkedHashMap<>();
+                map.put("email", maskEmail(existing.getEmail()));
+                map.put("name", maskName(existing.getName()));
+                map.put("role", existing.getRole().name());
+                map.put("message", "비활성화된 직원 계정을 다시 활성화했습니다.");
+                return map;
+            }
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT, "이미 사용 중인 이메일입니다.");
         }
 
         Member member = Member.builder()
-                .email(email.trim())
+                .email(normalizedEmail)
                 .password(sha256Hex(password))
                 .name(name.trim())
                 .role(Member.Role.valueOf(upperRole))
@@ -576,7 +611,17 @@ public class AdminService {
                     HttpStatus.BAD_REQUEST, "자신의 계정은 삭제할 수 없습니다.");
         }
 
-        memberRepository.delete(member);
+        if (member.getStatus() == Member.Status.WITHDRAWN) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("memberId", memberId);
+            map.put("message", "이미 비활성화된 직원 계정입니다.");
+            return map;
+        }
+
+        member.setStatus(Member.Status.WITHDRAWN);
+        member.setLoginFailCount(0);
+        memberRepository.save(member);
+        activeSessionService.invalidateAll(member.getEmail());
 
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("memberId", memberId);
@@ -600,6 +645,12 @@ public class AdminService {
 
     private boolean isBlank(String s) {
         return s == null || s.isBlank();
+    }
+
+    private boolean isStaffRole(Member.Role role) {
+        return role == Member.Role.VCESYS_CORE
+                || role == Member.Role.VCESYS_MGMT
+                || role == Member.Role.VCESYS_EMP;
     }
 
     /** SQL 인젝션에 사용되는 메타문자 포함 여부 검사 */
@@ -631,6 +682,22 @@ public class AdminService {
             return BigDecimal.ZERO;
         }
         return value.max(BigDecimal.ZERO);
+    }
+
+    private String normalizeTransactionNote(String note) {
+        if (note == null) {
+            return "";
+        }
+        String trimmed = note.trim();
+        if (trimmed.isEmpty()) {
+            return "";
+        }
+        if (trimmed.length() > TRANSACTION_NOTE_MAX_LENGTH) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "비고는 " + TRANSACTION_NOTE_MAX_LENGTH + "자까지 입력할 수 있습니다.");
+        }
+        return trimmed;
     }
 
     /**

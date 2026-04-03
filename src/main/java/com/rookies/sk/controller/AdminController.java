@@ -163,7 +163,7 @@ public class AdminController {
                 body.get("role")));
     }
 
-    @DeleteMapping("/staff/{memberId}")
+    @PostMapping("/staff/{memberId}/delete")
     @PreAuthorize("hasRole('VCESYS_CORE')")
     public ResponseEntity<Map<String, Object>> deleteStaffMember(
             @PathVariable Long memberId) {

@@ -55,6 +55,7 @@ public class TransactionService {
                                 .txHash(tx.getTxHash())
                                 .bankName(tx.getBankName())
                                 .accountNumber(tx.getAccountNumber())
+                                .note(tx.getNote())
                                 .status(tx.getStatus())
                                 .build();
         }

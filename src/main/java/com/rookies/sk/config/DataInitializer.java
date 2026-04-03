@@ -1,9 +1,11 @@
 package com.rookies.sk.config;
 
 import com.rookies.sk.entity.Faq;
+import com.rookies.sk.entity.FeeTier;
 import com.rookies.sk.entity.Inquiry;
 import com.rookies.sk.entity.Member;
 import com.rookies.sk.repository.FaqRepository;
+import com.rookies.sk.repository.FeeTierRepository;
 import com.rookies.sk.repository.InquiryRepository;
 import com.rookies.sk.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +17,7 @@ import org.springframework.context.annotation.Configuration;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.math.BigDecimal;
 
 @Slf4j
 @Configuration
@@ -22,6 +25,7 @@ import java.security.NoSuchAlgorithmException;
 public class DataInitializer {
 
     private final MemberRepository memberRepository;
+    private final FeeTierRepository feeTierRepository;
     private final FaqRepository faqRepository;
     private final InquiryRepository inquiryRepository;
 
@@ -45,6 +49,10 @@ public class DataInitializer {
         String hashed = sha256Hex(plainPassword);
         memberRepository.findByEmail(email).ifPresentOrElse(
                 existing -> {
+                    if (existing.getStatus() == Member.Status.WITHDRAWN) {
+                        log.info("비활성화된 관리자 계정 유지: {} ({})", email, existing.getRole());
+                        return;
+                    }
                     existing.setPassword(hashed);
                     existing.setRole(role);
                     existing.setStatus(Member.Status.ACTIVE);
@@ -66,9 +74,23 @@ public class DataInitializer {
                 });
     }
 
+    private void ensureFeeTier(long tierLevel, String tierName, String minVolume, String maxVolume, String feeRate) {
+        FeeTier tier = feeTierRepository.findById(tierLevel).orElseGet(() -> FeeTier.builder().tierLevel(tierLevel).build());
+        tier.setTierName(tierName);
+        tier.setMinVolume(new BigDecimal(minVolume));
+        tier.setMaxVolume(maxVolume == null ? null : new BigDecimal(maxVolume));
+        tier.setFeeRate(new BigDecimal(feeRate));
+        feeTierRepository.save(tier);
+    }
+
     @Bean
     public CommandLineRunner initAccounts() {
         return args -> {
+            ensureFeeTier(1L, "BRONZE", "0", "99999999.9999", "0.0008");
+            ensureFeeTier(2L, "SILVER", "100000000", "1999999999.9999", "0.0005");
+            ensureFeeTier(3L, "GOLD", "2000000000", "19999999999.9999", "0.0003");
+            ensureFeeTier(4L, "VIP", "20000000000", null, "0.0001");
+
             // 관리자 계정 (init.sql과 동일한 계정/비밀번호)
             ensureAdminAccount("core@vce.com", "Core!2024", "코어 관리자", "010-0000-0001", Member.Role.VCESYS_CORE);
             ensureAdminAccount("mgmt@vce.com", "Mgmt!2024", "매니지먼트", "010-0000-0002", Member.Role.VCESYS_MGMT);

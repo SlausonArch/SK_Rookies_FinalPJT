@@ -2411,8 +2411,9 @@ const AdminDashboard = () => {
                                     style={{ height: 30, fontSize: 12 }}
                                     onClick={async () => {
                                       try {
-                                        await axios.delete(
-                                          `${API_BASE}/api/admin/staff/${s.memberId}`,
+                                        await axios.post(
+                                          `${API_BASE}/api/admin/staff/${s.memberId}/delete`,
+                                          {},
                                           { headers }
                                         );
                                         setStaffList(prev =>

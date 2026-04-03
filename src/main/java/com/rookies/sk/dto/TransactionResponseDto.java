@@ -22,5 +22,6 @@ public class TransactionResponseDto {
     private String txHash;
     private String bankName;
     private String accountNumber;
+    private String note;
     private String status;
 }
