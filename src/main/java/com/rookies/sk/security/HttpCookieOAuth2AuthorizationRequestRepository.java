@@ -12,6 +12,7 @@ import org.springframework.http.ResponseCookie;
 import org.springframework.security.oauth2.client.web.AuthorizationRequestRepository;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -31,13 +32,16 @@ public class HttpCookieOAuth2AuthorizationRequestRepository
 
     private final ObjectMapper objectMapper;
     private final String hmacSecret;
+    private final String cookieDomain;
 
     public HttpCookieOAuth2AuthorizationRequestRepository(
             ObjectMapper objectMapper,
-            @Value("${jwt.secret}") String jwtSecret) {
+            @Value("${jwt.secret}") String jwtSecret,
+            @Value("${app.cookie-domain:}") String cookieDomain) {
         this.objectMapper = objectMapper;
         // JWT Secret을 HMAC 키로 재사용
         this.hmacSecret = jwtSecret;
+        this.cookieDomain = cookieDomain;
     }
 
     @Override
@@ -61,11 +65,11 @@ public class HttpCookieOAuth2AuthorizationRequestRepository
             return;
         }
 
-        addCookie(response, OAUTH2_AUTHORIZATION_REQUEST_COOKIE_NAME, serialize(authorizationRequest),
+        addCookie(request, response, OAUTH2_AUTHORIZATION_REQUEST_COOKIE_NAME, serialize(authorizationRequest),
                 COOKIE_EXPIRE_SECONDS);
         String redirectUriAfterLogin = request.getParameter(REDIRECT_URI_PARAM_COOKIE_NAME);
         if (redirectUriAfterLogin != null && !redirectUriAfterLogin.isBlank()) {
-            addCookie(response, REDIRECT_URI_PARAM_COOKIE_NAME, redirectUriAfterLogin, COOKIE_EXPIRE_SECONDS);
+            addCookie(request, response, REDIRECT_URI_PARAM_COOKIE_NAME, redirectUriAfterLogin, COOKIE_EXPIRE_SECONDS);
         }
     }
 
@@ -80,14 +84,8 @@ public class HttpCookieOAuth2AuthorizationRequestRepository
         deleteCookie(request, response, REDIRECT_URI_PARAM_COOKIE_NAME);
     }
 
-    private void addCookie(HttpServletResponse response, String name, String value, int maxAge) {
-        ResponseCookie cookie = ResponseCookie.from(name, value)
-                .path("/")
-                .httpOnly(true)
-                .maxAge(maxAge)
-                .sameSite("Lax")
-                .build();
-        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+    private void addCookie(HttpServletRequest request, HttpServletResponse response, String name, String value, int maxAge) {
+        response.addHeader(HttpHeaders.SET_COOKIE, buildCookie(request, name, value, maxAge).toString());
     }
 
     private void deleteCookie(HttpServletRequest request, HttpServletResponse response, String name) {
@@ -95,13 +93,44 @@ public class HttpCookieOAuth2AuthorizationRequestRepository
         if (cookies != null) {
             for (Cookie cookie : cookies) {
                 if (cookie.getName().equals(name)) {
-                    cookie.setValue("");
-                    cookie.setPath("/");
-                    cookie.setMaxAge(0);
-                    response.addCookie(cookie);
+                    response.addHeader(HttpHeaders.SET_COOKIE, buildCookie(request, name, "", 0).toString());
                 }
             }
         }
+    }
+
+    private ResponseCookie buildCookie(HttpServletRequest request, String name, String value, int maxAge) {
+        ResponseCookie.ResponseCookieBuilder builder = ResponseCookie.from(name, value)
+                .path("/")
+                .httpOnly(true)
+                .maxAge(maxAge)
+                .sameSite("Lax")
+                .secure(request.isSecure());
+
+        String resolvedCookieDomain = resolveCookieDomain(request);
+        if (StringUtils.hasText(resolvedCookieDomain)) {
+            builder.domain(resolvedCookieDomain);
+        }
+
+        return builder.build();
+    }
+
+    private String resolveCookieDomain(HttpServletRequest request) {
+        if (StringUtils.hasText(cookieDomain)) {
+            return cookieDomain;
+        }
+
+        String host = request.getServerName();
+        if (!StringUtils.hasText(host)) {
+            return null;
+        }
+
+        String normalizedHost = host.toLowerCase();
+        if ("vceapp.com".equals(normalizedHost) || normalizedHost.endsWith(".vceapp.com")) {
+            return ".vceapp.com";
+        }
+
+        return null;
     }
 
     /**

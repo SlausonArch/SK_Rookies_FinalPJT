@@ -1,47 +1,85 @@
 package com.rookies.sk.service;
 
+import com.rookies.sk.entity.ActiveSession;
+import com.rookies.sk.repository.ActiveSessionRepository;
+import com.rookies.sk.security.SessionScope;
 import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Locale;
 
-/**
- * 사용자당 하나의 활성 세션(Access Token JTI)만 허용.
- * 새 로그인 시:
- *   1. 이전 JTI를 RevokedToken DB에 블랙리스트 등록 (서버 재시작 후에도 무효)
- *   2. 새 JTI를 in-memory 맵에 등록 (빠른 검증용)
- */
-@Component
+@Service
 @RequiredArgsConstructor
 public class ActiveSessionService {
 
     private final TokenBlacklistService tokenBlacklistService;
+    private final ActiveSessionRepository activeSessionRepository;
 
-    private record SessionEntry(String jti, LocalDateTime expiresAt) {}
-
-    private final ConcurrentHashMap<String, SessionEntry> activeSessions = new ConcurrentHashMap<>();
-
-    /** 로그인/토큰 발급 시 활성 JTI 등록. 이전 JTI는 즉시 블랙리스트 처리. */
-    public void activate(String email, String jti, LocalDateTime expiresAt) {
-        if (email == null || jti == null) return;
-        SessionEntry old = activeSessions.put(email, new SessionEntry(jti, expiresAt));
-        if (old != null && !old.jti().equals(jti)) {
-            tokenBlacklistService.revokeByJti(old.jti(), email, old.expiresAt(), "NEW_LOGIN");
+    @Transactional
+    public void activate(String email, String sessionScope, String jti, LocalDateTime expiresAt) {
+        if (!StringUtils.hasText(email) || !StringUtils.hasText(jti) || expiresAt == null) {
+            return;
         }
+
+        String normalizedEmail = normalizeEmail(email);
+        String normalizedScope = SessionScope.from(sessionScope).name();
+        String sessionKey = buildSessionKey(normalizedEmail, normalizedScope);
+
+        ActiveSession old = activeSessionRepository.findById(sessionKey).orElse(null);
+        if (old != null && !jti.equals(old.getTokenId())) {
+            tokenBlacklistService.revokeByJti(old.getTokenId(), normalizedEmail, old.getExpiresAt(), "NEW_LOGIN");
+        }
+
+        activeSessionRepository.save(ActiveSession.builder()
+                .sessionKey(sessionKey)
+                .memberEmail(normalizedEmail)
+                .sessionScope(normalizedScope)
+                .tokenId(jti)
+                .expiresAt(expiresAt)
+                .updatedAt(LocalDateTime.now())
+                .build());
+        activeSessionRepository.deleteByExpiresAtBefore(LocalDateTime.now());
     }
 
-    /** 필터에서 토큰이 현재 활성 세션인지 확인 */
-    public boolean isActive(String email, String jti) {
-        if (email == null || jti == null) return false;
-        SessionEntry entry = activeSessions.get(email);
-        return entry != null && jti.equals(entry.jti());
+    @Transactional(readOnly = true)
+    public boolean isActive(String email, String sessionScope, String jti) {
+        if (!StringUtils.hasText(email) || !StringUtils.hasText(jti)) {
+            return false;
+        }
+
+        ActiveSession entry = activeSessionRepository.findById(
+                buildSessionKey(normalizeEmail(email), SessionScope.from(sessionScope).name()))
+                .orElse(null);
+        return entry != null
+                && !entry.getExpiresAt().isBefore(LocalDateTime.now())
+                && jti.equals(entry.getTokenId());
     }
 
-    /** 로그아웃/탈퇴 시 세션 제거 */
-    public void invalidate(String email) {
-        if (email != null) {
-            activeSessions.remove(email);
+    @Transactional
+    public void invalidate(String email, String sessionScope) {
+        if (!StringUtils.hasText(email)) {
+            return;
         }
+        activeSessionRepository.deleteById(
+                buildSessionKey(normalizeEmail(email), SessionScope.from(sessionScope).name()));
+    }
+
+    @Transactional
+    public void invalidateAll(String email) {
+        if (!StringUtils.hasText(email)) {
+            return;
+        }
+        activeSessionRepository.deleteByMemberEmailIgnoreCase(normalizeEmail(email));
+    }
+
+    private String buildSessionKey(String email, String sessionScope) {
+        return sessionScope + ":" + email;
+    }
+
+    private String normalizeEmail(String email) {
+        return email.trim().toLowerCase(Locale.ROOT);
     }
 }

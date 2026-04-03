@@ -1,0 +1,19 @@
+services:
+  front:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        BUILD_SCRIPT: build:${VITE_APP_MODE}
+        VITE_APP_MODE: ${VITE_APP_MODE}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+        VITE_EXCHANGE_FRONTEND_URL: ${VITE_EXCHANGE_FRONTEND_URL}
+        VITE_BANK_FRONTEND_URL: ${VITE_BANK_FRONTEND_URL}
+
+    ports:
+      - "80:80"
+
+    env_file:
+      - .env.front
+
+    restart: unless-stopped

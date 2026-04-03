@@ -27,18 +27,31 @@ public class JwtTokenProvider {
     }
 
     public String createAccessToken(String email, String role, Long memberId) {
-        return createToken(email, role, memberId, null, "ACCESS", ACCESS_TOKEN_EXPIRE_TIME);
+        return createAccessToken(email, role, memberId, null, SessionScope.USER);
+    }
+
+    public String createAccessToken(String email, String role, Long memberId, SessionScope sessionScope) {
+        return createAccessToken(email, role, memberId, null, sessionScope);
     }
 
     public String createAccessToken(String email, String role, Long memberId, String name) {
-        return createToken(email, role, memberId, name, "ACCESS", ACCESS_TOKEN_EXPIRE_TIME);
+        return createAccessToken(email, role, memberId, name, SessionScope.USER);
+    }
+
+    public String createAccessToken(String email, String role, Long memberId, String name, SessionScope sessionScope) {
+        return createToken(email, role, memberId, name, "ACCESS", ACCESS_TOKEN_EXPIRE_TIME, sessionScope);
     }
 
     public String createRefreshToken(String email) {
-        return createToken(email, null, null, null, "REFRESH", REFRESH_TOKEN_EXPIRE_TIME);
+        return createRefreshToken(email, SessionScope.USER);
     }
 
-    private String createToken(String email, String role, Long memberId, String name, String tokenType, long expireTime) {
+    public String createRefreshToken(String email, SessionScope sessionScope) {
+        return createToken(email, null, null, null, "REFRESH", REFRESH_TOKEN_EXPIRE_TIME, sessionScope);
+    }
+
+    private String createToken(String email, String role, Long memberId, String name, String tokenType, long expireTime,
+            SessionScope sessionScope) {
         Claims claims = Jwts.claims().setSubject(email);
         if (role != null)
             claims.put("role", role);
@@ -48,6 +61,7 @@ public class JwtTokenProvider {
             claims.put("name", name);
         claims.put("tokenType", tokenType);
         claims.put("jti", UUID.randomUUID().toString());
+        claims.put("sessionScope", SessionScope.normalize(sessionScope).name());
 
         Date now = new Date();
         Date validity = new Date(now.getTime() + expireTime);
@@ -101,6 +115,19 @@ public class JwtTokenProvider {
 
         Object role = claims.get("role");
         return role instanceof String && !((String) role).isBlank() ? "ACCESS" : "REFRESH";
+    }
+
+    public SessionScope getSessionScopeValue(String token) {
+        Claims claims = parseClaims(token);
+        Object sessionScope = claims.get("sessionScope");
+        if (sessionScope instanceof String value && !value.isBlank()) {
+            return SessionScope.from(value);
+        }
+        return SessionScope.USER;
+    }
+
+    public String getSessionScope(String token) {
+        return getSessionScopeValue(token).name();
     }
 
     private Claims parseClaims(String token) {

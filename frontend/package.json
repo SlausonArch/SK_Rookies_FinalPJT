@@ -7,9 +7,11 @@
     "dev": "vite",
     "dev:exchange": "vite --mode exchange",
     "dev:bank": "vite --mode bank",
+    "dev:admin": "vite --mode admin",
     "build": "tsc -b && vite build",
     "build:exchange": "tsc -b && vite build --mode exchange",
     "build:bank": "tsc -b && vite build --mode bank",
+    "build:admin": "tsc -b && vite build --mode admin",
     "lint": "eslint .",
     "preview": "vite preview"
   },

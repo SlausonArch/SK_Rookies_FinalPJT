@@ -93,9 +93,9 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
         }
 
         String accessToken = tokenProvider.createAccessToken(member.getEmail(), member.getRole().name(),
-                member.getMemberId());
-        String refreshToken = tokenProvider.createRefreshToken(member.getEmail());
-        activeSessionService.activate(member.getEmail(), tokenProvider.getTokenId(accessToken),
+                member.getMemberId(), SessionScope.USER);
+        String refreshToken = tokenProvider.createRefreshToken(member.getEmail(), SessionScope.USER);
+        activeSessionService.activate(member.getEmail(), SessionScope.USER.name(), tokenProvider.getTokenId(accessToken),
                 tokenProvider.getExpiration(accessToken).toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime());
 
         String targetUrl;

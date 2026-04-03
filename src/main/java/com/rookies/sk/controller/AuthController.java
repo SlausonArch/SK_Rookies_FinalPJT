@@ -6,6 +6,7 @@ import com.rookies.sk.dto.SignupRequestDto;
 import com.rookies.sk.dto.TokenRevokeRequestDto;
 import com.rookies.sk.entity.Member;
 import com.rookies.sk.security.JwtTokenProvider;
+import com.rookies.sk.security.SessionScope;
 import com.rookies.sk.security.SignupTokenStore;
 import com.rookies.sk.service.FileService;
 import com.rookies.sk.service.MemberService;
@@ -110,9 +111,9 @@ public class AuthController {
             memberService.saveMember(member);
 
             String accessToken = jwtTokenProvider.createAccessToken(
-                    member.getEmail(), member.getRole().name(), member.getMemberId());
-            String refreshToken = jwtTokenProvider.createRefreshToken(member.getEmail());
-            activeSessionService.activate(member.getEmail(), jwtTokenProvider.getTokenId(accessToken),
+                    member.getEmail(), member.getRole().name(), member.getMemberId(), SessionScope.USER);
+            String refreshToken = jwtTokenProvider.createRefreshToken(member.getEmail(), SessionScope.USER);
+            activeSessionService.activate(member.getEmail(), SessionScope.USER.name(), jwtTokenProvider.getTokenId(accessToken),
                     jwtTokenProvider.getExpiration(accessToken).toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime());
 
             setTokenCookie(httpResponse, "vce_token", accessToken, 30 * 60);
@@ -186,8 +187,9 @@ public class AuthController {
                     member.getEmail(),
                     member.getRole().name(),
                     member.getMemberId(),
-                    member.getName());
-            activeSessionService.activate(member.getEmail(), jwtTokenProvider.getTokenId(accessToken),
+                    member.getName(),
+                    SessionScope.ADMIN);
+            activeSessionService.activate(member.getEmail(), SessionScope.ADMIN.name(), jwtTokenProvider.getTokenId(accessToken),
                     jwtTokenProvider.getExpiration(accessToken).toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime());
 
             setTokenCookie(httpResponse, "vce_admin_token", accessToken, 30 * 60);
@@ -338,8 +340,8 @@ public class AuthController {
 
         // Issue new tokens
         String newAccessToken = jwtTokenProvider.createAccessToken(updatedMember.getEmail(),
-                updatedMember.getRole().name(), updatedMember.getMemberId());
-        activeSessionService.activate(updatedMember.getEmail(), jwtTokenProvider.getTokenId(newAccessToken),
+                updatedMember.getRole().name(), updatedMember.getMemberId(), SessionScope.USER);
+        activeSessionService.activate(updatedMember.getEmail(), SessionScope.USER.name(), jwtTokenProvider.getTokenId(newAccessToken),
                 jwtTokenProvider.getExpiration(newAccessToken).toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime());
 
         return ResponseEntity.ok(newAccessToken);
@@ -370,18 +372,23 @@ public class AuthController {
         try {
             String email = jwtTokenProvider.getEmail(refreshToken);
             Member member = memberService.findByEmailForLogin(email);
+            SessionScope sessionScope = jwtTokenProvider.getSessionScopeValue(refreshToken);
 
             // 기존 refresh token 즉시 무효화 (재사용 방지)
             tokenBlacklistService.revokeTokens(null, refreshToken, "REFRESH_ROTATION");
 
             String newAccessToken = jwtTokenProvider.createAccessToken(
-                    email, member.getRole().name(), member.getMemberId());
-            String newRefreshToken = jwtTokenProvider.createRefreshToken(email);
-            activeSessionService.activate(email, jwtTokenProvider.getTokenId(newAccessToken),
+                    email, member.getRole().name(), member.getMemberId(), sessionScope);
+            String newRefreshToken = jwtTokenProvider.createRefreshToken(email, sessionScope);
+            activeSessionService.activate(email, sessionScope.name(), jwtTokenProvider.getTokenId(newAccessToken),
                     jwtTokenProvider.getExpiration(newAccessToken).toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime());
 
-            setTokenCookie(httpResponse, "vce_token", newAccessToken, 30 * 60);
-            setTokenCookie(httpResponse, "vce_refresh_token", newRefreshToken, 7 * 24 * 60 * 60);
+            if (sessionScope == SessionScope.ADMIN) {
+                setTokenCookie(httpResponse, "vce_admin_token", newAccessToken, 30 * 60);
+            } else {
+                setTokenCookie(httpResponse, "vce_token", newAccessToken, 30 * 60);
+                setTokenCookie(httpResponse, "vce_refresh_token", newRefreshToken, 7 * 24 * 60 * 60);
+            }
             return ResponseEntity.ok(java.util.Map.of(
                     "accessToken", newAccessToken,
                     "refreshToken", newRefreshToken));
@@ -397,12 +404,17 @@ public class AuthController {
             @RequestBody(required = false) TokenRevokeRequestDto request,
             HttpServletRequest httpRequest,
             HttpServletResponse httpResponse) {
+        String accessToken = resolveAccessToken(httpRequest, authorizationHeader);
         tokenBlacklistService.revokeTokens(
-                resolveBearerToken(authorizationHeader),
+                accessToken,
                 request != null ? request.getRefreshToken() : null,
                 "LOGOUT");
-        if (userDetails != null) {
-            activeSessionService.invalidate(userDetails.getUsername());
+        if (accessToken != null && jwtTokenProvider.validateToken(accessToken)) {
+            activeSessionService.invalidate(
+                    jwtTokenProvider.getEmail(accessToken),
+                    jwtTokenProvider.getSessionScope(accessToken));
+        } else if (userDetails != null) {
+            activeSessionService.invalidateAll(userDetails.getUsername());
         }
         clearTokenCookie(httpResponse, "vce_token");
         clearTokenCookie(httpResponse, "vce_refresh_token");
@@ -422,7 +434,7 @@ public class AuthController {
                     resolveBearerToken(authorizationHeader),
                     request != null ? request.getRefreshToken() : null,
                     "WITHDRAW");
-            activeSessionService.invalidate(userDetails.getUsername());
+            activeSessionService.invalidateAll(userDetails.getUsername());
             return ResponseEntity.ok(java.util.Map.of("message", "회원 탈퇴가 완료되었습니다."));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(java.util.Map.of("message", "회원 탈퇴 실패: " + e.getMessage()));
@@ -434,6 +446,25 @@ public class AuthController {
             return null;
         }
         return authorizationHeader.substring(7);
+    }
+
+    private String resolveAccessToken(HttpServletRequest request, String authorizationHeader) {
+        String bearerToken = resolveBearerToken(authorizationHeader);
+        if (bearerToken != null && !bearerToken.isBlank()) {
+            return bearerToken;
+        }
+
+        String userToken = getCookieValue(request, "vce_token");
+        if (userToken != null && !userToken.isBlank()) {
+            return userToken;
+        }
+
+        String adminToken = getCookieValue(request, "vce_admin_token");
+        if (adminToken != null && !adminToken.isBlank()) {
+            return adminToken;
+        }
+
+        return null;
     }
 
     private void setTokenCookie(HttpServletResponse response, String name, String value, int maxAgeSeconds) {

@@ -1,3 +1,5 @@
+import { writeFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
@@ -32,13 +34,23 @@ export default defineConfig(({ mode }) => ({
     react(),
     {
       name: 'robots-txt',
+      apply: 'serve',
       configureServer(server) {
         server.middlewares.use('/robots.txt', (_req, res) => {
-          const appMode = process.env.VITE_APP_MODE || 'exchange'
+          const appMode = process.env.VITE_APP_MODE || mode || 'exchange'
           const content = ROBOTS[appMode] ?? ROBOTS.exchange
           res.setHeader('Content-Type', 'text/plain; charset=utf-8')
           res.end(content)
         })
+      },
+    },
+    {
+      name: 'robots-txt-build',
+      apply: 'build',
+      closeBundle() {
+        const appMode = process.env.VITE_APP_MODE || mode || 'exchange'
+        const content = ROBOTS[appMode] ?? ROBOTS.exchange
+        writeFileSync(resolve(process.cwd(), 'dist', 'robots.txt'), content, 'utf8')
       },
     },
   ],

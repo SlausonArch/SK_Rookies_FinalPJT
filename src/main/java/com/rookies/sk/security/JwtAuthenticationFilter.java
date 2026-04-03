@@ -50,16 +50,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             String email = tokenProvider.getEmail(token);
             String role = tokenProvider.getRole(token);
+            String sessionScope = tokenProvider.getSessionScope(token);
 
             // ACCESS 토큰인 경우 활성 세션(단일 로그인) 검증
             if ("ACCESS".equals(tokenProvider.getTokenType(token))) {
                 String jti = tokenProvider.getTokenId(token);
-                if (!activeSessionService.isActive(email, jti)) {
+                if (!activeSessionService.isActive(email, sessionScope, jti)) {
                     writeJsonError(response, HttpServletResponse.SC_UNAUTHORIZED, "DUPLICATE_LOGIN");
                     return;
                 }
             }
-            log.info("Token Valid. Email: {}, Role: {}", email, role);
+            log.info("Token Valid. Email: {}, Role: {}, Scope: {}", email, role, sessionScope);
 
             Member member = memberRepository.findByEmail(email).orElse(null);
             if (member == null) {
