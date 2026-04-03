@@ -1,12 +1,18 @@
 """
 AWS Cloud 취약점 진단 모듈
 SK Shieldus AWS 보안 가이드라인 기반
+주통기 2026 개정 반영
+
+[2026 개정 추가 항목]
+  C-1.11  IAM 액세스 키 교체 주기 점검     (2026 신규 — 90일 이하 교체 권장)
+  C-4.14  AWS Config 서비스 활성화 점검    (2026 신규 — 리소스 구성 변경 추적)
+  C-4.15  GuardDuty 활성화 점검           (2026 신규 — 위협 탐지 서비스)
 
 점검 항목:
-  1. 계정 관리   (C-1.1 ~ C-1.10)
+  1. 계정 관리   (C-1.1 ~ C-1.11) ★2026 C-1.11 추가
   2. 권한 관리   (C-2.1 ~ C-2.3)  — 수동 점검
   3. 가상 리소스 (C-3.1 ~ C-3.8)
-  4. 운영 관리   (C-4.1 ~ C-4.13)
+  4. 운영 관리   (C-4.1 ~ C-4.15) ★2026 C-4.14, C-4.15 추가
 """
 from __future__ import annotations
 from datetime import datetime, timezone
@@ -75,6 +81,7 @@ class AWSScanner(BaseScanner):
             ("C-1.8",  self._chk_access_key_mgmt),
             ("C-1.9",  self._chk_mfa),
             ("C-1.10", self._chk_password_policy),
+            ("C-1.11", self._chk_access_key_rotation),  # ★2026
             # 권한 관리
             ("C-2.1",  self._chk_instance_policy),
             ("C-2.2",  self._chk_network_policy),
@@ -102,6 +109,8 @@ class AWSScanner(BaseScanner):
             ("C-4.11", self._chk_vpc_flow_log),
             ("C-4.12", self._chk_log_retention),
             ("C-4.13", self._chk_backup),
+            ("C-4.14", self._chk_aws_config),       # ★2026
+            ("C-4.15", self._chk_guardduty),         # ★2026
         ]
 
         for cid, fn in checks:
@@ -773,3 +782,102 @@ class AWSScanner(BaseScanner):
                       f"AWS Backup 플랜이 {len(plans)}개 설정되어 있습니다.",
                       "\n".join(p["BackupPlanName"] for p in plans),
                       "백업 플랜의 대상 리소스와 보존 기간이 정책에 맞는지 주기적으로 검토하세요.")
+
+    def _chk_access_key_rotation(self):
+        """C-1.11 IAM 액세스 키 교체 주기 점검 [★2026 신규]
+        주통기 2026: 액세스 키 장기 미교체 시 유출·악용 위험.
+        생성 후 90일 이상 경과한 활성 액세스 키 보유 계정을 탐지.
+        """
+        iam = self._client("iam")
+        users = self._paginate("iam", "list_users", "Users")
+        issues = []
+        now = datetime.now(timezone.utc)
+
+        for u in users:
+            uname = u["UserName"]
+            keys = iam.list_access_keys(UserName=uname)["AccessKeyMetadata"]
+            for k in keys:
+                if k["Status"] != "Active":
+                    continue
+                created = k["CreateDate"]
+                age_days = (now - created).days
+                if age_days > 90:
+                    issues.append(f"{uname}: 액세스 키 {k['AccessKeyId'][:8]}... "
+                                  f"{age_days}일 경과 (생성: {created.strftime('%Y-%m-%d')})")
+
+        if issues:
+            self.vulnerable("C-1.11", "IAM 액세스 키 교체 주기", Severity.HIGH,
+                            f"90일 이상 미교체 활성 액세스 키 {len(issues)}개 발견:",
+                            "\n".join(issues),
+                            "액세스 키를 90일 이내에 교체하고 미사용 키는 즉시 비활성화·삭제하세요.\n"
+                            "aws iam update-access-key --access-key-id <ID> --status Inactive")
+        else:
+            self.safe("C-1.11", "IAM 액세스 키 교체 주기", Severity.HIGH,
+                      f"모든 활성 액세스 키가 90일 이내에 생성 또는 교체됨 ({len(users)}개 계정 확인)",
+                      "양호",
+                      "액세스 키 교체 주기(90일)를 유지하고 불필요한 키는 삭제하세요.")
+
+    def _chk_aws_config(self):
+        """C-4.14 AWS Config 서비스 활성화 점검 [★2026 신규]
+        주통기 2026: AWS Config 비활성화 시 리소스 구성 변경 이력 추적 불가.
+        현재 리전에서 Config recorder가 활성화·기록 중인지 점검.
+        """
+        config = self._client("config")
+        recorders = config.describe_configuration_recorder_status().get(
+            "ConfigurationRecordersStatus", []
+        )
+
+        if not recorders:
+            self.vulnerable("C-4.14", "AWS Config 서비스 활성화", Severity.HIGH,
+                            "AWS Config Configuration Recorder가 설정되어 있지 않습니다.",
+                            "Config Recorder 없음",
+                            "AWS Config를 활성화하여 모든 리소스 구성 변경을 기록하고 규정 준수 여부를 추적하세요.")
+            return
+
+        not_recording = [r["name"] for r in recorders if not r.get("recording", False)]
+
+        if not_recording:
+            self.vulnerable("C-4.14", "AWS Config 서비스 활성화", Severity.HIGH,
+                            f"Config Recorder가 기록 중지 상태: {', '.join(not_recording)}",
+                            "recording=False",
+                            "AWS Config Recorder를 시작하세요: aws configservice start-configuration-recorder")
+        else:
+            self.safe("C-4.14", "AWS Config 서비스 활성화", Severity.HIGH,
+                      f"AWS Config Recorder {len(recorders)}개 모두 활성화·기록 중",
+                      "양호",
+                      "Config 규칙을 추가하여 보안 정책 준수 여부를 자동으로 평가하세요.")
+
+    def _chk_guardduty(self):
+        """C-4.15 GuardDuty 활성화 점검 [★2026 신규]
+        주통기 2026: GuardDuty 비활성화 시 비정상 API 호출, 악성 IP 접근,
+        자격 증명 유출 등 위협을 자동 탐지할 수 없음.
+        """
+        gd = self._client("guardduty")
+        detectors = gd.list_detectors().get("DetectorIds", [])
+
+        if not detectors:
+            self.vulnerable("C-4.15", "GuardDuty 활성화", Severity.HIGH,
+                            "GuardDuty 탐지기가 설정되어 있지 않습니다.",
+                            "GuardDuty Detector 없음",
+                            "GuardDuty를 활성화하여 위협 탐지를 설정하세요:\n"
+                            "aws guardduty create-detector --enable")
+            return
+
+        issues = []
+        for det_id in detectors:
+            det = gd.get_detector(DetectorId=det_id)
+            status = det.get("Status", "")
+            if status != "ENABLED":
+                issues.append(f"Detector {det_id}: {status}")
+
+        if issues:
+            self.vulnerable("C-4.15", "GuardDuty 활성화", Severity.HIGH,
+                            f"비활성화된 GuardDuty 탐지기 {len(issues)}개:",
+                            "\n".join(issues),
+                            "GuardDuty 탐지기를 활성화하세요:\n"
+                            "aws guardduty update-detector --detector-id <ID> --enable")
+        else:
+            self.safe("C-4.15", "GuardDuty 활성화", Severity.HIGH,
+                      f"GuardDuty 탐지기 {len(detectors)}개 모두 활성화됨",
+                      "양호",
+                      "GuardDuty 결과(Findings)를 정기적으로 검토하고 위협에 즉시 대응하세요.")

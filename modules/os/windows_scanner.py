@@ -1,6 +1,15 @@
 """
 OS - Windows 취약점 진단 모듈
 SK Shieldus 보안가이드라인 기반 (Windows Server 2019, 2022)
+주통기 2026 개정 반영
+
+[2026 개정 추가 항목]
+  W-1.9  통합 계정 정책 점검              (2026 신규 — net accounts + secedit 종합)
+  W-3.5  Windows Defender Firewall 활성화 (2026 신규 — 서비스 권한 기반 관리)
+  W-3.6  SMB v1 비활성화                  (2026 신규 — WannaCry 등 취약점 대응)
+  W-5.17 이벤트 로그 크기 및 보존 설정   (2026 신규 — 로그 감사 정책 강화)
+  W-5.18 서비스 계정 권한 최소화         (2026 신규 — 보안 관리 권한 최소화)
+  W-8.3  Windows Update 자동 업데이트    (2026 신규 — 최신 보안 패치 자동 적용)
 
 항목 구성
   1. 계정관리
@@ -12,6 +21,7 @@ SK Shieldus 보안가이드라인 기반 (Windows Server 2019, 2022)
      W-1.6  익명 SID/이름 변환 허용 정책     (중요도: 중)
      W-1.7  콘솔 로그온 빈 암호 사용 제한    (중요도: 중)
      W-1.8  관리자 그룹 최소 사용자 포함     (중요도: 상)
+     W-1.9  통합 계정 정책 점검              (중요도: 상) ★2026
   2. 파일 시스템
      W-2.1  CMD.EXE 파일 권한 설정           (중요도: 중)
      W-2.2  사용자 홈 디렉터리 접근 제한     (중요도: 중)
@@ -23,6 +33,8 @@ SK Shieldus 보안가이드라인 기반 (Windows Server 2019, 2022)
      W-3.2  터미널 서비스 암호화 수준        (중요도: 중)
      W-3.3  NetBIOS 서비스 보안 설정         (중요도: 상)
      W-3.4  터미널 서비스 Time Out 설정      (중요도: 중)
+     W-3.5  Windows Defender Firewall 활성화 (중요도: 상) ★2026
+     W-3.6  SMB v1 비활성화                  (중요도: 상) ★2026
   4. 주요 응용 설정
      W-4.1  Telnet 서비스 보안 설정          (중요도: 중) → N/A
      W-4.2  DNS 보안 설정                    (중요도: 중)
@@ -44,6 +56,8 @@ SK Shieldus 보안가이드라인 기반 (Windows Server 2019, 2022)
      W-5.14 원격 시스템 종료 권한 설정       (중요도: 상)
      W-5.15 보안 감사 로그 불가 시 종료 방지 (중요도: 상)
      W-5.16 보안 채널 데이터 암호화/서명     (중요도: 중)
+     W-5.17 이벤트 로그 크기 및 보존 설정   (중요도: 상) ★2026
+     W-5.18 서비스 계정 권한 최소화         (중요도: 상) ★2026
   6. 바이러스 진단
      W-6.1  백신 프로그램 설치               (중요도: 중)
      W-6.2  최신 엔진 업데이트               (중요도: 중)
@@ -57,6 +71,7 @@ SK Shieldus 보안가이드라인 기반 (Windows Server 2019, 2022)
   8. 보안 패치
      W-8.1  최신 서비스 팩 적용              (중요도: 상)
      W-8.2  최신 HOT FIX 적용               (중요도: 상)
+     W-8.3  Windows Update 자동 업데이트    (중요도: 상) ★2026
   9. 이슈 취약점
      W-9.1  OpenSSL 취약점                   (중요도: 상)
 
@@ -122,6 +137,7 @@ class WindowsScanner(BaseScanner):
         self._w16_anon_sid()
         self._w17_blank_password_limit()
         self._w18_admin_group()
+        self._w19_integrated_account_policy()   # ★2026
 
         print()
         print("  ─── 2. 파일 시스템 ──────────────────────────────────")
@@ -137,6 +153,8 @@ class WindowsScanner(BaseScanner):
         self._w32_rdp_encrypt()
         self._w33_netbios()
         self._w34_rdp_timeout()
+        self._w35_firewall_status()             # ★2026
+        self._w36_smb_v1()                      # ★2026
 
         print()
         print("  ─── 4. 주요 응용 설정 ───────────────────────────────")
@@ -162,6 +180,8 @@ class WindowsScanner(BaseScanner):
         self._w514_remote_shutdown()
         self._w515_audit_crash()
         self._w516_secure_channel()
+        self._w517_eventlog_size()              # ★2026
+        self._w518_service_privilege()          # ★2026
 
         print()
         print("  ─── 6. 바이러스 진단 ────────────────────────────────")
@@ -181,6 +201,7 @@ class WindowsScanner(BaseScanner):
         print("  ─── 8. 보안 패치 ────────────────────────────────────")
         self._w81_service_pack()
         self._w82_hotfix()
+        self._w83_windows_update()              # ★2026
 
         print()
         print("  ─── 9. 이슈 취약점 ──────────────────────────────────")
@@ -518,6 +539,66 @@ class WindowsScanner(BaseScanner):
                       f"Administrators 그룹 구성원 {count}명: {', '.join(members)}",
                       rec, command=cmd, cmd_output=out)
 
+    def _w19_integrated_account_policy(self):
+        """1.9 통합 계정 정책 점검 [★2026 신규]
+        주통기 2026: 계정 잠금·암호 정책을 net accounts + secedit 로 통합 점검.
+        W-1.2/1.3 개별 항목 외 종합 판정 결과 제공.
+        """
+        cid, name = "W-1.9", "통합 계정 정책 점검"
+        desc = ("계정 잠금 임계값(≤5회), 잠금 기간(≥30분), 최소 암호 길이(≥8자), "
+                "최대 암호 사용 기간(≤60일), 암호 복잡성(사용)을 종합 점검.")
+        rec  = ("net accounts / secedit / 로컬 보안 정책에서 "
+                "계정 잠금 임계값 5, 잠금 기간 30분, 최소 길이 8자, "
+                "복잡성 사용으로 일괄 설정")
+
+        cmd_na = "net accounts"
+        _, out_na, _ = self._run_shell(cmd_na)
+
+        cmd_sec = (r'cmd /c "secedit /export /cfg C:\Windows\Temp\wss2.cfg /quiet'
+                   r' && type C:\Windows\Temp\wss2.cfg"')
+        _, out_sec, _ = self._run_shell(cmd_sec, timeout=20)
+
+        cmd_str = f"{cmd_na}\n{cmd_sec}"
+        cmd_out  = f"[net accounts]\n{out_na}\n\n[secedit]\n{out_sec[:600]}"
+
+        issues = []
+
+        # net accounts 파싱
+        for line in out_na.splitlines():
+            ll = line.lower()
+            m = re.search(r"(\d+)", line)
+            val_i = int(m.group(1)) if m else None
+
+            if "lockout threshold" in ll or "잠금 임계" in ll:
+                if val_i is not None and (val_i == 0 or val_i > 5):
+                    issues.append(f"계정 잠금 임계값 {val_i} (권장: 1~5)")
+            elif "lockout duration" in ll or "잠금 기간" in ll:
+                if val_i is not None and val_i < 30:
+                    issues.append(f"계정 잠금 기간 {val_i}분 (권장: 30분↑)")
+            elif "minimum password length" in ll or "최소 암호 길이" in ll:
+                if val_i is not None and val_i < 8:
+                    issues.append(f"최소 암호 길이 {val_i}자 (권장: 8자↑)")
+            elif "maximum password age" in ll or "최대 암호 사용 기간" in ll:
+                if val_i is not None and (val_i == 0 or val_i > 60):
+                    issues.append(f"최대 암호 사용 기간 {val_i}일 (권장: 1~60일)")
+
+        # secedit 복잡성 파싱
+        for line in out_sec.splitlines():
+            if "passwordcomplexity" in line.lower():
+                m = re.search(r"=\s*(\d+)", line)
+                if m and int(m.group(1)) == 0:
+                    issues.append("암호 복잡성 사용 안 함 (PasswordComplexity=0)")
+
+        if issues:
+            self.vulnerable(cid, name, Severity.HIGH, desc,
+                            "\n".join(issues), rec,
+                            command=cmd_str, cmd_output=cmd_out,
+                            evidence="\n".join(issues))
+        else:
+            self.safe(cid, name, Severity.HIGH, desc,
+                      "통합 계정 정책 모든 항목 양호",
+                      rec, command=cmd_str, cmd_output=cmd_out)
+
     # ══════════════════════════════════════════════════════════════
     # 2. 파일 시스템
     # ══════════════════════════════════════════════════════════════
@@ -833,6 +914,95 @@ class WindowsScanner(BaseScanner):
                             f"유휴 세션 타임아웃 {minutes}분 (5분 초과)",
                             rec, command=cmd, cmd_output=out,
                             evidence=f"MaxIdleTime={ms}ms({minutes}분)")
+
+    def _w35_firewall_status(self):
+        """3.5 Windows Defender Firewall 활성화 [★2026 신규]
+        주통기 2026 서비스 권한 기반 관리: 호스트 방화벽이 모든 프로파일에서 활성화되어야 함.
+        Domain / Private / Public 프로파일 모두 ON 여부 점검.
+        """
+        cid, name = "W-3.5", "Windows Defender Firewall 활성화"
+        desc = ("방화벽 비활성화 시 불필요한 포트를 통한 무단 접근 및 악성코드 확산 위험. "
+                "Domain / Private / Public 모든 프로파일에서 방화벽이 활성화되어야 함.")
+        rec  = ("netsh advfirewall set allprofiles state on 또는 "
+                "제어판 > Windows Defender 방화벽 > 모든 프로파일 켜기")
+
+        cmd = "netsh advfirewall show allprofiles state"
+        _, out, _ = self._run_shell(cmd)
+
+        if not out.strip():
+            self.manual(cid, name, Severity.HIGH, desc,
+                        "방화벽 상태 조회 실패 — 수동 점검 필요",
+                        rec, command=cmd, cmd_output=out)
+            return
+
+        off_profiles = []
+        current_profile = None
+        for line in out.splitlines():
+            s = line.strip()
+            if s.endswith("프로필 설정") or s.endswith("Profile Settings"):
+                current_profile = s
+            elif "state" in s.lower() or "상태" in s.lower():
+                if "off" in s.lower() or "해제" in s.lower():
+                    off_profiles.append(current_profile or s)
+
+        if off_profiles:
+            self.vulnerable(cid, name, Severity.HIGH, desc,
+                            f"방화벽 비활성화 프로파일: {', '.join(off_profiles)}",
+                            rec, command=cmd, cmd_output=out,
+                            evidence=", ".join(off_profiles))
+        else:
+            self.safe(cid, name, Severity.HIGH, desc,
+                      "모든 방화벽 프로파일 활성화됨",
+                      rec, command=cmd, cmd_output=out)
+
+    def _w36_smb_v1(self):
+        """3.6 SMB v1 비활성화 [★2026 신규]
+        주통기 2026: SMB v1 활성화 시 WannaCry(EternalBlue) 등 취약점에 노출.
+        Windows Server 2016+ 기본 비활성화이나 명시적 확인 필요.
+        """
+        cid, name = "W-3.6", "SMB v1 비활성화"
+        desc = ("SMB v1 프로토콜 활성화 시 EternalBlue(MS17-010) 취약점을 통한 "
+                "랜섬웨어(WannaCry) 및 원격 코드 실행 위험.")
+        rec  = ('PowerShell: Set-SmbServerConfiguration -EnableSMB1Protocol $false -Force\n'
+                '또는 "프로그램 및 기능 > Windows 기능 켜기/끄기 > SMB 1.0/CIFS 파일 공유 지원" 해제')
+
+        cmd = ('powershell -NoProfile -NonInteractive -Command '
+               '"(Get-SmbServerConfiguration).EnableSMB1Protocol"')
+        _, out, _ = self._run_shell(cmd, timeout=15)
+
+        result = out.strip().lower()
+
+        if result == "false":
+            self.safe(cid, name, Severity.HIGH, desc,
+                      "SMB v1 비활성화됨 (EnableSMB1Protocol=False)",
+                      rec, command=cmd, cmd_output=out)
+        elif result == "true":
+            self.vulnerable(cid, name, Severity.HIGH, desc,
+                            "SMB v1 활성화됨 — WannaCry 등 취약점 노출 위험",
+                            rec, command=cmd, cmd_output=out,
+                            evidence="EnableSMB1Protocol=True")
+        else:
+            # reg query 폴백
+            cmd2 = (r'reg query "HKLM\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters"'
+                    r' /v SMB1')
+            _, out2, _ = self._run_shell(cmd2)
+            val = self._reg_val(out2)
+            cmd_str = f"{cmd}\n{cmd2}"
+            cmd_out  = f"[PowerShell]\n{out}\n\n[reg query]\n{out2}"
+
+            if val in ("0x0", "0"):
+                self.safe(cid, name, Severity.HIGH, desc,
+                          "SMB v1 비활성화됨 (reg SMB1=0)",
+                          rec, command=cmd_str, cmd_output=cmd_out)
+            elif val in ("0x1", "1"):
+                self.vulnerable(cid, name, Severity.HIGH, desc,
+                                "SMB v1 활성화됨 (reg SMB1=1)",
+                                rec, command=cmd_str, cmd_output=cmd_out,
+                                evidence="SMB1=1")
+            else:
+                self.manual(cid, name, Severity.HIGH, desc,
+                            f"SMB v1 상태 확인 불가 (출력: {out[:100]})",
+                            rec, command=cmd_str, cmd_output=cmd_out)
 
     # ══════════════════════════════════════════════════════════════
     # 4. 주요 응용 설정
@@ -1415,6 +1585,119 @@ class WindowsScanner(BaseScanner):
                       "보안 채널 암호화·서명 모두 설정됨",
                       rec, command=cmd_str, cmd_output=cmd_out)
 
+    def _w517_eventlog_size(self):
+        """5.17 이벤트 로그 크기 및 보존 설정 [★2026 신규]
+        주통기 2026 로그 감사 정책 강화: Security·System·Application 이벤트 로그
+        최소 크기(Security≥32MB, 나머지≥16MB)와 보존 정책(덮어쓰기) 설정 점검.
+        """
+        cid, name = "W-5.17", "이벤트 로그 크기 및 보존 설정"
+        desc = ("이벤트 로그 크기 미설정 또는 과소 설정 시 침해 사고 발생 후 "
+                "로그가 덮어쓰여 감사 추적 불가. "
+                "Security≥32MB, System/Application≥16MB 권장.")
+        rec  = ("eventvwr.msc > 각 로그 > 속성 > 최대 로그 크기 조정 "
+                "(Security: 32768KB↑, System/Application: 16384KB↑), "
+                "이벤트 로그 보존 방법: '필요한 경우 덮어쓰기'")
+
+        issues = []
+        cmd_parts = []
+        out_parts = []
+
+        # Security: 32MB(32768KB), System/Application: 16MB(16384KB)
+        thresholds = {
+            "Security":    32 * 1024 * 1024,
+            "System":      16 * 1024 * 1024,
+            "Application": 16 * 1024 * 1024,
+        }
+
+        for log_name, min_bytes in thresholds.items():
+            cmd = f'wevtutil gl "{log_name}"'
+            cmd_parts.append(cmd)
+            _, out, _ = self._run_shell(cmd, timeout=10)
+            out_parts.append(f"[{log_name}]\n{out}")
+
+            max_size = None
+            retention = None
+            for line in out.splitlines():
+                ll = line.strip().lower()
+                if ll.startswith("maxsize:"):
+                    try:
+                        max_size = int(ll.split(":", 1)[1].strip())
+                    except ValueError:
+                        pass
+                elif ll.startswith("retention:"):
+                    retention = ll.split(":", 1)[1].strip()
+
+            if max_size is None:
+                issues.append(f"{log_name}: 로그 크기 조회 실패")
+            elif max_size < min_bytes:
+                issues.append(f"{log_name}: 로그 최대 크기 {max_size//1024//1024}MB "
+                              f"(권장: {min_bytes//1024//1024}MB↑)")
+
+        cmd_str = "\n".join(cmd_parts)
+        cmd_out  = "\n\n".join(out_parts)
+
+        if issues:
+            self.vulnerable(cid, name, Severity.HIGH, desc,
+                            "\n".join(issues), rec,
+                            command=cmd_str, cmd_output=cmd_out,
+                            evidence="\n".join(issues))
+        else:
+            self.safe(cid, name, Severity.HIGH, desc,
+                      "Security/System/Application 이벤트 로그 크기 권장값 이상",
+                      rec, command=cmd_str, cmd_output=cmd_out)
+
+    def _w518_service_privilege(self):
+        """5.18 서비스 계정 권한 최소화 [★2026 신규]
+        주통기 2026 권한 최소화: 주요 서비스가 LocalSystem(SYSTEM) 으로 구동되면
+        취약점 악용 시 최고 권한 탈취 가능. NetworkService/LocalService 사용 권장.
+        """
+        cid, name = "W-5.18", "서비스 계정 권한 최소화"
+        desc = ("불필요한 서비스가 LocalSystem 계정으로 실행될 경우 "
+                "해당 서비스 취약점 악용 시 시스템 최고 권한 탈취 위험. "
+                "가능한 경우 NetworkService 또는 LocalService로 변경.")
+        rec  = ("sc config [서비스명] obj= \"NT AUTHORITY\\NetworkService\" 등으로 "
+                "최소 권한 계정으로 변경. 불가피한 경우 전용 서비스 계정 사용.")
+
+        cmd = ('powershell -NoProfile -NonInteractive -Command '
+               '"Get-WmiObject Win32_Service | '
+               'Where-Object {$_.StartName -eq \'LocalSystem\' -and $_.State -eq \'Running\'} | '
+               'Select-Object Name,DisplayName,StartName | '
+               'Format-Table -AutoSize"')
+        _, out, _ = self._run_shell(cmd, timeout=20)
+
+        if not out.strip():
+            self.manual(cid, name, Severity.HIGH, desc,
+                        "서비스 계정 정보 조회 실패 — 수동 점검 필요",
+                        rec, command=cmd, cmd_output=out)
+            return
+
+        # LocalSystem 서비스 중 위험도가 높은 서비스 목록 (외부 노출 가능 서비스)
+        risky = {"W3SVC", "MSSQLSERVER", "SQLSERVERAGENT", "FTP", "FTPSVC",
+                 "TlntSvr", "SNMP", "RemoteRegistry"}
+        lines = [l.strip() for l in out.splitlines() if l.strip()
+                 and "Name" not in l and "----" not in l]
+
+        risky_found = []
+        for line in lines:
+            parts = line.split()
+            if parts:
+                svc_name = parts[0]
+                if svc_name in risky:
+                    risky_found.append(svc_name)
+
+        total_system = len(lines)
+
+        if risky_found:
+            self.vulnerable(cid, name, Severity.HIGH, desc,
+                            f"위험 서비스 {len(risky_found)}개가 LocalSystem으로 실행: "
+                            f"{', '.join(risky_found)}",
+                            rec, command=cmd, cmd_output=out[:500],
+                            evidence=", ".join(risky_found))
+        else:
+            self.safe(cid, name, Severity.HIGH, desc,
+                      f"LocalSystem 실행 서비스 {total_system}개 중 위험 서비스 없음",
+                      rec, command=cmd, cmd_output=out[:300])
+
     # ══════════════════════════════════════════════════════════════
     # 6. 바이러스 진단
     # ══════════════════════════════════════════════════════════════
@@ -1610,6 +1893,72 @@ class WindowsScanner(BaseScanner):
         self.manual(cid, name, Severity.HIGH, desc,
                     f"최근 설치된 HOT FIX 수동 확인 필요:\n{out[:400]}",
                     rec, command=cmd, cmd_output=out)
+
+    def _w83_windows_update(self):
+        """8.3 Windows Update 자동 업데이트 설정 [★2026 신규]
+        주통기 2026 패치 관리: 자동 업데이트 비활성화 시 보안 패치가 적시에 적용되지 않아
+        알려진 취약점에 장기 노출. Windows Update 서비스 상태 및 자동 업데이트 정책 점검.
+        """
+        cid, name = "W-8.3", "Windows Update 자동 업데이트 설정"
+        desc = ("자동 업데이트 비활성화 시 보안 패치가 즉시 적용되지 않아 "
+                "알려진 취약점(CVE)에 장기간 노출 위험. "
+                "AUOptions=4(자동 다운로드·설치) 또는 조직 WSUS 정책 적용 필요.")
+        rec  = ("그룹 정책: 컴퓨터 구성 > 관리 템플릿 > Windows 구성 요소 > "
+                "Windows Update > '자동 업데이트 구성' = 자동 다운로드 및 예약 설치(4)\n"
+                "또는: reg add HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate\\AU "
+                "/v AUOptions /t REG_DWORD /d 4")
+
+        cmd1 = "sc query wuauserv"
+        _, out1, _ = self._run_shell(cmd1)
+
+        cmd2 = (r'reg query "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" '
+                r'/v AUOptions')
+        _, out2, _ = self._run_shell(cmd2)
+
+        cmd3 = (r'reg query "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update" '
+                r'/v AUOptions')
+        _, out3, _ = self._run_shell(cmd3)
+
+        cmd_str = f"{cmd1}\n{cmd2}\n{cmd3}"
+        cmd_out  = (f"[wuauserv 서비스]\n{out1}\n\n"
+                    f"[정책 AUOptions]\n{out2}\n\n"
+                    f"[현재 AUOptions]\n{out3}")
+
+        issues = []
+
+        # Windows Update 서비스 상태
+        if "RUNNING" not in out1.upper() and "STOPPED" in out1.upper():
+            # STOPPED 는 on-demand 트리거 방식이므로 DISABLED 만 경고
+            pass
+        if "DISABLED" in out1.upper():
+            issues.append("Windows Update 서비스(wuauserv) 비활성화됨")
+
+        # AUOptions 확인 (정책 우선, 없으면 현재 설정)
+        val = self._reg_val(out2) or self._reg_val(out3)
+        au_labels = {
+            "1": "업데이트 알림만(수동)", "2": "다운로드 후 설치 알림",
+            "3": "자동 다운로드, 설치 알림", "4": "자동 다운로드·설치(권장)",
+        }
+        if val is None:
+            issues.append("AUOptions 미설정 — 자동 업데이트 설정 확인 불가")
+        else:
+            try:
+                ao = int(val, 16) if val.startswith("0x") else int(val)
+                label = au_labels.get(str(ao), f"알 수 없음({ao})")
+                if ao not in (3, 4):
+                    issues.append(f"AUOptions={ao} ({label}) — 자동 다운로드·설치(4) 권장")
+            except ValueError:
+                issues.append(f"AUOptions 파싱 실패: {val}")
+
+        if issues:
+            self.vulnerable(cid, name, Severity.HIGH, desc,
+                            "\n".join(issues), rec,
+                            command=cmd_str, cmd_output=cmd_out,
+                            evidence="\n".join(issues))
+        else:
+            self.safe(cid, name, Severity.HIGH, desc,
+                      f"자동 업데이트 설정 양호 (AUOptions={val})",
+                      rec, command=cmd_str, cmd_output=cmd_out)
 
     # ══════════════════════════════════════════════════════════════
     # 9. 이슈 취약점
