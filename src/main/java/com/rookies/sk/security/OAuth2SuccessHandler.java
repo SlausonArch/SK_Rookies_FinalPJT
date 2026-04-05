@@ -30,6 +30,9 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
     @org.springframework.beans.factory.annotation.Value("${app.frontend-url}")
     private String frontendUrl;
 
+    @org.springframework.beans.factory.annotation.Value("${app.bank-frontend-url}")
+    private String bankFrontendUrl;
+
     @org.springframework.beans.factory.annotation.Value("${app.cors.allowed-origins}")
     private java.util.List<String> allowedOrigins;
 
@@ -92,9 +95,13 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
             socialEmail = (String) resp.get("email");
         }
 
+        // 리다이렉트 대상이 은행 프론트인 경우 BANK scope, 그 외는 EXCHANGE
+        boolean isBankOrigin = bankFrontendUrl != null && targetFrontendUrl.startsWith(bankFrontendUrl);
+        SessionScope sessionScope = isBankOrigin ? SessionScope.BANK : SessionScope.EXCHANGE;
+
         String accessToken = tokenProvider.createAccessToken(member.getEmail(), member.getRole().name(),
-                member.getMemberId(), SessionScope.USER);
-        String refreshToken = tokenProvider.createRefreshToken(member.getEmail(), SessionScope.USER);
+                member.getMemberId(), sessionScope);
+        String refreshToken = tokenProvider.createRefreshToken(member.getEmail(), sessionScope);
         activeSessionService.activate(member.getEmail(), SessionScope.USER.name(), tokenProvider.getTokenId(accessToken),
                 tokenProvider.getExpiration(accessToken).toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime());
 

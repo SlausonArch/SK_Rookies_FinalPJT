@@ -135,9 +135,11 @@ const Login: React.FC = () => {
   const handleTestLogin = async () => {
     setError('');
     try {
+      const scope = (import.meta.env.VITE_APP_MODE === 'bank') ? 'BANK' : 'EXCHANGE';
       const { data } = await axios.post(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/auth/test/login`, {
         email: 'test@vce.com',
         password: 'test1234',
+        scope,
       });
       setUserSession(data.accessToken, data.refreshToken);
       window.location.href = resolveRedirectTarget();

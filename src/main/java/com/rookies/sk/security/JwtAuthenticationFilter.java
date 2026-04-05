@@ -106,7 +106,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (cookies != null) {
             for (Cookie cookie : cookies) {
                 String name = cookie.getName();
-                if ("vce_token".equals(name) || "vce_admin_token".equals(name)) {
+                if ("vce_token".equals(name) || "vce_bank_token".equals(name) || "vce_admin_token".equals(name)) {
                     String value = cookie.getValue();
                     if (StringUtils.hasText(value)) return value;
                 }

@@ -78,10 +78,15 @@ public class AuthController {
     }
 
     @PostMapping("/test/login")
-    public ResponseEntity<?> testLogin(@RequestBody AdminLoginRequest request, HttpServletResponse httpResponse) {
+    public ResponseEntity<?> testLogin(@RequestBody java.util.Map<String, String> request, HttpServletResponse httpResponse) {
         log.debug("Test login request received");
         try {
-            Member member = memberService.findByEmailForLogin(request.getEmail());
+            String email = request.getOrDefault("email", "");
+            String password = request.getOrDefault("password", "");
+            String scopeStr = request.getOrDefault("scope", "EXCHANGE");
+            SessionScope sessionScope = SessionScope.from(scopeStr);
+
+            Member member = memberService.findByEmailForLogin(email);
 
             if (member.getStatus() == Member.Status.WITHDRAWN) {
                 return ResponseEntity.status(403).body(WITHDRAWN_ACCOUNT_MESSAGE);
@@ -91,7 +96,7 @@ public class AuthController {
                 return ResponseEntity.status(403).body("인증 실패로 계정이 잠겼습니다. 문의 게시판을 통해 해제 요청해 주세요.");
             }
 
-            if (member.getPassword() == null || !passwordEncoder.matches(request.getPassword(), member.getPassword())) {
+            if (member.getPassword() == null || !passwordEncoder.matches(password, member.getPassword())) {
                 int failCount = member.getLoginFailCount() + 1;
                 member.setLoginFailCount(failCount);
                 if (failCount >= MAX_LOGIN_FAIL) {
@@ -111,13 +116,13 @@ public class AuthController {
             memberService.saveMember(member);
 
             String accessToken = jwtTokenProvider.createAccessToken(
-                    member.getEmail(), member.getRole().name(), member.getMemberId(), SessionScope.USER);
-            String refreshToken = jwtTokenProvider.createRefreshToken(member.getEmail(), SessionScope.USER);
-            activeSessionService.activate(member.getEmail(), SessionScope.USER.name(), jwtTokenProvider.getTokenId(accessToken),
+                    member.getEmail(), member.getRole().name(), member.getMemberId(), sessionScope);
+            String refreshToken = jwtTokenProvider.createRefreshToken(member.getEmail(), sessionScope);
+            activeSessionService.activate(member.getEmail(), sessionScope.name(), jwtTokenProvider.getTokenId(accessToken),
                     jwtTokenProvider.getExpiration(accessToken).toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime());
 
-            setTokenCookie(httpResponse, "vce_token", accessToken, 30 * 60);
-            setTokenCookie(httpResponse, "vce_refresh_token", refreshToken, 7 * 24 * 60 * 60);
+            setTokenCookie(httpResponse, accessCookieName(sessionScope), accessToken, 30 * 60);
+            setTokenCookie(httpResponse, refreshCookieName(sessionScope), refreshToken, 7 * 24 * 60 * 60);
             return ResponseEntity.ok(java.util.Map.of(
                     "accessToken", accessToken,
                     "refreshToken", refreshToken));
@@ -354,6 +359,10 @@ public class AuthController {
             HttpServletResponse httpResponse) {
         String refreshToken = body != null ? body.get("refreshToken") : null;
         if (refreshToken == null || refreshToken.isBlank()) {
+            // bank 쿠키 우선, 없으면 exchange 쿠키
+            refreshToken = getCookieValue(httpRequest, "vce_bank_refresh_token");
+        }
+        if (refreshToken == null || refreshToken.isBlank()) {
             refreshToken = getCookieValue(httpRequest, "vce_refresh_token");
         }
         if (refreshToken == null || refreshToken.isBlank()) {
@@ -386,8 +395,8 @@ public class AuthController {
             if (sessionScope == SessionScope.ADMIN) {
                 setTokenCookie(httpResponse, "vce_admin_token", newAccessToken, 30 * 60);
             } else {
-                setTokenCookie(httpResponse, "vce_token", newAccessToken, 30 * 60);
-                setTokenCookie(httpResponse, "vce_refresh_token", newRefreshToken, 7 * 24 * 60 * 60);
+                setTokenCookie(httpResponse, accessCookieName(sessionScope), newAccessToken, 30 * 60);
+                setTokenCookie(httpResponse, refreshCookieName(sessionScope), newRefreshToken, 7 * 24 * 60 * 60);
             }
             return ResponseEntity.ok(java.util.Map.of(
                     "accessToken", newAccessToken,
@@ -418,6 +427,8 @@ public class AuthController {
         }
         clearTokenCookie(httpResponse, "vce_token");
         clearTokenCookie(httpResponse, "vce_refresh_token");
+        clearTokenCookie(httpResponse, "vce_bank_token");
+        clearTokenCookie(httpResponse, "vce_bank_refresh_token");
         clearTokenCookie(httpResponse, "vce_admin_token");
         return ResponseEntity.ok(java.util.Map.of("message", "로그아웃이 완료되었습니다."));
     }
@@ -465,6 +476,16 @@ public class AuthController {
         }
 
         return null;
+    }
+
+    /** scope에 따른 액세스 토큰 쿠키 이름 */
+    private static String accessCookieName(SessionScope scope) {
+        return scope == SessionScope.BANK ? "vce_bank_token" : "vce_token";
+    }
+
+    /** scope에 따른 리프레시 토큰 쿠키 이름 */
+    private static String refreshCookieName(SessionScope scope) {
+        return scope == SessionScope.BANK ? "vce_bank_refresh_token" : "vce_refresh_token";
     }
 
     private void setTokenCookie(HttpServletResponse response, String name, String value, int maxAgeSeconds) {

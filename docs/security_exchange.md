@@ -58,6 +58,10 @@ Spring Security CSRF 비활성화 상태이나, 아래 구조적 방어로 CSRF 
 - JWT 토큰(`Authorization: Bearer`)을 요청 헤더에 직접 포함: 브라우저가 자동 전송하지 않으므로 CSRF 성립 불가.
 - JWT 쿠키에 `SameSite=Strict` 적용(조치 내용 참조) → 타 도메인 요청 시 쿠키 미포함.
 
+**CSRF 토큰 미적용 사유**
+
+Spring CSRF 토큰(`CookieCsrfTokenRepository`) 적용을 시도했으나, 멀티 포트 환경(프론트 15173/25173/45173 ↔ 백엔드 18080)에서 쿠키 도메인 불일치로 안정적인 동작이 어려워 비활성화 유지. 대신 JWT Bearer 토큰 헤더 방식 + `SameSite=Strict` 쿠키 + CORS Origin 제한으로 동등한 수준의 CSRF 방어 달성.
+
 ---
 
 ## 2. Injection
