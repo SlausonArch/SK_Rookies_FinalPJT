@@ -377,8 +377,7 @@ const MyPage: React.FC = () => {
         const payload = res.data || {};
         const normalizedMember: MemberInfo = {
           ...payload,
-          hasIdPhoto: Boolean(payload.hasIdPhoto || payload.idPhotoUrl),
-          idPhotoUrl: payload.idPhotoUrl || '',
+          hasIdPhoto: Boolean(payload.hasIdPhoto),
         };
         setMember(normalizedMember);
         setTotalVolume(Number(payload.totalVolume) || 0);
@@ -479,7 +478,6 @@ const MyPage: React.FC = () => {
             ...prev,
             status: data.status || prev.status,
             hasIdPhoto: true,
-            idPhotoUrl: data.idPhotoUrl || prev.idPhotoUrl || '',
           }
           : prev,
       );

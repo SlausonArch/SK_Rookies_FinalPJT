@@ -100,7 +100,7 @@ public class AuthController {
                     return ResponseEntity.status(403).body("인증 실패 횟수(" + MAX_LOGIN_FAIL + "회)를 초과하여 계정이 잠겼습니다.");
                 }
                 memberService.saveMember(member);
-                return ResponseEntity.status(401).body("이메일 또는 비밀번호가 올바르지 않습니다. (실패 " + failCount + "/" + MAX_LOGIN_FAIL + ")");
+                return ResponseEntity.status(401).body("이메일 또는 비밀번호가 올바르지 않습니다.");
             }
 
             if (member.getRole() == Member.Role.GUEST) {
@@ -243,7 +243,7 @@ public class AuthController {
             result.put("nextTierVolume", nextTierVolume.toString());
             result.put("referralCode", member.getReferralCode());
             result.put("hasIdPhoto", member.getIdPhotoUrl() != null && !member.getIdPhotoUrl().isBlank());
-            result.put("idPhotoUrl", member.getIdPhotoUrl() != null ? member.getIdPhotoUrl() : "");
+            // 신분증 파일 경로는 클라이언트에 노출하지 않음 (관리자 전용 API로만 접근)
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             return ResponseEntity.status(404).body("회원 정보를 찾을 수 없습니다.");
@@ -285,12 +285,12 @@ public class AuthController {
             @AuthenticationPrincipal UserDetails userDetails,
             @RequestPart("file") MultipartFile file) {
         try {
-            String filePath = fileService.storeFile(file);
+            String filePath = fileService.storeIdPhoto(file);
             Member member = memberService.submitIdPhotoByEmail(userDetails.getUsername(), filePath);
             return ResponseEntity.ok(java.util.Map.of(
                     "message", "신분증이 제출되었습니다. 관리자 승인 전까지 LOCKED 상태로 유지됩니다.",
                     "status", member.getStatus().name(),
-                    "idPhotoUrl", member.getIdPhotoUrl() != null ? member.getIdPhotoUrl() : ""));
+                    "hasIdPhoto", member.getIdPhotoUrl() != null && !member.getIdPhotoUrl().isBlank()));
         } catch (Exception e) {
             return ResponseEntity.status(400).body(java.util.Map.of("message", e.getMessage()));
         }
@@ -327,7 +327,7 @@ public class AuthController {
         // Ideally we shouldn't trust client provided ID for signup completion of OWN
         // account.
 
-        String filePath = fileService.storeFile(file);
+        String filePath = fileService.storeIdPhoto(file);
 
         // We need to look up the member based on the CURRENTLY LOGGED IN user (GUEST)
         // memberRepository is not injected here.
