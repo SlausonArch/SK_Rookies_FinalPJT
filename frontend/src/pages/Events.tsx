@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import axios from 'axios';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import { getUserAccessToken } from '../utils/auth';
 
 const Container = styled.div`
   min-height: 100vh;
@@ -346,13 +347,13 @@ const Events: React.FC = () => {
   const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:18080';
 
   const getAuthHeader = () => {
-    const token = localStorage.getItem('accessToken');
+    const token = getUserAccessToken();
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
 
   // 서버에서 오늘 이벤트 참여 현황 조회
   React.useEffect(() => {
-    const token = localStorage.getItem('accessToken');
+    const token = getUserAccessToken();
     if (!token) return;
     axios
       .get<{ attendanceDone: boolean; adMissionCount: number }>(
@@ -367,7 +368,7 @@ const Events: React.FC = () => {
   }, []);
 
   const handleAttendance = async () => {
-    const token = localStorage.getItem('accessToken');
+    const token = getUserAccessToken();
     if (!token) {
       alert('로그인이 필요한 서비스입니다.');
       window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
@@ -393,7 +394,7 @@ const Events: React.FC = () => {
   };
 
   const callAdMissionAPI = async () => {
-    const token = localStorage.getItem('accessToken');
+    const token = getUserAccessToken();
     if (!token) return;
     if (adMissionCount >= 3) return;
     try {
@@ -410,7 +411,7 @@ const Events: React.FC = () => {
   };
 
   const handleAdMissionClick = () => {
-    const token = localStorage.getItem('accessToken');
+    const token = getUserAccessToken();
     if (!token) {
       alert('로그인이 필요한 서비스입니다.');
       window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
@@ -427,7 +428,7 @@ const Events: React.FC = () => {
   // 광고 탭 복귀 감지 제거 — 광고 버튼 클릭 즉시 서버 호출로 대체됨
 
   const handleCheckReferral = async () => {
-    const token = localStorage.getItem('accessToken');
+    const token = getUserAccessToken();
     if (!token) {
       alert('로그인이 필요한 서비스입니다.');
       const redirect = encodeURIComponent(`${window.location.pathname}${window.location.search}`);

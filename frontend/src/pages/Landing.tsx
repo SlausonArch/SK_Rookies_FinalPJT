@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import Matter from 'matter-js';
+import { getUserAccessToken } from '../utils/auth';
 
 const COLORS = {
     bg: '#093687',
@@ -111,7 +112,7 @@ const ActionButton = styled.button<{ $variant?: 'bank' | 'crypto' }>`
 const Landing: React.FC = () => {
     const sceneRef = useRef<HTMLDivElement>(null);
     const navigate = useNavigate();
-    const isLoggedIn = !!localStorage.getItem('accessToken');
+    const isLoggedIn = !!getUserAccessToken();
 
     useEffect(() => {
         if (!sceneRef.current) return;

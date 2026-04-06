@@ -9,6 +9,7 @@ import { fetchKRWMarkets, fetchTickers } from '../services/upbitApi';
 import type { UpbitMarket, UpbitTicker } from '../services/upbitApi';
 import { useUpbitTicker } from '../hooks/useUpbitWebSocket';
 import axios from 'axios';
+import { getUserAccessToken } from '../utils/auth';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 const bankUrl = import.meta.env.VITE_BANK_FRONTEND_URL || `${window.location.protocol}//${window.location.hostname}:15174`;
@@ -320,7 +321,7 @@ const Home: React.FC = () => {
   const [notices, setNotices] = useState<NoticePost[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
   const [activeTab, setActiveTab] = useState<RankingTab>('popular');
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(!!localStorage.getItem('accessToken'));
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(!!getUserAccessToken());
 
   const RANKING_TABS: { key: RankingTab; label: string }[] = [
     { key: 'popular', label: '인기' },
@@ -332,7 +333,7 @@ const Home: React.FC = () => {
   const activeTabLabel = RANKING_TABS.find(tab => tab.key === activeTab)?.label ?? '인기';
 
   useEffect(() => {
-    const handleStorage = () => setIsLoggedIn(!!localStorage.getItem('accessToken'));
+    const handleStorage = () => setIsLoggedIn(!!getUserAccessToken());
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
   }, []);

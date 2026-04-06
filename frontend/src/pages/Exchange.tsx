@@ -12,6 +12,7 @@ import TradeForm from './exchange/TradeForm';
 import RecentTrades from './exchange/RecentTrades';
 
 import axios from 'axios';
+import { getUserAccessToken } from '../utils/auth';
 
 const ExchangeContainer = styled.div`
   display: flex;
@@ -214,7 +215,7 @@ const MyHistory = ({ market }: { market: string }) => {
 
   useEffect(() => {
     const fetchHistory = async () => {
-      const token = localStorage.getItem('accessToken');
+      const token = getUserAccessToken();
       if (!token) return;
 
       setLoading(true);
@@ -243,7 +244,7 @@ const MyHistory = ({ market }: { market: string }) => {
   }, [assetType, market]);
 
   const handleCancelOrder = async (orderId: number) => {
-    const token = localStorage.getItem('accessToken');
+    const token = getUserAccessToken();
     if (!token) {
       alert('로그인이 필요합니다.');
       return;
