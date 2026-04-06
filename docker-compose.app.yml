@@ -51,33 +51,31 @@ services:
 
   # 3. Frontend - Exchange (dev 빌드)
   exchange-front:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        - VITE_APP_MODE=exchange
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL}
+        - VITE_EXCHANGE_FRONTEND_URL=${VITE_EXCHANGE_FRONTEND_URL}
+        - VITE_BANK_FRONTEND_URL=${VITE_BANK_FRONTEND_URL}
+        - VITE_ENABLE_API_DOCS=${VITE_ENABLE_API_DOCS:-false}
     image: dev-exchange-front:latest
     ports:
       - "${APP_BIND_IP:-0.0.0.0}:${HOST_EXCHANGE_FRONT_PORT:-15175}:3000"
-    environment:
-      - VITE_API_BASE_URL=${VITE_API_BASE_URL}
-      - VITE_ADMIN_API_BASE_URL=${VITE_API_BASE_URL}
-      - VITE_EXCHANGE_FRONTEND_URL=${VITE_EXCHANGE_FRONTEND_URL}
-      - VITE_BANK_FRONTEND_URL=${VITE_BANK_FRONTEND_URL}
-      - VITE_APP_MODE=exchange
-    stdin_open: true
-    tty: true
 
   # 4. Frontend - Bank (dev 빌드)
   bank-front:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        - VITE_APP_MODE=bank
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL}
+        - VITE_EXCHANGE_FRONTEND_URL=${VITE_EXCHANGE_FRONTEND_URL}
+        - VITE_BANK_FRONTEND_URL=${VITE_BANK_FRONTEND_URL}
+        - VITE_ENABLE_API_DOCS=${VITE_ENABLE_API_DOCS:-false}
     image: dev-bank-front:latest
     ports:
       - "${APP_BIND_IP:-0.0.0.0}:${HOST_BANK_FRONT_PORT:-15176}:3000"
-    environment:
-      - VITE_API_BASE_URL=${VITE_API_BASE_URL}
-      - VITE_ADMIN_API_BASE_URL=${VITE_API_BASE_URL}
-      - VITE_EXCHANGE_FRONTEND_URL=${VITE_EXCHANGE_FRONTEND_URL}
-      - VITE_BANK_FRONTEND_URL=${VITE_BANK_FRONTEND_URL}
-      - VITE_APP_MODE=bank
-    stdin_open: true
-    tty: true
 
 volumes:
   dev-oracle-data:

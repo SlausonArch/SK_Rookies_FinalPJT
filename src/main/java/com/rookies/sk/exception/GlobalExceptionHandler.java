@@ -54,7 +54,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<Map<String, String>> handleRuntimeException(RuntimeException ex) {
         log.error("RuntimeException: {}", ex.getMessage(), ex);
-        return ResponseEntity.badRequest().body(Map.of("message", "잘못된 요청입니다."));
+        return ResponseEntity.status(500).body(Map.of("message", "서버 내부 오류가 발생했습니다."));
     }
 
     @ExceptionHandler(Exception.class)
