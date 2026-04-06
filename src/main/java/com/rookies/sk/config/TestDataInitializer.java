@@ -15,22 +15,21 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 
 /**
- * 애플리케이션 시작 시 테스트 계정 및 초기 자산을 자동 생성한다.
- * test@vce.com / test1234 계정이 없으면 생성하고, KRW 100억을 지급한다.
+ * Keeps the exchange test account usable across redeploys, even if an older row already exists.
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class TestDataInitializer implements ApplicationRunner {
 
-    private static final String TEST_EMAIL    = "test@vce.com";
+    private static final String TEST_EMAIL = "test@vce.com";
     private static final String TEST_PASSWORD = "test1234";
-    private static final String TEST_NAME     = "테스트 계정";
-    private static final BigDecimal INITIAL_KRW = new BigDecimal("10000000000"); // 100억
+    private static final String TEST_NAME = "테스트 계정";
+    private static final BigDecimal INITIAL_KRW = new BigDecimal("10000000000");
 
     private final MemberRepository memberRepository;
-    private final AssetRepository  assetRepository;
-    private final PasswordEncoder  passwordEncoder;
+    private final AssetRepository assetRepository;
+    private final PasswordEncoder passwordEncoder;
 
     @Override
     @Transactional
@@ -50,19 +49,44 @@ public class TestDataInitializer implements ApplicationRunner {
             memberRepository.save(member);
             log.info("테스트 계정 생성: {}", TEST_EMAIL);
         } else {
-            // 이미 존재하면 상태만 ACTIVE로 보정
+            boolean updated = false;
+
+            if (member.getRole() != Member.Role.USER) {
+                member.setRole(Member.Role.USER);
+                updated = true;
+            }
             if (member.getStatus() != Member.Status.ACTIVE) {
                 member.setStatus(Member.Status.ACTIVE);
+                updated = true;
+            }
+            if (member.getLoginFailCount() != 0) {
                 member.setLoginFailCount(0);
+                updated = true;
+            }
+            if (member.getPassword() == null || !passwordEncoder.matches(TEST_PASSWORD, member.getPassword())) {
+                member.setPassword(passwordEncoder.encode(TEST_PASSWORD));
+                updated = true;
+            }
+            if (member.getName() == null || member.getName().isBlank()) {
+                member.setName(TEST_NAME);
+                updated = true;
+            }
+            if (member.getRrnPrefix() == null || member.getRrnPrefix().isBlank()) {
+                member.setRrnPrefix("000101-1");
+                updated = true;
+            }
+            if (member.getPhoneNumber() == null || member.getPhoneNumber().isBlank()) {
+                member.setPhoneNumber("010-0000-0001");
+                updated = true;
+            }
+
+            if (updated) {
                 memberRepository.save(member);
+                log.info("테스트 계정 보정: {}", TEST_EMAIL);
             }
         }
 
-        // KRW 자산 생성 또는 100억으로 리셋
-        Asset krw = assetRepository
-                .findByMember_MemberIdAndAssetType(member.getMemberId(), "KRW")
-                .orElse(null);
-
+        Asset krw = assetRepository.findByMember_MemberIdAndAssetType(member.getMemberId(), "KRW").orElse(null);
         if (krw == null) {
             krw = Asset.builder()
                     .member(member)
@@ -72,7 +96,26 @@ public class TestDataInitializer implements ApplicationRunner {
                     .averageBuyPrice(BigDecimal.ZERO)
                     .build();
             assetRepository.save(krw);
-            log.info("테스트 계정 KRW 100억 지급 완료");
+            log.info("테스트 계정 KRW 초기 자산 지급 완료");
+            return;
+        }
+
+        boolean assetUpdated = false;
+        if (krw.getBalance() == null || krw.getBalance().compareTo(INITIAL_KRW) < 0) {
+            krw.setBalance(INITIAL_KRW);
+            assetUpdated = true;
+        }
+        if (krw.getLockedBalance() == null) {
+            krw.setLockedBalance(BigDecimal.ZERO);
+            assetUpdated = true;
+        }
+        if (krw.getAverageBuyPrice() == null) {
+            krw.setAverageBuyPrice(BigDecimal.ZERO);
+            assetUpdated = true;
+        }
+        if (assetUpdated) {
+            assetRepository.save(krw);
+            log.info("테스트 계정 KRW 자산 보정 완료");
         }
     }
 }
