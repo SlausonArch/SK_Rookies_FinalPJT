@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import axios from 'axios';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import { getUserAccessToken } from '../utils/auth';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 
@@ -387,7 +388,7 @@ const Support: React.FC = () => {
   const [formContent, setFormContent] = useState('');
   const [file, setFile] = useState<File | null>(null);
 
-  const token = sessionStorage.getItem('accessToken');
+  const token = getUserAccessToken();
   const isLoggedIn = !!token;
   const role = parseRoleFromToken(token);
   const isStaff = role === 'STAFF' || role === 'ADMIN' || role === 'MANAGER';
