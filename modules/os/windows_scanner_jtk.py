@@ -4,9 +4,11 @@ SK Shieldus 보안가이드라인 기반 (Windows Server 2019, 2022)
 주통기 2026 개정 반영
 
 [2026 개정 추가 항목]
+  W-1.2  계정 잠금 기간 기준 30분 → 60분 상향 조정
   W-1.9  통합 계정 정책 점검              (2026 신규 — net accounts + secedit 종합)
   W-3.5  Windows Defender Firewall 활성화 (2026 신규 — 서비스 권한 기반 관리)
   W-3.6  SMB v1 비활성화                  (2026 신규 — WannaCry 등 취약점 대응)
+  W-4.4  NTP 시간 동기화 설정             (2026 신규 — 로그 무결성 위한 시간 동기화)
   W-5.17 이벤트 로그 크기 및 보존 설정   (2026 신규 — 로그 감사 정책 강화)
   W-5.18 서비스 계정 권한 최소화         (2026 신규 — 보안 관리 권한 최소화)
   W-8.3  Windows Update 자동 업데이트    (2026 신규 — 최신 보안 패치 자동 적용)
@@ -39,6 +41,7 @@ SK Shieldus 보안가이드라인 기반 (Windows Server 2019, 2022)
      W-4.1  Telnet 서비스 보안 설정          (중요도: 중) → N/A
      W-4.2  DNS 보안 설정                    (중요도: 중)
      W-4.3  SNMP 서비스 보안 설정            (중요도: 상)
+     W-4.4  NTP 시간 동기화 설정             (중요도: 중) ★2026
   5. 시스템 보안 설정
      W-5.1  원격 로그파일 접근 진단          (중요도: 하)
      W-5.2  화면 보호기 설정                 (중요도: 하)
@@ -90,7 +93,7 @@ _UNNECESSARY_SERVICES = {
 
 
 class WindowsScanner(BaseScanner):
-    CATEGORY = "OS-Windows"
+    CATEGORY = "OS-Windows [주통기]"
 
     def __init__(self, target: str = "localhost", verbose: bool = False,
                  executor=None):
@@ -161,6 +164,7 @@ class WindowsScanner(BaseScanner):
         self._w41_telnet()
         self._w42_dns()
         self._w43_snmp()
+        self._w44_ntp()                             # ★2026
 
         print()
         print("  ─── 5. 시스템 보안 설정 ─────────────────────────────")
@@ -259,12 +263,12 @@ class WindowsScanner(BaseScanner):
                       rec, command=cmd_str, cmd_output=cmd_out)
 
     def _w12_lockout_policy(self):
-        """1.2 계정 잠금 정책 설정"""
+        """1.2 계정 잠금 정책 설정 (2026 주통기: 잠금 기간 60분 이상)"""
         cid, name = "W-1.2", "계정 잠금 정책 설정"
-        desc = ("계정 잠금 기간 30분 이상, 잠금 임계값 1~5번, "
+        desc = ("계정 잠금 기간 60분 이상, 잠금 임계값 1~5번, "
                 "잠금 카운터 재설정 시간 30분 이상 설정 여부 점검.")
         rec  = ("제어판 > 관리 도구 > 로컬 보안 정책 > 계정 잠금 정책 > "
-                "잠금 기간 30분, 임계값 5번, 카운터 재설정 30분 설정")
+                "잠금 기간 60분, 임계값 5번, 카운터 재설정 30분 설정")
 
         cmd = "net accounts"
         _, out, _ = self._run_shell(cmd)
@@ -292,8 +296,8 @@ class WindowsScanner(BaseScanner):
 
         if lockout_duration is None:
             issues.append("계정 잠금 기간 파싱 불가")
-        elif lockout_duration < 30:
-            issues.append(f"계정 잠금 기간 {lockout_duration}분 (30분 미만)")
+        elif lockout_duration < 60:
+            issues.append(f"계정 잠금 기간 {lockout_duration}분 (60분 미만)")
 
         if lockout_threshold is None:
             issues.append("계정 잠금 임계값 파싱 불가")
@@ -545,10 +549,10 @@ class WindowsScanner(BaseScanner):
         W-1.2/1.3 개별 항목 외 종합 판정 결과 제공.
         """
         cid, name = "W-1.9", "통합 계정 정책 점검"
-        desc = ("계정 잠금 임계값(≤5회), 잠금 기간(≥30분), 최소 암호 길이(≥8자), "
+        desc = ("계정 잠금 임계값(≤5회), 잠금 기간(≥60분), 최소 암호 길이(≥8자), "
                 "최대 암호 사용 기간(≤60일), 암호 복잡성(사용)을 종합 점검.")
         rec  = ("net accounts / secedit / 로컬 보안 정책에서 "
-                "계정 잠금 임계값 5, 잠금 기간 30분, 최소 길이 8자, "
+                "계정 잠금 임계값 5, 잠금 기간 60분, 최소 길이 8자, "
                 "복잡성 사용으로 일괄 설정")
 
         cmd_na = "net accounts"
@@ -573,8 +577,8 @@ class WindowsScanner(BaseScanner):
                 if val_i is not None and (val_i == 0 or val_i > 5):
                     issues.append(f"계정 잠금 임계값 {val_i} (권장: 1~5)")
             elif "lockout duration" in ll or "잠금 기간" in ll:
-                if val_i is not None and val_i < 30:
-                    issues.append(f"계정 잠금 기간 {val_i}분 (권장: 30분↑)")
+                if val_i is not None and val_i < 60:
+                    issues.append(f"계정 잠금 기간 {val_i}분 (권장: 60분↑)")
             elif "minimum password length" in ll or "최소 암호 길이" in ll:
                 if val_i is not None and val_i < 8:
                     issues.append(f"최소 암호 길이 {val_i}자 (권장: 8자↑)")
@@ -1076,6 +1080,56 @@ class WindowsScanner(BaseScanner):
         else:
             self.safe(cid, name, Severity.HIGH, desc,
                       f"SNMP Community String 양호: {', '.join(communities) or '(없음)'}",
+                      rec, command=cmd_str, cmd_output=cmd_out)
+
+    def _w44_ntp(self):
+        """4.4 NTP 시간 동기화 설정 [★2026 주통기]
+        로그 무결성을 위해 Windows Time 서비스가 활성화되고
+        신뢰할 수 있는 NTP 서버와 동기화되는지 점검.
+        """
+        cid, name = "W-4.4", "NTP 시간 동기화 설정"
+        desc = ("시스템 시간 동기화 미설정 시 보안 로그 시간 불일치로 "
+                "사고 분석이 어려워짐.")
+        rec  = ("w32tm /config /manualpeerlist:<NTP서버> /syncfromflags:manual /reliable:YES /update\n"
+                "net stop w32tm && net start w32tm")
+
+        cmd1 = "sc query W32Time"
+        _, out1, _ = self._run_shell(cmd1)
+
+        cmd2 = "w32tm /query /status"
+        _, out2, _ = self._run_shell(cmd2)
+
+        cmd_str = f"{cmd1}\n{cmd2}"
+        cmd_out  = f"[W32Time 서비스]\n{out1}\n\n[w32tm 상태]\n{out2}"
+
+        if "RUNNING" not in out1.upper():
+            self.vulnerable(cid, name, Severity.MEDIUM, desc,
+                            "Windows Time 서비스(W32Time)가 실행되지 않습니다.",
+                            rec, command=cmd_str, cmd_output=cmd_out,
+                            evidence="W32Time 서비스 미실행")
+            return
+
+        # NTP 동기화 상태 확인
+        issues = []
+        synced = False
+        for line in out2.splitlines():
+            ll = line.lower()
+            if "source" in ll and ("local cmos clock" in ll or "로컬" in ll):
+                issues.append("NTP 외부 서버 미동기화 (로컬 CMOS 클럭 사용 중)")
+            if "leap indicator" in ll and "no warning" in ll:
+                synced = True
+            if "시간 소스" in ll or "source" in ll:
+                if any(x in ll for x in ("time.windows.com", "pool.ntp.org", "kr.pool.ntp")):
+                    synced = True
+
+        if issues:
+            self.vulnerable(cid, name, Severity.MEDIUM, desc,
+                            "\n".join(issues),
+                            rec, command=cmd_str, cmd_output=cmd_out,
+                            evidence="\n".join(issues))
+        else:
+            self.safe(cid, name, Severity.MEDIUM, desc,
+                      "Windows Time 서비스 실행 중, NTP 동기화 정상",
                       rec, command=cmd_str, cmd_output=cmd_out)
 
     # ══════════════════════════════════════════════════════════════

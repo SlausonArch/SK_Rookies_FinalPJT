@@ -317,7 +317,7 @@ def _select_report_format() -> list[tuple[str, callable]]:
             return [(label, fn)]
         print(RED("  잘못된 선택입니다."))
 
-def _print_summary(report: ScanReport):
+def _print_summary(report: ScanReport, guide: str = ""):
     s = report.summary
     print()
     _hr()
@@ -325,6 +325,9 @@ def _print_summary(report: ScanReport):
     _hr()
     print(f"  대상   : {report.target}")
     print(f"  유형   : {report.scan_type}")
+    if guide:
+        guide_label = GUIDES.get({"sk": "1", "jtk": "2"}.get(guide, "1"), "")
+        print(f"  가이드 : {guide_label}")
     print(f"  시작   : {report.started_at}")
     print(f"  종료   : {report.finished_at}")
     print()
@@ -448,12 +451,14 @@ def main():
         "2": f"SSH → {target}",
         "3": f"SSM → {target}",
     }.get(conn_mode, target)
+    guide_label = GUIDES.get({"sk": "1", "jtk": "2"}.get(guide, "1"), "")
     print(BOLD(f"  [{mod['name']}] 진단 시작... ({conn_label})"))
+    print(f"  기준 가이드: {CYAN(guide_label)}")
     _hr()
     report = _run_scan(mod, opts)
 
     # 6. 요약 출력
-    _print_summary(report)
+    _print_summary(report, guide)
 
     # 7. 상세 출력
     _print_details(report)

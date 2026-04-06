@@ -1,18 +1,36 @@
 """
 AWS Cloud 취약점 진단 모듈
-SK Shieldus AWS 보안 가이드라인 기반
-주통기 2026 개정 반영
+주요정보통신기반시설 기술적 취약점 분석평가 방법 상세가이드 (2026 기준)
 
-[2026 개정 추가 항목]
-  C-1.11  IAM 액세스 키 교체 주기 점검     (2026 신규 — 90일 이하 교체 권장)
-  C-4.14  AWS Config 서비스 활성화 점검    (2026 신규 — 리소스 구성 변경 추적)
-  C-4.15  GuardDuty 활성화 점검           (2026 신규 — 위협 탐지 서비스)
+[2026 가이드 구조]
+  1. 계정 관리
+    C-1.1  사용자 계정 관리
+    C-1.2  IAM 사용자 계정 단일화 관리
+    C-1.3  IAM 사용자 계정 식별 관리
+    C-1.4  IAM 그룹 사용자 계정 관리
+    C-1.9  MFA 설정
+    C-1.10 AWS 계정 패스워드 정책 관리
+    C-1.11 IAM 액세스 키 교체 주기 점검
 
-점검 항목:
-  1. 계정 관리   (C-1.1 ~ C-1.11) ★2026 C-1.11 추가
-  2. 권한 관리   (C-2.1 ~ C-2.3)  — 수동 점검
-  3. 가상 리소스 (C-3.1 ~ C-3.8)
-  4. 운영 관리   (C-4.1 ~ C-4.15) ★2026 C-4.14, C-4.15 추가
+  2. 권한 관리 (C-2.1 ~ C-2.3) — 수동 점검
+
+  3. 가상 리소스
+    C-3.1  VPC 네트워크 서브넷 관리 (보안 그룹 + NACL + IGW + NAT)
+    C-3.2  가상 네트워크 리소스 관리 (라우팅 테이블)
+    C-3.3  접근 제어 설정 관리 (보안 그룹 세부)
+    C-3.4  스토리지 리소스 퍼블릭 접근 관리 (S3 + RDS)
+
+  4. 운영 관리
+    C-4.1  관계형 데이터베이스 암호화 설정 (구 C-4.2)
+    C-4.2  통신구간 암호화 설정 (구 C-4.4)
+    C-4.3  클라우드 서비스 사용자 계정 로깅 설정 (구 C-4.7)
+    C-4.4  인스턴스 로깅 설정 (구 C-4.8)
+    C-4.5  관계형 데이터베이스 로깅 설정 (구 C-4.9)
+    C-4.6  오브젝트 스토리지 버킷 로깅 설정 (구 C-4.10)
+    C-4.7  로그 보관 기간 설정 (구 C-4.12)
+    C-4.8  백업 사용 여부 (구 C-4.13)
+    C-4.9  AWS Config 서비스 활성화 (구 C-4.14)
+    C-4.10 GuardDuty 활성화 (구 C-4.15)
 """
 from __future__ import annotations
 from datetime import datetime, timezone
@@ -21,7 +39,7 @@ from core.result import ScanReport, Severity
 
 
 class AWSScanner(BaseScanner):
-    CATEGORY = "Cloud-AWS"
+    CATEGORY = "Cloud-AWS [주통기]"
 
     def __init__(
         self,
@@ -70,47 +88,38 @@ class AWSScanner(BaseScanner):
         print(f"\n[*] AWS Cloud 취약점 진단 시작 → 리전: {self.region}\n")
 
         checks = [
-            # 계정 관리
+            # 계정 관리 (2026 가이드 기준)
             ("C-1.1",  self._chk_iam_admin_accounts),
             ("C-1.2",  self._chk_iam_user_single),
             ("C-1.3",  self._chk_iam_user_tags),
             ("C-1.4",  self._chk_iam_group_users),
-            ("C-1.5",  self._chk_ec2_key_pair),
-            ("C-1.6",  self._chk_key_pair_storage),
-            ("C-1.7",  self._chk_root_console_usage),
-            ("C-1.8",  self._chk_access_key_mgmt),
             ("C-1.9",  self._chk_mfa),
             ("C-1.10", self._chk_password_policy),
-            ("C-1.11", self._chk_access_key_rotation),  # ★2026
+            ("C-1.11", self._chk_access_key_rotation),
             # 권한 관리
             ("C-2.1",  self._chk_instance_policy),
             ("C-2.2",  self._chk_network_policy),
             ("C-2.3",  self._chk_other_policy),
-            # 가상 리소스
-            ("C-3.1",  self._chk_sg_any_port),
-            ("C-3.2",  self._chk_sg_any_source),
-            ("C-3.3",  self._chk_nacl),
-            ("C-3.4",  self._chk_route_table),
-            ("C-3.5",  self._chk_igw),
-            ("C-3.6",  self._chk_nat_gw),
-            ("C-3.7",  self._chk_s3_access),
-            ("C-3.8",  self._chk_rds_subnet),
-            # 운영 관리
-            ("C-4.1",  self._chk_ebs_encryption),
-            ("C-4.2",  self._chk_rds_encryption),
-            ("C-4.3",  self._chk_s3_encryption),
-            ("C-4.4",  self._chk_tls_encryption),
-            ("C-4.5",  self._chk_cloudtrail_encryption),
-            ("C-4.6",  self._chk_cloudwatch_encryption),
-            ("C-4.7",  self._chk_cloudtrail_logging),
-            ("C-4.8",  self._chk_instance_logging),
-            ("C-4.9",  self._chk_rds_logging),
-            ("C-4.10", self._chk_s3_logging),
-            ("C-4.11", self._chk_vpc_flow_log),
-            ("C-4.12", self._chk_log_retention),
-            ("C-4.13", self._chk_backup),
-            ("C-4.14", self._chk_aws_config),       # ★2026
-            ("C-4.15", self._chk_guardduty),         # ★2026
+            # 가상 리소스 (2026 재편성)
+            ("C-3.1",  self._chk_sg_any_port),       # VPC 네트워크 서브넷 관리
+            ("C-3.1",  self._chk_nacl),              # VPC 네트워크 서브넷 관리 (통합)
+            ("C-3.1",  self._chk_igw),               # VPC 네트워크 서브넷 관리 (통합)
+            ("C-3.1",  self._chk_nat_gw),            # VPC 네트워크 서브넷 관리 (통합)
+            ("C-3.2",  self._chk_route_table),       # 가상 네트워크 리소스 관리
+            ("C-3.3",  self._chk_sg_any_source),     # 접근 제어 설정 관리
+            ("C-3.4",  self._chk_s3_access),         # 스토리지 리소스 퍼블릭 접근 관리
+            ("C-3.4",  self._chk_rds_subnet),        # 스토리지 리소스 퍼블릭 접근 관리 (통합)
+            # 운영 관리 (2026 재편성, 삭제된 항목 제외)
+            ("C-4.1",  self._chk_rds_encryption),    # 관계형 DB 암호화 (구 C-4.2)
+            ("C-4.2",  self._chk_tls_encryption),    # 통신구간 암호화 (구 C-4.4)
+            ("C-4.3",  self._chk_cloudtrail_logging),  # 클라우드 서비스 사용자 계정 로깅 (구 C-4.7)
+            ("C-4.4",  self._chk_instance_logging),    # 인스턴스 로깅 (구 C-4.8)
+            ("C-4.5",  self._chk_rds_logging),         # RDS 로깅 (구 C-4.9)
+            ("C-4.6",  self._chk_s3_logging),          # S3 버킷 로깅 (구 C-4.10)
+            ("C-4.7",  self._chk_log_retention),       # 로그 보관 기간 (구 C-4.12)
+            ("C-4.8",  self._chk_backup),              # 백업 (구 C-4.13)
+            ("C-4.9",  self._chk_aws_config),          # AWS Config (구 C-4.14)
+            ("C-4.10", self._chk_guardduty),           # GuardDuty (구 C-4.15)
         ]
 
         for cid, fn in checks:
@@ -221,84 +230,6 @@ class AWSScanner(BaseScanner):
                       f"전체 사용자 {len(users)}명 그룹 소속 확인 완료",
                       "양호")
 
-    def _chk_ec2_key_pair(self):
-        """C-1.5 Key Pair 접근 관리 — EC2 인스턴스 Key Pair 사용 확인"""
-        ec2 = self._client("ec2")
-        instances = []
-        resp = ec2.describe_instances()
-        for r in resp["Reservations"]:
-            for i in r["Instances"]:
-                if i["State"]["Name"] not in ("terminated", "shutting-down"):
-                    instances.append(i)
-        no_kp = [i.get("InstanceId","?") for i in instances if not i.get("KeyName")]
-        if no_kp:
-            self.vulnerable("C-1.5", "Key Pair 접근 관리", Severity.HIGH,
-                            "Key Pair 없이 실행 중인 EC2 인스턴스가 있습니다.",
-                            f"Key Pair 미설정 인스턴스:\n" + "\n".join(no_kp),
-                            "EC2 인스턴스 접근 시 Key Pair(PEM)를 사용하도록 설정하세요.")
-        else:
-            self.safe("C-1.5", "Key Pair 접근 관리", Severity.HIGH,
-                      "모든 실행 중인 EC2 인스턴스에 Key Pair가 설정되어 있습니다.",
-                      f"확인된 인스턴스 {len(instances)}개 모두 Key Pair 사용",
-                      "양호")
-
-    def _chk_key_pair_storage(self):
-        """C-1.6 Key Pair 보관 관리 — 수동 점검"""
-        self.manual("C-1.6", "Key Pair 보관 관리", Severity.HIGH,
-                    "Key Pair 파일의 보관 위치는 수동 확인이 필요합니다.",
-                    "Key Pair 파일이 공용 접근 가능한 위치(퍼블릭 S3, Admin Console 루트 등)에 저장되어 있지 않은지 확인하세요.",
-                    "Key Pair를 프라이빗 S3 버킷 또는 안전한 비밀 관리 서비스에 보관하세요.")
-
-    def _chk_root_console_usage(self):
-        """C-1.7 Admin Console 관리자 정책 관리 — 루트 계정 액세스 키 확인"""
-        iam = self._client("iam")
-        import io, csv
-        report = iam.get_credential_report()
-        content = report["Content"].decode("utf-8")
-        reader = csv.DictReader(io.StringIO(content))
-        for row in reader:
-            if row.get("user") == "<root_account>":
-                ak1 = row.get("access_key_1_active", "false")
-                ak2 = row.get("access_key_2_active", "false")
-                if ak1 == "true" or ak2 == "true":
-                    self.vulnerable("C-1.7", "Admin Console 관리자 정책 관리", Severity.MEDIUM,
-                                    "루트 계정에 활성화된 Access Key가 존재합니다.",
-                                    f"access_key_1_active={ak1}, access_key_2_active={ak2}",
-                                    "루트 계정의 Access Key를 즉시 삭제하고 IAM 사용자 계정을 사용하세요.")
-                else:
-                    self.safe("C-1.7", "Admin Console 관리자 정책 관리", Severity.MEDIUM,
-                              "루트 계정에 활성 Access Key가 없습니다.", "루트 계정 Access Key 없음", "양호")
-                return
-        self.manual("C-1.7", "Admin Console 관리자 정책 관리", Severity.MEDIUM,
-                    "Credential Report 생성 후 재시도 필요",
-                    "IAM > 자격 증명 보고서 생성 후 점검하세요.",
-                    "루트 계정은 일상 업무에 사용하지 않도록 하세요.")
-
-    def _chk_access_key_mgmt(self):
-        """C-1.8 Access Key 활성화 및 사용주기 관리 — 90일 초과 키 확인"""
-        iam = self._client("iam")
-        users = self._paginate("iam", "list_users", "Users")
-        old_keys = []
-        now = datetime.now(timezone.utc)
-        for u in users:
-            keys = iam.list_access_keys(UserName=u["UserName"])["AccessKeyMetadata"]
-            for k in keys:
-                if k["Status"] != "Active":
-                    continue
-                age = (now - k["CreateDate"]).days
-                if age > 90:
-                    old_keys.append(f"{u['UserName']} — KeyId: {k['AccessKeyId'][:8]}... ({age}일 경과)")
-        if old_keys:
-            self.vulnerable("C-1.8", "Admin Console 계정 Access Key 관리", Severity.HIGH,
-                            f"90일 초과 Active Access Key가 {len(old_keys)}개 존재합니다.",
-                            "\n".join(old_keys),
-                            "Access Key 사용 주기를 60일 이내로 관리하고 미사용 키는 삭제하세요.")
-        else:
-            self.safe("C-1.8", "Admin Console 계정 Access Key 관리", Severity.HIGH,
-                      "모든 Active Access Key가 90일 이내입니다.",
-                      f"전체 사용자 {len(users)}명 Access Key 확인 완료",
-                      "양호")
-
     def _chk_mfa(self):
         """C-1.9 MFA 설정 — 루트 및 IAM 사용자 MFA 확인"""
         iam = self._client("iam")
@@ -406,12 +337,12 @@ class AWSScanner(BaseScanner):
                         if r.get("CidrIp") == "0.0.0.0/0":
                             vuln.append(f"[아웃바운드 ALL→0.0.0.0/0] {sgid} ({sgname})")
         if vuln:
-            self.vulnerable("C-3.1", "보안 그룹 인/아웃바운드 ANY 설정 관리", Severity.HIGH,
+            self.vulnerable("C-3.1", "VPC 네트워크 서브넷 관리 (보안 그룹 ANY)", Severity.HIGH,
                             f"인/아웃바운드 ALL 허용 보안 그룹이 {len(vuln)}개 발견되었습니다.",
                             "\n".join(vuln[:30]),
                             "보안 그룹에서 불필요한 ALL(Any) 허용 규칙을 제거하고 필요한 포트만 개방하세요.")
         else:
-            self.safe("C-3.1", "보안 그룹 인/아웃바운드 ANY 설정 관리", Severity.HIGH,
+            self.safe("C-3.1", "VPC 네트워크 서브넷 관리 (보안 그룹 ANY)", Severity.HIGH,
                       "ALL(Any) 포트 허용 보안 그룹이 없습니다.",
                       f"보안 그룹 {len(sgs)}개 확인 완료", "양호")
 
@@ -434,12 +365,12 @@ class AWSScanner(BaseScanner):
                         if ports_in_range or proto == "-1":
                             vuln.append(f"{sgid}({sgname}) 인바운드 {proto} {from_p}-{to_p} from 0.0.0.0/0")
         if vuln:
-            self.vulnerable("C-3.2", "보안 그룹 인/아웃바운드 불필요 정책 관리", Severity.HIGH,
+            self.vulnerable("C-3.3", "접근 제어 설정 관리 (보안 그룹 민감 포트)", Severity.HIGH,
                             f"민감 포트를 0.0.0.0/0으로 허용하는 보안 그룹 규칙이 {len(vuln)}개 있습니다.",
                             "\n".join(vuln[:30]),
                             "SSH(22), RDP(3389), DB 포트 등은 특정 IP/대역으로만 허용하세요.")
         else:
-            self.safe("C-3.2", "보안 그룹 인/아웃바운드 불필요 정책 관리", Severity.HIGH,
+            self.safe("C-3.3", "접근 제어 설정 관리 (보안 그룹 민감 포트)", Severity.HIGH,
                       "민감 포트 전체 허용(0.0.0.0/0) 규칙이 없습니다.",
                       f"보안 그룹 {len(sgs)}개 확인 완료", "양호")
 
@@ -459,12 +390,12 @@ class AWSScanner(BaseScanner):
                     direction = "인바운드" if not entry.get("Egress") else "아웃바운드"
                     vuln.append(f"{acid} {direction} ALL 허용 (rule #{entry['RuleNumber']})")
         if vuln:
-            self.vulnerable("C-3.3", "네트워크 ACL 인/아웃바운드 트래픽 정책 관리", Severity.MEDIUM,
+            self.vulnerable("C-3.1", "VPC 네트워크 서브넷 관리 (네트워크 ACL)", Severity.MEDIUM,
                             f"ALL 트래픽을 허용하는 네트워크 ACL이 {len(vuln)}개 있습니다.",
                             "\n".join(vuln),
                             "네트워크 ACL에서 모든 트래픽 허용 규칙을 제거하고 필요한 포트/IP만 허용하세요.")
         else:
-            self.safe("C-3.3", "네트워크 ACL 인/아웃바운드 트래픽 정책 관리", Severity.MEDIUM,
+            self.safe("C-3.1", "VPC 네트워크 서브넷 관리 (네트워크 ACL)", Severity.MEDIUM,
                       "ALL 허용 네트워크 ACL이 없습니다.",
                       f"네트워크 ACL {len(nacls)}개 확인 완료", "양호")
 
@@ -480,12 +411,12 @@ class AWSScanner(BaseScanner):
                         and route.get("GatewayId", "").startswith("igw-")):
                     igw_routes.append(f"{rtid} → {route['GatewayId']} (0.0.0.0/0)")
         if igw_routes:
-            self.manual("C-3.4", "라우팅 테이블 정책 관리", Severity.MEDIUM,
+            self.manual("C-3.2", "가상 네트워크 리소스 관리 (라우팅 테이블)", Severity.MEDIUM,
                         "인터넷 게이트웨이로의 기본 경로(0.0.0.0/0)가 존재합니다. 서비스 목적에 맞는지 확인하세요.",
                         "\n".join(igw_routes),
                         "퍼블릭 서브넷 이외의 라우팅 테이블에 0.0.0.0/0 → IGW 경로가 있는지 확인하세요.")
         else:
-            self.safe("C-3.4", "라우팅 테이블 정책 관리", Severity.MEDIUM,
+            self.safe("C-3.2", "가상 네트워크 리소스 관리 (라우팅 테이블)", Severity.MEDIUM,
                       "인터넷 게이트웨이로의 기본 경로가 없습니다.",
                       f"라우팅 테이블 {len(rts)}개 확인 완료", "양호")
 
@@ -494,7 +425,7 @@ class AWSScanner(BaseScanner):
         ec2 = self._client("ec2")
         igws = ec2.describe_internet_gateways()["InternetGateways"]
         attached = [igw for igw in igws if igw.get("Attachments")]
-        self.manual("C-3.5", "인터넷 게이트웨이 연결 관리", Severity.LOW,
+        self.manual("C-3.1", "VPC 네트워크 서브넷 관리 (인터넷 게이트웨이)", Severity.LOW,
                     f"연결된 인터넷 게이트웨이 {len(attached)}개를 확인하세요.",
                     "\n".join(
                         f"{igw['InternetGatewayId']} → VPC: {igw['Attachments'][0].get('VpcId','?')}"
@@ -507,7 +438,7 @@ class AWSScanner(BaseScanner):
         ec2 = self._client("ec2")
         nats = ec2.describe_nat_gateways()["NatGateways"]
         active = [n for n in nats if n["State"] == "available"]
-        self.manual("C-3.6", "NAT 게이트웨이 연결 관리", Severity.MEDIUM,
+        self.manual("C-3.1", "VPC 네트워크 서브넷 관리 (NAT 게이트웨이)", Severity.MEDIUM,
                     f"활성 NAT 게이트웨이 {len(active)}개를 확인하세요.",
                     "\n".join(
                         f"{n['NatGatewayId']} (서브넷: {n.get('SubnetId','?')})"
@@ -534,12 +465,12 @@ class AWSScanner(BaseScanner):
             except Exception:
                 vuln.append(f"{name} — 퍼블릭 액세스 차단 설정 없음")
         if vuln:
-            self.vulnerable("C-3.7", "S3 버킷/객체 접근 관리", Severity.MEDIUM,
+            self.vulnerable("C-3.4", "스토리지 리소스 퍼블릭 접근 관리 (S3)", Severity.MEDIUM,
                             f"퍼블릭 액세스 차단이 미완료된 S3 버킷이 {len(vuln)}개 있습니다.",
                             "\n".join(vuln[:20]),
                             "S3 버킷의 모든 퍼블릭 액세스 차단 옵션 4개를 활성화하세요.")
         else:
-            self.safe("C-3.7", "S3 버킷/객체 접근 관리", Severity.MEDIUM,
+            self.safe("C-3.4", "스토리지 리소스 퍼블릭 접근 관리 (S3)", Severity.MEDIUM,
                       "모든 S3 버킷의 퍼블릭 액세스 차단이 설정되어 있습니다.",
                       f"S3 버킷 {len(buckets)}개 확인 완료", "양호")
 
@@ -551,7 +482,7 @@ class AWSScanner(BaseScanner):
         for g in sg:
             azs = list({s["SubnetAvailabilityZone"]["Name"] for s in g.get("Subnets", [])})
             details.append(f"{g['DBSubnetGroupName']}: AZ {azs}")
-        self.manual("C-3.8", "RDS 서브넷 가용 영역 관리", Severity.MEDIUM,
+        self.manual("C-3.4", "스토리지 리소스 퍼블릭 접근 관리 (RDS 서브넷)", Severity.MEDIUM,
                     "RDS 서브넷 그룹에 불필요한 가용 영역이 포함되어 있는지 수동 확인이 필요합니다.",
                     "\n".join(details) or "RDS 서브넷 그룹 없음",
                     "RDS 서브넷 그룹에서 서비스에 필요하지 않은 가용 영역의 서브넷을 제거하세요.")
@@ -560,103 +491,34 @@ class AWSScanner(BaseScanner):
     # 4. 운영 관리
     # ══════════════════════════════════════════════════════════════════
 
-    def _chk_ebs_encryption(self):
-        """C-4.1 EBS 및 볼륨 암호화 설정"""
-        ec2 = self._client("ec2")
-        volumes = ec2.describe_volumes()["Volumes"]
-        unencrypted = [v["VolumeId"] for v in volumes if not v.get("Encrypted")]
-        if unencrypted:
-            self.vulnerable("C-4.1", "EBS 및 볼륨 암호화 설정", Severity.MEDIUM,
-                            f"암호화되지 않은 EBS 볼륨이 {len(unencrypted)}개 있습니다.",
-                            "\n".join(unencrypted[:20]),
-                            "EBS 볼륨을 생성할 때 암호화를 활성화하거나 기존 볼륨을 암호화된 스냅샷으로 교체하세요.")
-        else:
-            self.safe("C-4.1", "EBS 및 볼륨 암호화 설정", Severity.MEDIUM,
-                      "모든 EBS 볼륨이 암호화되어 있습니다.",
-                      f"EBS 볼륨 {len(volumes)}개 확인 완료", "양호")
-
     def _chk_rds_encryption(self):
         """C-4.2 RDS 암호화 설정"""
         rds = self._client("rds")
         dbs = rds.describe_db_instances()["DBInstances"]
         unenc = [d["DBInstanceIdentifier"] for d in dbs if not d.get("StorageEncrypted")]
         if unenc:
-            self.vulnerable("C-4.2", "RDS 암호화 설정", Severity.MEDIUM,
+            self.vulnerable("C-4.1", "관계형 데이터베이스 암호화 설정", Severity.MEDIUM,
                             f"암호화되지 않은 RDS 인스턴스가 {len(unenc)}개 있습니다.",
                             "\n".join(unenc),
                             "RDS 인스턴스 생성 시 저장 데이터 암호화를 활성화하세요.")
         else:
-            self.safe("C-4.2", "RDS 암호화 설정", Severity.MEDIUM,
+            self.safe("C-4.1", "관계형 데이터베이스 암호화 설정", Severity.MEDIUM,
                       "모든 RDS 인스턴스가 암호화되어 있습니다.",
                       f"RDS 인스턴스 {len(dbs)}개 확인 완료", "양호")
 
-    def _chk_s3_encryption(self):
-        """C-4.3 S3 암호화 설정 — SSE-S3 또는 SSE-KMS 확인"""
-        s3 = self._client("s3")
-        buckets = s3.list_buckets().get("Buckets", [])
-        unenc = []
-        for b in buckets:
-            name = b["Name"]
-            try:
-                enc = s3.get_bucket_encryption(Bucket=name)
-                rules = enc["ServerSideEncryptionConfiguration"]["Rules"]
-                if not any(r.get("ApplyServerSideEncryptionByDefault") for r in rules):
-                    unenc.append(f"{name} — 암호화 규칙 없음")
-            except Exception:
-                unenc.append(f"{name} — 암호화 미설정")
-        if unenc:
-            self.vulnerable("C-4.3", "S3 암호화 설정", Severity.MEDIUM,
-                            f"기본 암호화가 설정되지 않은 S3 버킷이 {len(unenc)}개 있습니다.",
-                            "\n".join(unenc[:20]),
-                            "S3 버킷 속성에서 SSE-S3 또는 SSE-KMS 기본 암호화를 활성화하세요.")
-        else:
-            self.safe("C-4.3", "S3 암호화 설정", Severity.MEDIUM,
-                      "모든 S3 버킷에 기본 암호화가 설정되어 있습니다.",
-                      f"S3 버킷 {len(buckets)}개 확인 완료", "양호")
-
     def _chk_tls_encryption(self):
-        """C-4.4 통신구간 암호화 설정 — 수동 점검"""
-        self.manual("C-4.4", "통신구간 암호화 설정", Severity.MEDIUM,
+        """C-4.2 통신구간 암호화 설정 — 수동 점검"""
+        self.manual("C-4.2", "통신구간 암호화 설정", Severity.MEDIUM,
                     "통신구간 암호화(TLS/SSL, VPN, SSH) 적용 여부는 수동 확인이 필요합니다.",
                     "서비스간 통신에 암호화된 채널(TLS 1.2 이상, OpenSSH, VPN)이 사용되는지 점검하세요.",
                     "내/외부 통신 구간에 TLS 1.2 이상을 적용하고 평문 통신을 금지하세요.")
 
-    def _chk_cloudtrail_encryption(self):
-        """C-4.5 CloudTrail 암호화 설정 — SSE-KMS 확인"""
-        ct = self._client("cloudtrail")
-        trails = ct.describe_trails()["trailList"]
-        unenc = [t["Name"] for t in trails if not t.get("KMSKeyId")]
-        if unenc:
-            self.vulnerable("C-4.5", "CloudTrail 암호화 설정", Severity.MEDIUM,
-                            f"KMS 암호화가 설정되지 않은 CloudTrail이 {len(unenc)}개 있습니다.",
-                            "\n".join(unenc),
-                            "CloudTrail 로그 파일에 SSE-KMS 암호화를 설정하세요.")
-        else:
-            self.safe("C-4.5", "CloudTrail 암호화 설정", Severity.MEDIUM,
-                      "모든 CloudTrail에 KMS 암호화가 설정되어 있습니다.",
-                      f"CloudTrail {len(trails)}개 확인 완료", "양호")
-
-    def _chk_cloudwatch_encryption(self):
-        """C-4.6 CloudWatch 암호화 설정 — 로그 그룹 KMS 확인"""
-        logs = self._client("logs")
-        groups = self._paginate("logs", "describe_log_groups", "logGroups")
-        unenc = [g["logGroupName"] for g in groups if not g.get("kmsKeyId")]
-        if unenc:
-            self.vulnerable("C-4.6", "CloudWatch 암호화 설정", Severity.MEDIUM,
-                            f"KMS 암호화가 설정되지 않은 CloudWatch 로그 그룹이 {len(unenc)}개 있습니다.",
-                            "\n".join(unenc[:20]),
-                            "CloudWatch 로그 그룹 생성 시 KMS 키 ARN을 설정하세요.")
-        else:
-            self.safe("C-4.6", "CloudWatch 암호화 설정", Severity.MEDIUM,
-                      "모든 CloudWatch 로그 그룹에 KMS 암호화가 설정되어 있습니다.",
-                      f"로그 그룹 {len(groups)}개 확인 완료", "양호")
-
     def _chk_cloudtrail_logging(self):
-        """C-4.7 AWS 사용자 계정 로깅 설정 — CloudTrail 활성화 확인"""
+        """C-4.3 클라우드 서비스 사용자 계정 로깅 설정 — CloudTrail 활성화 확인"""
         ct = self._client("cloudtrail")
         trails = ct.describe_trails()["trailList"]
         if not trails:
-            self.vulnerable("C-4.7", "AWS 사용자 계정 로깅 설정", Severity.HIGH,
+            self.vulnerable("C-4.3", "클라우드 서비스 사용자 계정 로깅 설정", Severity.HIGH,
                             "CloudTrail이 설정되어 있지 않습니다.",
                             "CloudTrail 추적 없음",
                             "CloudTrail을 활성화하여 모든 AWS 계정 활동을 로깅하세요.")
@@ -667,30 +529,30 @@ class AWSScanner(BaseScanner):
             if not status.get("IsLogging"):
                 inactive.append(t["Name"])
         if inactive:
-            self.vulnerable("C-4.7", "AWS 사용자 계정 로깅 설정", Severity.HIGH,
+            self.vulnerable("C-4.3", "클라우드 서비스 사용자 계정 로깅 설정", Severity.HIGH,
                             f"로깅이 비활성화된 CloudTrail이 {len(inactive)}개 있습니다.",
                             "\n".join(inactive),
                             "CloudTrail 로깅을 활성화하세요.")
         else:
-            self.safe("C-4.7", "AWS 사용자 계정 로깅 설정", Severity.HIGH,
+            self.safe("C-4.3", "클라우드 서비스 사용자 계정 로깅 설정", Severity.HIGH,
                       "모든 CloudTrail이 활성화되어 있습니다.",
                       f"CloudTrail {len(trails)}개 로깅 활성화 확인", "양호")
 
     def _chk_instance_logging(self):
-        """C-4.8 인스턴스 로깅 설정 — CloudWatch 에이전트 수동 점검"""
+        """C-4.4 인스턴스 로깅 설정 — CloudWatch 에이전트 수동 점검"""
         ec2 = self._client("ec2")
         instances = []
         for r in ec2.describe_instances()["Reservations"]:
             for i in r["Instances"]:
                 if i["State"]["Name"] == "running":
                     instances.append(i.get("InstanceId", "?"))
-        self.manual("C-4.8", "인스턴스 로깅 설정", Severity.MEDIUM,
+        self.manual("C-4.4", "인스턴스 로깅 설정", Severity.MEDIUM,
                     f"실행 중인 EC2 인스턴스 {len(instances)}개의 CloudWatch 에이전트 설치 여부를 수동 확인하세요.",
                     "인스턴스 ID:\n" + "\n".join(instances[:20]),
                     "각 EC2 인스턴스에 CloudWatch 에이전트를 설치하고 로그 스트림을 설정하세요.")
 
     def _chk_rds_logging(self):
-        """C-4.9 RDS 로깅 설정 — CloudWatch 로그 내보내기 확인"""
+        """C-4.5 관계형 데이터베이스 로깅 설정 — CloudWatch 로그 내보내기 확인"""
         rds = self._client("rds")
         dbs = rds.describe_db_instances()["DBInstances"]
         no_log = []
@@ -699,17 +561,17 @@ class AWSScanner(BaseScanner):
             if not exports:
                 no_log.append(f"{d['DBInstanceIdentifier']} ({d['Engine']})")
         if no_log:
-            self.vulnerable("C-4.9", "RDS 로깅 설정", Severity.MEDIUM,
+            self.vulnerable("C-4.5", "관계형 데이터베이스 로깅 설정", Severity.MEDIUM,
                             f"CloudWatch 로그 내보내기가 설정되지 않은 RDS 인스턴스가 {len(no_log)}개 있습니다.",
                             "\n".join(no_log),
                             "RDS 인스턴스 수정 → 로그 내보내기 옵션을 활성화하세요.")
         else:
-            self.safe("C-4.9", "RDS 로깅 설정", Severity.MEDIUM,
+            self.safe("C-4.5", "관계형 데이터베이스 로깅 설정", Severity.MEDIUM,
                       "모든 RDS 인스턴스에 CloudWatch 로그 내보내기가 설정되어 있습니다.",
                       f"RDS 인스턴스 {len(dbs)}개 확인 완료", "양호")
 
     def _chk_s3_logging(self):
-        """C-4.10 S3 버킷 로깅 설정 — 서버 액세스 로깅 확인"""
+        """C-4.6 오브젝트 스토리지 버킷 로깅 설정 — 서버 액세스 로깅 확인"""
         s3 = self._client("s3")
         buckets = s3.list_buckets().get("Buckets", [])
         no_log = []
@@ -722,34 +584,17 @@ class AWSScanner(BaseScanner):
             except Exception:
                 no_log.append(f"{name} (오류)")
         if no_log:
-            self.vulnerable("C-4.10", "S3 버킷 로깅 설정", Severity.MEDIUM,
+            self.vulnerable("C-4.6", "오브젝트 스토리지 버킷 로깅 설정", Severity.MEDIUM,
                             f"서버 액세스 로깅이 비활성화된 S3 버킷이 {len(no_log)}개 있습니다.",
                             "\n".join(no_log[:20]),
                             "S3 버킷 속성에서 서버 액세스 로깅을 활성화하세요.")
         else:
-            self.safe("C-4.10", "S3 버킷 로깅 설정", Severity.MEDIUM,
+            self.safe("C-4.6", "오브젝트 스토리지 버킷 로깅 설정", Severity.MEDIUM,
                       "모든 S3 버킷에 서버 액세스 로깅이 설정되어 있습니다.",
                       f"S3 버킷 {len(buckets)}개 확인 완료", "양호")
 
-    def _chk_vpc_flow_log(self):
-        """C-4.11 VPC 플로우 로깅 설정"""
-        ec2 = self._client("ec2")
-        vpcs = ec2.describe_vpcs()["Vpcs"]
-        flow_logs = ec2.describe_flow_logs()["FlowLogs"]
-        vpc_with_logs = {fl["ResourceId"] for fl in flow_logs if fl.get("FlowLogStatus") == "ACTIVE"}
-        no_log = [v["VpcId"] for v in vpcs if v["VpcId"] not in vpc_with_logs]
-        if no_log:
-            self.vulnerable("C-4.11", "VPC 플로우 로깅 설정", Severity.MEDIUM,
-                            f"플로우 로그가 설정되지 않은 VPC가 {len(no_log)}개 있습니다.",
-                            "\n".join(no_log),
-                            "VPC 플로우 로그를 활성화하여 네트워크 트래픽을 모니터링하세요.")
-        else:
-            self.safe("C-4.11", "VPC 플로우 로깅 설정", Severity.MEDIUM,
-                      "모든 VPC에 플로우 로그가 설정되어 있습니다.",
-                      f"VPC {len(vpcs)}개 확인 완료", "양호")
-
     def _chk_log_retention(self):
-        """C-4.12 로그 보관 기간 설정 — CloudWatch 로그 그룹 보존 기간 확인"""
+        """C-4.7 로그 보관 기간 설정 — CloudWatch 로그 그룹 보존 기간 확인"""
         groups = self._paginate("logs", "describe_log_groups", "logGroups")
         issues = []
         for g in groups:
@@ -759,26 +604,26 @@ class AWSScanner(BaseScanner):
             elif ret < 365:
                 issues.append(f"{g['logGroupName']} — {ret}일 (권고: 365일 이상)")
         if issues:
-            self.vulnerable("C-4.12", "로그 보관 기간 설정", Severity.MEDIUM,
+            self.vulnerable("C-4.7", "로그 보관 기간 설정", Severity.MEDIUM,
                             f"보관 기간이 1년 미만인 CloudWatch 로그 그룹이 {len(issues)}개 있습니다.",
                             "\n".join(issues[:20]),
                             "CloudWatch 로그 그룹의 보존 기간을 최소 365일(1년) 이상으로 설정하세요.")
         else:
-            self.safe("C-4.12", "로그 보관 기간 설정", Severity.MEDIUM,
+            self.safe("C-4.7", "로그 보관 기간 설정", Severity.MEDIUM,
                       "모든 CloudWatch 로그 그룹의 보관 기간이 1년 이상입니다.",
                       f"로그 그룹 {len(groups)}개 확인 완료", "양호")
 
     def _chk_backup(self):
-        """C-4.13 백업 사용 여부 — AWS Backup 플랜 확인"""
+        """C-4.8 백업 사용 여부 — AWS Backup 플랜 확인"""
         backup = self._client("backup")
         plans = backup.list_backup_plans()["BackupPlansList"]
         if not plans:
-            self.vulnerable("C-4.13", "백업 사용 여부", Severity.MEDIUM,
+            self.vulnerable("C-4.8", "백업 사용 여부", Severity.MEDIUM,
                             "AWS Backup 플랜이 설정되어 있지 않습니다.",
                             "AWS Backup 플랜 없음",
                             "AWS Backup을 사용하여 EC2, RDS, EBS, S3 등 주요 리소스의 백업 정책을 수립하세요.")
         else:
-            self.safe("C-4.13", "백업 사용 여부", Severity.MEDIUM,
+            self.safe("C-4.8", "백업 사용 여부", Severity.MEDIUM,
                       f"AWS Backup 플랜이 {len(plans)}개 설정되어 있습니다.",
                       "\n".join(p["BackupPlanName"] for p in plans),
                       "백업 플랜의 대상 리소스와 보존 기간이 정책에 맞는지 주기적으로 검토하세요.")
@@ -818,7 +663,7 @@ class AWSScanner(BaseScanner):
                       "액세스 키 교체 주기(90일)를 유지하고 불필요한 키는 삭제하세요.")
 
     def _chk_aws_config(self):
-        """C-4.14 AWS Config 서비스 활성화 점검 [★2026 신규]
+        """C-4.9 AWS Config 서비스 활성화 점검 [★2026 신규]
         주통기 2026: AWS Config 비활성화 시 리소스 구성 변경 이력 추적 불가.
         현재 리전에서 Config recorder가 활성화·기록 중인지 점검.
         """
@@ -828,7 +673,7 @@ class AWSScanner(BaseScanner):
         )
 
         if not recorders:
-            self.vulnerable("C-4.14", "AWS Config 서비스 활성화", Severity.HIGH,
+            self.vulnerable("C-4.9", "AWS Config 서비스 활성화", Severity.HIGH,
                             "AWS Config Configuration Recorder가 설정되어 있지 않습니다.",
                             "Config Recorder 없음",
                             "AWS Config를 활성화하여 모든 리소스 구성 변경을 기록하고 규정 준수 여부를 추적하세요.")
@@ -837,18 +682,18 @@ class AWSScanner(BaseScanner):
         not_recording = [r["name"] for r in recorders if not r.get("recording", False)]
 
         if not_recording:
-            self.vulnerable("C-4.14", "AWS Config 서비스 활성화", Severity.HIGH,
+            self.vulnerable("C-4.9", "AWS Config 서비스 활성화", Severity.HIGH,
                             f"Config Recorder가 기록 중지 상태: {', '.join(not_recording)}",
                             "recording=False",
                             "AWS Config Recorder를 시작하세요: aws configservice start-configuration-recorder")
         else:
-            self.safe("C-4.14", "AWS Config 서비스 활성화", Severity.HIGH,
+            self.safe("C-4.9", "AWS Config 서비스 활성화", Severity.HIGH,
                       f"AWS Config Recorder {len(recorders)}개 모두 활성화·기록 중",
                       "양호",
                       "Config 규칙을 추가하여 보안 정책 준수 여부를 자동으로 평가하세요.")
 
     def _chk_guardduty(self):
-        """C-4.15 GuardDuty 활성화 점검 [★2026 신규]
+        """C-4.10 GuardDuty 활성화 점검 [★2026 신규]
         주통기 2026: GuardDuty 비활성화 시 비정상 API 호출, 악성 IP 접근,
         자격 증명 유출 등 위협을 자동 탐지할 수 없음.
         """
@@ -856,7 +701,7 @@ class AWSScanner(BaseScanner):
         detectors = gd.list_detectors().get("DetectorIds", [])
 
         if not detectors:
-            self.vulnerable("C-4.15", "GuardDuty 활성화", Severity.HIGH,
+            self.vulnerable("C-4.10", "GuardDuty 활성화", Severity.HIGH,
                             "GuardDuty 탐지기가 설정되어 있지 않습니다.",
                             "GuardDuty Detector 없음",
                             "GuardDuty를 활성화하여 위협 탐지를 설정하세요:\n"
@@ -871,13 +716,13 @@ class AWSScanner(BaseScanner):
                 issues.append(f"Detector {det_id}: {status}")
 
         if issues:
-            self.vulnerable("C-4.15", "GuardDuty 활성화", Severity.HIGH,
+            self.vulnerable("C-4.10", "GuardDuty 활성화", Severity.HIGH,
                             f"비활성화된 GuardDuty 탐지기 {len(issues)}개:",
                             "\n".join(issues),
                             "GuardDuty 탐지기를 활성화하세요:\n"
                             "aws guardduty update-detector --detector-id <ID> --enable")
         else:
-            self.safe("C-4.15", "GuardDuty 활성화", Severity.HIGH,
+            self.safe("C-4.10", "GuardDuty 활성화", Severity.HIGH,
                       f"GuardDuty 탐지기 {len(detectors)}개 모두 활성화됨",
                       "양호",
                       "GuardDuty 결과(Findings)를 정기적으로 검토하고 위협에 즉시 대응하세요.")

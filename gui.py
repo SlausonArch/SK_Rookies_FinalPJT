@@ -930,7 +930,11 @@ class VulnScannerGUI:
                 self._start_ssm_tunnel()
             opts     = self._make_opts(executor)
             k        = self.mod_key.get()
-            active_mods = _MODULES_JTK if self.guide_key.get() == "jtk" else _MODULES_SK
+            guide    = self.guide_key.get()
+            active_mods = _MODULES_JTK if guide == "jtk" else _MODULES_SK
+            guide_label = ("주요정보통신기반시설 기술적 취약점 분석·평가 가이드" if guide == "jtk"
+                           else "SK Shieldus 표준 보안 가이드")
+            print(f"  기준 가이드: {guide_label}")
             Cls      = active_mods[k]["loader"]()
             valid    = set(inspect.signature(Cls.__init__).parameters) - {"self"}
             scanner  = Cls(**{p: v for p, v in opts.items() if p in valid})

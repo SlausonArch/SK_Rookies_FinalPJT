@@ -59,7 +59,7 @@ _DEFAULT_ACCOUNTS = {
 
 
 class LinuxScanner(BaseScanner):
-    CATEGORY = "OS-Linux"
+    CATEGORY = "OS-Linux [주통기]"
 
     # ── 헬퍼 ───────────────────────────────────────────────────
 
