@@ -21,10 +21,12 @@ import WithdrawalComplete from './pages/WithdrawalComplete';
 import Events from './pages/Events';
 import Support from './pages/Support';
 import PrivacyPolicy from './pages/PrivacyPolicy';
+import ApiDocs from './pages/ApiDocs';
 import { syncUserAuthState, syncAdminAuthState, setUserSession, getUserAccessToken } from './utils/auth';
 
 const mode = import.meta.env.VITE_APP_MODE || 'exchange'; // 'bank' or 'exchange' or 'admin'
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:18080';
+const enableApiDocs = import.meta.env.VITE_ENABLE_API_DOCS === 'true';
 
 // 모드별로 해당 토큰만 초기 동기화 (관리자 토큰이 거래소/은행에 노출되지 않도록 분리)
 if (mode === 'admin') {
@@ -95,6 +97,7 @@ function App() {
           <Route path="/signup/complete" element={<SignupComplete />} />
           <Route path="/oauth/callback" element={<OAuthCallback />} />
           <Route path="/bank" element={<BankDashboard />} />
+          {enableApiDocs && <Route path="/api-docs" element={<ApiDocs />} />}
           <Route path="*" element={<Navigate to="/bank" />} />
         </Routes>
       </Router>
@@ -133,6 +136,7 @@ function App() {
         <Route path="/mypage" element={<MyPage />} />
         <Route path="/withdrawal-complete" element={<WithdrawalComplete />} />
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+        {enableApiDocs && <Route path="/api-docs" element={<ApiDocs />} />}
         <Route path="/" element={<Navigate to="/crypto" />} />
         <Route path="/crypto" element={<Home />} />
         <Route path="*" element={<Navigate to="/crypto" />} />

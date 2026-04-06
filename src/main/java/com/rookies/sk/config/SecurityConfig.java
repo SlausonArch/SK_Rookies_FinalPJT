@@ -108,6 +108,7 @@ public class SecurityConfig {
                                                 .requestMatchers(HttpMethod.GET, "/api/community/posts/**").permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/api/news").permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/api/market/**").permitAll()
+                                                .requestMatchers(HttpMethod.GET, "/api/dev/api-docs").permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/api/support/faqs").permitAll()
                                                 .requestMatchers("/api/auth/signup/complete").hasRole("GUEST")
                                                 .requestMatchers("/api/files/id-photo/**")
