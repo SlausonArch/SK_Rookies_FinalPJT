@@ -27,8 +27,12 @@ public class SignupTokenStore {
     public record TokenInfo(String accessToken, String email) {}
 
     public TokenInfo consume(String code) {
-        Entry entry = store.remove(code);
-        if (entry == null || Instant.now().isAfter(entry.expiresAt())) {
+        Entry entry = store.get(code);
+        if (entry == null) {
+            return null;
+        }
+        if (Instant.now().isAfter(entry.expiresAt())) {
+            store.remove(code);
             return null;
         }
         return new TokenInfo(entry.accessToken(), entry.email());
