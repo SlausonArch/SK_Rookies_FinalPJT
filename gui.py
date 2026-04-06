@@ -7,22 +7,41 @@ from tkinter import ttk, filedialog, messagebox
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from core import reporter
 
-MODULES = {
-    "1": {"name": "OS - Linux",           "tag": "LINUX", "desc": "계정/패스워드 · 파일 권한 · SSH · 서비스 · 로그 · 커널",
-          "loader": lambda: __import__("modules.os.linux_scanner",        fromlist=["LinuxScanner"]).LinuxScanner},
+_MODULES_SK = {
+    "1": {"name": "OS - Linux",           "tag": "LINUX", "desc": "계정/패스워드 · 파일 권한 · SSH · 서비스 · 로그 · 커널  [58개]",
+          "loader": lambda: __import__("modules.os.linux_scanner",            fromlist=["LinuxScanner"]).LinuxScanner},
     "2": {"name": "OS - Windows",         "tag": "WIN",   "desc": "계정 정책 · 레지스트리 · 감사 정책 · RDP · SMB",
-          "loader": lambda: __import__("modules.os.windows_scanner",      fromlist=["WindowsScanner"]).WindowsScanner},
+          "loader": lambda: __import__("modules.os.windows_scanner",          fromlist=["WindowsScanner"]).WindowsScanner},
     "3": {"name": "WebServer - Nginx",    "tag": "NGINX", "desc": "버전 노출 · 디렉토리 리스팅 · SSL/TLS · 보안 헤더",
-          "loader": lambda: __import__("modules.webserver.nginx_scanner", fromlist=["NginxScanner"]).NginxScanner},
+          "loader": lambda: __import__("modules.webserver.nginx_scanner",     fromlist=["NginxScanner"]).NginxScanner},
     "4": {"name": "WebServer - IIS",      "tag": "IIS",   "desc": "디렉토리 브라우징 · 버전 노출 · HTTP 메서드 · 로그",
-          "loader": lambda: __import__("modules.webserver.iis_scanner",   fromlist=["IISScanner"]).IISScanner},
+          "loader": lambda: __import__("modules.webserver.iis_scanner",       fromlist=["IISScanner"]).IISScanner},
     "5": {"name": "DBMS  MySQL/PG/MSSQL", "tag": "DB",    "desc": "포트 노출 · 기본 계정 · 원격 root · 감사 로그",
-          "loader": lambda: __import__("modules.dbms.dbms_scanner",       fromlist=["DBMSScanner"]).DBMSScanner},
+          "loader": lambda: __import__("modules.dbms.dbms_scanner",           fromlist=["DBMSScanner"]).DBMSScanner},
     "6": {"name": "Oracle  11g ~ 21c",    "tag": "ORA",   "desc": "계정/권한 · 보안설정 · 환경파일 · 감사 — 서버/Docker/RDS",
-          "loader": lambda: __import__("modules.dbms.oracle_scanner",     fromlist=["OracleScanner"]).OracleScanner},
-    "7": {"name": "Cloud - AWS",          "tag": "AWS",   "desc": "IAM · 보안그룹 · S3 · RDS · CloudTrail · VPC · 백업 (SK Shieldus 가이드라인)",
-          "loader": lambda: __import__("modules.cloud.aws_scanner",       fromlist=["AWSScanner"]).AWSScanner},
+          "loader": lambda: __import__("modules.dbms.oracle_scanner",         fromlist=["OracleScanner"]).OracleScanner},
+    "7": {"name": "Cloud - AWS",          "tag": "AWS",   "desc": "IAM · 보안그룹 · S3 · RDS · CloudTrail · VPC · 백업",
+          "loader": lambda: __import__("modules.cloud.aws_scanner",           fromlist=["AWSScanner"]).AWSScanner},
 }
+
+_MODULES_JTK = {
+    "1": {"name": "OS - Linux",           "tag": "LINUX", "desc": "계정/패스워드 · 파일 권한 · SSH · 서비스 · 로그 · 커널  [67개, 주통기 2026]",
+          "loader": lambda: __import__("modules.os.linux_scanner_jtk",        fromlist=["LinuxScanner"]).LinuxScanner},
+    "2": {"name": "OS - Windows",         "tag": "WIN",   "desc": "계정 정책 · 레지스트리 · 감사 정책 · RDP · SMB  [주통기 2026 +6]",
+          "loader": lambda: __import__("modules.os.windows_scanner_jtk",      fromlist=["WindowsScanner"]).WindowsScanner},
+    "3": {"name": "WebServer - Nginx",    "tag": "NGINX", "desc": "버전 노출 · 디렉토리 리스팅 · SSL/TLS · 보안 헤더",
+          "loader": lambda: __import__("modules.webserver.nginx_scanner",     fromlist=["NginxScanner"]).NginxScanner},
+    "4": {"name": "WebServer - IIS",      "tag": "IIS",   "desc": "디렉토리 브라우징 · 버전 노출 · HTTP 메서드 · 로그",
+          "loader": lambda: __import__("modules.webserver.iis_scanner",       fromlist=["IISScanner"]).IISScanner},
+    "5": {"name": "DBMS  MySQL/PG/MSSQL", "tag": "DB",    "desc": "포트 노출 · 기본 계정 · 원격 root · 감사 로그  [주통기 2026 +5]",
+          "loader": lambda: __import__("modules.dbms.dbms_scanner_jtk",       fromlist=["DBMSScanner"]).DBMSScanner},
+    "6": {"name": "Oracle  11g ~ 21c",    "tag": "ORA",   "desc": "계정/권한 · 보안설정 · 환경파일 · 감사 — 서버/Docker/RDS",
+          "loader": lambda: __import__("modules.dbms.oracle_scanner",         fromlist=["OracleScanner"]).OracleScanner},
+    "7": {"name": "Cloud - AWS",          "tag": "AWS",   "desc": "IAM · 보안그룹 · S3 · RDS · CloudTrail · VPC · 백업  [주통기 2026 +3]",
+          "loader": lambda: __import__("modules.cloud.aws_scanner_jtk",       fromlist=["AWSScanner"]).AWSScanner},
+}
+
+MODULES = _MODULES_SK  # 기본값 — 런타임에 교체됨
 
 # ── Binance-style palette ─────────────────────────────────────────────────────
 C_BG    = "#0b0e11"
@@ -132,6 +151,7 @@ class VulnScannerGUI:
 
     # ── 변수 ─────────────────────────────────────────────────────────────────
     def _init_vars(self):
+        self.guide_key  = tk.StringVar(value="sk")   # "sk" | "jtk"
         self.conn_mode  = tk.StringVar(value="1")
         self.ssh_host   = tk.StringVar()
         self.ssh_port   = tk.StringVar(value="22")
@@ -242,7 +262,7 @@ class VulnScannerGUI:
                  font=(_UI, 16, "bold")).pack(side=tk.LEFT)
         tk.Label(inner, text=" VulnScanner", bg=C_DEEP, fg=C_FG,
                  font=(_UI, 15, "bold")).pack(side=tk.LEFT)
-        tk.Label(inner, text="  SK Shieldus 보안 가이드라인", bg=C_DEEP, fg=C_MUTE,
+        tk.Label(inner, text="  취약점 진단 자동화", bg=C_DEEP, fg=C_MUTE,
                  font=(_UI, 9)).pack(side=tk.LEFT, padx=(10, 0))
 
         rf = tk.Frame(inner, bg=C_DEEP)
@@ -259,7 +279,27 @@ class VulnScannerGUI:
         sf.pack(fill=tk.BOTH, expand=True)
         p = sf.inner
 
+        # ── GUIDE ───────────────────────────────────────────────────────────
+        self._shdr(p, "GUIDE")
+        gf = tk.Frame(p, bg=C_CARD); gf.pack(fill=tk.X, padx=16, pady=(2, 8))
+        self.guide_btns = {}
+        guide_defs = [
+            ("sk",  "SK Shieldus 표준",      "SK 내부 보안 가이드라인"),
+            ("jtk", "주요정보통신기반시설",   "주통기 2026 개정 반영"),
+        ]
+        for val, label, tooltip in guide_defs:
+            b = tk.Button(gf, text=label, bg=C_LINE, fg=C_SUB,
+                          relief=tk.FLAT, font=(_UI, 9), padx=10, pady=6,
+                          cursor="hand2", command=lambda v=val: self._set_guide(v))
+            b.pack(side=tk.LEFT, padx=(0, 4))
+            self.guide_btns[val] = b
+        self._guide_hint = tk.Label(gf, text="SK 내부 보안 가이드라인",
+                                    bg=C_CARD, fg=C_MUTE, font=(_UI, 8))
+        self._guide_hint.pack(side=tk.LEFT, padx=(6, 0))
+        self._set_guide("sk")   # 초기값 적용
+
         # ── TARGET ──────────────────────────────────────────────────────────
+        tk.Frame(p, bg=C_LINE, height=1).pack(fill=tk.X, pady=(0, 0))
         self._shdr(p, "TARGET")
         self._field(p, "진단 대상 호스트  (리포트 표시용)", self.target)
 
@@ -414,6 +454,26 @@ class VulnScannerGUI:
     def _on_cred(self):
         if self.ssm_cred.get() == "1": self.f_ssm_key.pack(fill=tk.X, padx=16, pady=4)
         else: self.f_ssm_key.pack_forget()
+
+    # ── Guide selection ───────────────────────────────────────────────────────
+    def _set_guide(self, val):
+        global MODULES
+        self.guide_key.set(val)
+        hints = {
+            "sk":  "SK 내부 보안 가이드라인",
+            "jtk": "주통기 2026 개정 반영",
+        }
+        active_modules = _MODULES_SK if val == "sk" else _MODULES_JTK
+        MODULES = active_modules
+        for k, b in self.guide_btns.items():
+            if k == val: b.configure(bg=C_GOLD, fg=C_BG, font=(_UI, 9, "bold"))
+            else:        b.configure(bg=C_LINE, fg=C_SUB, font=(_UI, 9, "normal"))
+        self._guide_hint.config(text=hints.get(val, ""))
+        # 모듈 설명 텍스트 업데이트
+        if hasattr(self, "mod_rows"):
+            for k, (row, bar, inner, top, tl, nl, dl) in self.mod_rows.items():
+                if k in active_modules:
+                    dl.config(text=active_modules[k]["desc"])
 
     # ── Module list ───────────────────────────────────────────────────────────
     def _build_mod_list(self, parent):
@@ -870,7 +930,8 @@ class VulnScannerGUI:
                 self._start_ssm_tunnel()
             opts     = self._make_opts(executor)
             k        = self.mod_key.get()
-            Cls      = MODULES[k]["loader"]()
+            active_mods = _MODULES_JTK if self.guide_key.get() == "jtk" else _MODULES_SK
+            Cls      = active_mods[k]["loader"]()
             valid    = set(inspect.signature(Cls.__init__).parameters) - {"self"}
             scanner  = Cls(**{p: v for p, v in opts.items() if p in valid})
             scanner._stop_event = self._stop_event   # 중단 신호 주입

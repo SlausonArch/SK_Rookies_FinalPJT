@@ -1,13 +1,26 @@
 """
 OS - Linux 취약점 진단 모듈
-점검 기준: 58개 항목
-  1. 계정 관리        (1.1  ~ 1.12)  12개
-  2. 파일 시스템      (2.1  ~ 2.23)  23개
-  3. 네트워크 서비스  (3.1  ~ 3.10)  10개
-  4. 로그 관리        (4.1  ~ 4.3)    3개
+점검 기준: 주요통신기반시설 보안가이드 (2026년 개정 반영)
+  1. 계정 관리        (1.1  ~ 1.13)  13개
+  2. 파일 시스템      (2.1  ~ 2.24)  24개
+  3. 네트워크 서비스  (3.1  ~ 3.15)  15개
+  4. 로그 관리        (4.1  ~ 4.5)    5개
   5. 주요 응용 설정   (5.1  ~ 5.6)    6개
   6. 시스템 보안 설정 (6.1  ~ 6.3)    3개
   7. 보안 패치        (7.1)           1개
+
+개정 사항 (2026):
+  - U-02: 개별 패스워드 설정 → 정책 기반 점검으로 변경 (pwquality.conf 포함)
+  - U-13: 비밀번호 암호화 알고리즘 점검 신규 추가 (SHA-512 여부)
+  - U-17: 시스템 시작 스크립트 권한 설정 신규 추가
+  - U-35: 익명 FTP → 공유 서비스 전체 익명 접근 제한으로 확장
+  - U-51: DNS 취약한 동적 업데이트 설정 금지 신규 추가
+  - U-52: Telnet 서비스 비활성화 신규 추가
+  - U-53/54/55: FTP 보안 강화 (정보노출·암호화·접근제어)
+  - U-59/61: SNMP v3 및 ACL 점검 신규 추가
+  - U-63: sudo 명령어 접근 관리 신규 추가
+  - U-65: NTP 시각 동기화 신규 추가
+  - U-67: 로그 디렉터리 소유자 및 권한 설정 신규 추가
 """
 import os
 import re
@@ -149,21 +162,22 @@ class LinuxScanner(BaseScanner):
         print("\n  ─── 1. 계정 관리 ───────────────────────────────────")
         self._a01(); self._a02(); self._a03(); self._a04(); self._a05()
         self._a06(); self._a07(); self._a08(); self._a09(); self._a10()
-        self._a11(); self._a12()
+        self._a11(); self._a12(); self._a13()
 
         print("\n  ─── 2. 파일 시스템 ─────────────────────────────────")
         self._b01(); self._b02(); self._b03(); self._b04(); self._b05()
         self._b06(); self._b07(); self._b08(); self._b09(); self._b10()
         self._b11(); self._b12(); self._b13(); self._b14(); self._b15()
         self._b16(); self._b17(); self._b18(); self._b19(); self._b20()
-        self._b21(); self._b22(); self._b23()
+        self._b21(); self._b22(); self._b23(); self._b24()
 
         print("\n  ─── 3. 네트워크 서비스 ─────────────────────────────")
         self._c01(); self._c02(); self._c03(); self._c04(); self._c05()
         self._c06(); self._c07(); self._c08(); self._c09(); self._c10()
+        self._c11(); self._c12(); self._c13(); self._c14(); self._c15()
 
         print("\n  ─── 4. 로그 관리 ───────────────────────────────────")
-        self._d01(); self._d02(); self._d03()
+        self._d01(); self._d02(); self._d03(); self._d04(); self._d05()
 
         print("\n  ─── 5. 주요 응용 설정 ──────────────────────────────")
         self._e01(); self._e02(); self._e03(); self._e04(); self._e05(); self._e06()
@@ -355,22 +369,26 @@ class LinuxScanner(BaseScanner):
                      rec, command="ls -al /etc/shadow", cmd_output="(파일 없음)")
 
     def _a07(self):
-        """1.7 패스워드 사용 규칙 적용"""
+        """1.7 패스워드 사용 규칙 적용 (U-02 — 2026: 정책 기반 점검으로 변경)"""
         cid, name = "1.7", "패스워드 사용 규칙 적용"
-        desc = ("PASS_MIN_LEN(8자↑), PASS_MAX_DAYS(60일↓), PASS_MIN_DAYS(7일↑), "
-                "계정잠금 임계값(5↓), 패스워드 복잡도 모듈 적용 여부를 점검합니다.")
-        rec  = ("login.defs: PASS_MIN_LEN 8, PASS_MAX_DAYS 60, PASS_MIN_DAYS 7\n"
-                "PAM system-auth: pam_faillock deny=5 / pam_pwquality minlen=8\n"
+        desc = ("비밀번호 관리정책(복잡성·길이·변경주기) 설정 여부를 점검합니다.\n"
+                "2026년 주통기 개정: 개별 설정 항목 → 정책 기반 통합 점검\n"
+                "점검 대상: /etc/security/pwquality.conf, /etc/login.defs, PAM")
+        rec  = ("pwquality.conf: minlen=8, minclass=3 (또는 dcredit/ucredit/ocredit 설정)\n"
+                "login.defs: PASS_MAX_DAYS 60, PASS_MIN_DAYS 7\n"
+                "PAM system-auth: pam_faillock deny=5 / pam_pwquality 적용\n"
                 "pam_unix.so remember=5 (재사용 금지)")
 
         cmd = r"""echo "=== [패스워드 정책 점검 결과] ==="; \
-echo "1. 기본 설정 (/etc/login.defs)"; \
+echo "1. pwquality.conf (복잡성 정책)"; \
+cat /etc/security/pwquality.conf 2>/dev/null | grep -v "^#" | grep -v "^$"; \
+echo ""; echo "2. 기본 설정 (/etc/login.defs)"; \
 grep -E "PASS_MIN_LEN|PASS_MAX_DAYS|PASS_MIN_DAYS" /etc/login.defs 2>/dev/null; \
-echo ""; echo "2. 계정 잠금 정책 (PAM)"; \
+echo ""; echo "3. 계정 잠금 정책 (PAM)"; \
 grep -E "pam_tally|pam_faillock" /etc/pam.d/system-auth 2>/dev/null; \
-echo ""; echo "3. 패스워드 복잡성 규칙"; \
+echo ""; echo "4. 패스워드 복잡성 규칙 (PAM)"; \
 grep "password" /etc/pam.d/system-auth 2>/dev/null | grep "requisite"; \
-echo ""; echo "4. 패스워드 재사용 금지 (History)"; \
+echo ""; echo "5. 패스워드 재사용 금지 (History)"; \
 grep "pam_unix.so" /etc/pam.d/system-auth 2>/dev/null | grep "remember" """
 
         _, out, _ = self._run_shell(cmd)
@@ -382,9 +400,32 @@ grep "pam_unix.so" /etc/pam.d/system-auth 2>/dev/null | grep "remember" """
         max_days = self._login_defs("PASS_MAX_DAYS")
         min_days = self._login_defs("PASS_MIN_DAYS")
 
-        # 기준: 최소 길이 8↑, 최대 사용기간 60일↓, 최소 사용기간 7일↑
-        if min_len  is None or (isinstance(min_len,  int) and min_len  < 8):
-            issues.append(f"PASS_MIN_LEN={min_len} → 8자 이상 권고")
+        # pwquality.conf 복잡성 정책 확인 (2026 개정: 정책 파일 기반 점검)
+        pwq = self._read_file("/etc/security/pwquality.conf") or ""
+        pwq_minlen = None
+        pwq_minclass = None
+        for line in pwq.splitlines():
+            s = line.strip()
+            if s.startswith("#") or "=" not in s:
+                continue
+            k, _, v = s.partition("=")
+            k, v = k.strip(), v.strip()
+            if k == "minlen":
+                try: pwq_minlen = int(v)
+                except ValueError: pass
+            elif k == "minclass":
+                try: pwq_minclass = int(v)
+                except ValueError: pass
+
+        # pwquality.conf 기준 우선 적용
+        eff_minlen = pwq_minlen or min_len
+        if eff_minlen is None or (isinstance(eff_minlen, int) and eff_minlen < 8):
+            issues.append(f"비밀번호 최소 길이 = {eff_minlen} → 8자 이상 권고 "
+                          f"(pwquality.conf minlen={pwq_minlen}, login.defs PASS_MIN_LEN={min_len})")
+        if pwq_minclass is not None and pwq_minclass < 3:
+            issues.append(f"pwquality.conf minclass={pwq_minclass} → 3 이상(영문·숫자·특수문자) 권고")
+
+        # 기준: 최대 사용기간 60일↓, 최소 사용기간 7일↑
         if max_days is None or (isinstance(max_days, int) and max_days > 60):
             issues.append(f"PASS_MAX_DAYS={max_days} → 60일 이하 권고")
         if min_days is None or (isinstance(min_days, int) and min_days < 7):
@@ -562,6 +603,55 @@ grep "pam_unix.so" /etc/pam.d/system-auth 2>/dev/null | grep "remember" """
             self.safe(cid, name, Severity.MEDIUM, desc,
                       "UID 중복 없음",
                       rec, command=cmd, cmd_output="(중복 없음)")
+
+    def _a13(self):
+        """1.13 안전한 비밀번호 암호화 알고리즘 사용 (U-13 신규 — 2026)"""
+        cid, name = "1.13", "안전한 비밀번호 암호화 알고리즘 사용"
+        desc = ("/etc/shadow의 해시 접두사로 암호화 알고리즘을 점검합니다.\n"
+                "$6$ → SHA-512 (양호) / $5$ → SHA-256 (보통) / $1$ → MD5 (취약)")
+        rec  = ("SHA-512 전환:\n"
+                "  authconfig --passalgo=sha512 --update  (CentOS/RHEL)\n"
+                "  또는 /etc/pam.d/common-password에서 sha512 옵션 추가\n"
+                "  기존 계정은 패스워드 재설정 필요")
+
+        cmd = ("awk -F: 'NR>1 && $2 !~ /^[!*x]/ && length($2) > 3 "
+               "{print $1, $2}' /etc/shadow 2>/dev/null | head -30")
+        rc, out, _ = self._run_shell(cmd)
+
+        if not out.strip():
+            self.skipped(cid, name, Severity.HIGH, desc,
+                         "/etc/shadow 읽기 실패 또는 활성 계정 없음 — root 권한 필요",
+                         rec, command=cmd, cmd_output="")
+            return
+
+        vuln_list, warn_list = [], []
+        for line in out.splitlines():
+            parts = line.split()
+            if len(parts) < 2:
+                continue
+            user, h = parts[0], parts[1]
+            if h.startswith("$1$"):
+                vuln_list.append(f"{user}: MD5($1$) — 취약")
+            elif h.startswith("$2"):
+                vuln_list.append(f"{user}: bcrypt($2$) — 취약(비표준)")
+            elif h.startswith("$5$"):
+                warn_list.append(f"{user}: SHA-256($5$) — SHA-512 권고")
+
+        if vuln_list:
+            self.vulnerable(cid, name, Severity.HIGH, desc,
+                            f"취약 알고리즘 사용 계정 {len(vuln_list)}개:\n" +
+                            "\n".join(vuln_list) +
+                            (f"\nSHA-256 계정 {len(warn_list)}개:\n" + "\n".join(warn_list) if warn_list else ""),
+                            rec, command=cmd, cmd_output=out)
+        elif warn_list:
+            self.manual(cid, name, Severity.HIGH, desc,
+                        f"SHA-256 사용 계정 {len(warn_list)}개 — SHA-512 전환 권고:\n" +
+                        "\n".join(warn_list),
+                        rec, command=cmd, cmd_output=out)
+        else:
+            self.safe(cid, name, Severity.HIGH, desc,
+                      "모든 활성 계정이 SHA-512($6$) 사용 (양호)",
+                      rec, command=cmd, cmd_output=out)
 
     # ══════════════════════════════════════════════════════════
     # 2. 파일 시스템
@@ -1400,6 +1490,58 @@ grep "pam_unix.so" /etc/pam.d/system-auth 2>/dev/null | grep "remember" """
                       "/dev 내 일반 파일 없음 (양호)",
                       rec, command=cmd, cmd_output=out or "(출력 없음)")
 
+    def _b24(self):
+        """2.24 시스템 시작 스크립트 권한 설정 (U-17 신규 — 2026)"""
+        cid, name = "2.24", "시스템 시작 스크립트 권한 설정"
+        desc = ("/etc/rc.d, /etc/init.d 시작 스크립트가 root 소유이고 "
+                "other 쓰기 권한이 없는지(750 이하) 점검합니다.\n"
+                "초기 부팅 단계 백도어 설치(persistence) 방지 목적")
+        rec  = ("chown root /etc/rc.d/* /etc/init.d/*\n"
+                "chmod o-rwx /etc/rc.d/* /etc/init.d/*  (750 이하 유지)")
+
+        issues, any_found = [], False
+        cmd_parts, out_parts = [], []
+
+        for dir_path in ("/etc/rc.d", "/etc/init.d"):
+            cmd = f"ls -al {dir_path} 2>/dev/null"
+            cmd_parts.append(cmd)
+            rc2, dir_out, _ = self._run_shell(cmd)
+            out_parts.append(f"[{dir_path}]\n{dir_out or '(없음)'}")
+            if rc2 != 0 or not dir_out.strip():
+                continue
+            for line in dir_out.splitlines():
+                parts = line.split()
+                if len(parts) < 4 or line.startswith("total"):
+                    continue
+                fname = parts[-1]
+                if fname in (".", ".."):
+                    continue
+                perm_str, owner = parts[0], parts[2]
+                any_found = True
+                if owner != "root":
+                    issues.append(f"{dir_path}/{fname}: 소유자 {owner} (root 권고)")
+                # other 쓰기 비트 확인 (perm_str 인덱스 8 = other write)
+                if len(perm_str) >= 10 and perm_str[8] == "w":
+                    issues.append(f"{dir_path}/{fname}: other 쓰기 권한 ({perm_str})")
+
+        combined_cmd = "\n".join(cmd_parts)
+        combined_out = "\n\n".join(out_parts)
+
+        if not any_found:
+            self.skipped(cid, name, Severity.HIGH, desc,
+                         "/etc/rc.d, /etc/init.d 없음 — N/A (systemd 전용 환경)",
+                         rec, command=combined_cmd, cmd_output=combined_out)
+            return
+
+        if issues:
+            self.vulnerable(cid, name, Severity.HIGH, desc,
+                            f"권한 문제 {len(issues)}건:\n" + "\n".join(issues[:15]),
+                            rec, command=combined_cmd, cmd_output=combined_out)
+        else:
+            self.safe(cid, name, Severity.HIGH, desc,
+                      "시작 스크립트 소유자(root) 및 권한(other 쓰기 없음) 양호",
+                      rec, command=combined_cmd, cmd_output=combined_out)
+
     # ══════════════════════════════════════════════════════════
     # 3. 네트워크 서비스
     # ══════════════════════════════════════════════════════════
@@ -1742,6 +1884,263 @@ grep "pam_unix.so" /etc/pam.d/system-auth 2>/dev/null | grep "remember" """
                     "최신 보안 버전 여부는 https://www.isc.org/bind/ 에서 수동 확인 필요",
                     rec, command=combined_cmd, cmd_output=combined_out)
 
+    def _c11(self):
+        """3.11 DNS 동적 업데이트 설정 금지 (U-51 신규 — 2026)"""
+        cid, name = "3.11", "DNS 서비스 취약한 동적 업데이트 설정 금지"
+        desc = ("named.conf에서 allow-update가 any로 설정되어 누구나 DNS 레코드를 "
+                "수정할 수 있는지 점검합니다.")
+        rec  = ("named.conf에서 allow-update를 none 또는 인가된 IP로 제한:\n"
+                "  allow-update { none; };\n"
+                "  또는  allow-update { 192.168.1.0/24; };")
+
+        named_paths = ["/etc/named.conf", "/etc/bind/named.conf",
+                       "/etc/named/named.conf", "/usr/local/etc/named.conf"]
+        content = ""
+        found_path = ""
+        for p in named_paths:
+            c = self._read_file(p)
+            if c:
+                content = c
+                found_path = p
+                break
+
+        cmd = f"cat {found_path or '/etc/named.conf'} 2>/dev/null"
+        _, out, _ = self._run_shell(cmd)
+
+        # named 미실행 여부 확인
+        rc_ps, ps_out, _ = self._run_shell("ps -ef 2>/dev/null | grep named | grep -v grep")
+        if not ps_out.strip() and not content:
+            self.skipped(cid, name, Severity.HIGH, desc,
+                         "BIND DNS(named) 미실행 — N/A",
+                         rec, command=cmd, cmd_output=out or "(없음)")
+            return
+
+        if not content:
+            self.manual(cid, name, Severity.HIGH, desc,
+                        "named.conf 읽기 실패 — 수동 확인 필요",
+                        rec, command=cmd, cmd_output=out or "")
+            return
+
+        # allow-update any 확인
+        vuln = []
+        for line in content.splitlines():
+            s = line.strip().lower()
+            if s.startswith("#") or s.startswith("//"):
+                continue
+            if "allow-update" in s and "any" in s and "none" not in s:
+                vuln.append(line.strip())
+
+        if vuln:
+            self.vulnerable(cid, name, Severity.HIGH, desc,
+                            f"allow-update any 설정 발견 ({found_path}):\n" + "\n".join(vuln),
+                            rec, command=cmd, cmd_output=content[:500])
+        else:
+            self.safe(cid, name, Severity.HIGH, desc,
+                      f"allow-update 취약 설정 없음 ({found_path or '파일 없음'})",
+                      rec, command=cmd, cmd_output=content[:300] or out or "(없음)")
+
+    def _c12(self):
+        """3.12 Telnet 서비스 비활성화 (U-52 신규 — 2026)"""
+        cid, name = "3.12", "Telnet 서비스 비활성화"
+        desc = ("Telnet은 평문 통신 프로토콜로 도청·세션 가로채기에 취약합니다.\n"
+                "Telnet 서비스 실행 여부 및 23번 포트 리스닝 상태를 점검합니다.")
+        rec  = ("Telnet 비활성화:\n"
+                "  systemctl disable --now telnet.socket\n"
+                "  또는 xinetd telnet 서비스 disable\n"
+                "SSH(22) 사용으로 대체 권고")
+
+        cmd1 = "ps -ef 2>/dev/null | grep -E 'telnet|telnetd' | grep -v grep"
+        cmd2 = "systemctl is-active telnet.socket 2>/dev/null"
+        cmd3 = "ss -tlnp 2>/dev/null | grep ':23'"
+        combined_cmd = f"{cmd1}\n{cmd2}\n{cmd3}"
+        _, out1, _ = self._run_shell(cmd1)
+        _, out2, _ = self._run_shell(cmd2)
+        _, out3, _ = self._run_shell(cmd3)
+        combined_out = (f"[telnet 프로세스]\n{out1 or '(없음)'}\n\n"
+                        f"[systemctl 상태]\n{out2 or '(inactive/없음)'}\n\n"
+                        f"[23포트 리스닝]\n{out3 or '(없음)'}")
+
+        telnet_running = (out1.strip() or out2.strip() == "active" or out3.strip())
+        if telnet_running:
+            self.vulnerable(cid, name, Severity.HIGH, desc,
+                            "Telnet 서비스 실행 중 또는 23번 포트 리스닝",
+                            rec, command=combined_cmd, cmd_output=combined_out)
+        else:
+            self.safe(cid, name, Severity.HIGH, desc,
+                      "Telnet 서비스 미실행 (양호)",
+                      rec, command=combined_cmd, cmd_output=combined_out)
+
+    def _c13(self):
+        """3.13 FTP 보안 강화 (U-53/54/55 신규 — 2026)"""
+        cid, name = "3.13", "FTP 서비스 보안 강화 (정보노출·암호화·접근제어)"
+        desc = ("vsftpd.conf 점검:\n"
+                "  U-53: FTP 배너 정보 노출 제한 (ftpd_banner 설정)\n"
+                "  U-54: 암호화되지 않은 FTP 비활성화 (ssl_enable=YES)\n"
+                "  U-55: FTP 접근 제어 (tcp_wrappers/hosts_access)")
+        rec  = ("vsftpd.conf:\n"
+                "  ftpd_banner=FTP Service  (버전·OS 정보 노출 금지)\n"
+                "  ssl_enable=YES / rsa_cert_file=/etc/ssl/certs/...  (FTPS 활성화)\n"
+                "  tcp_wrappers=YES  (접근 제어 활성화)\n"
+                "  /etc/hosts.allow: vsftpd: <허용IP>")
+
+        ftp_conf = None
+        for p in ("/etc/vsftpd.conf", "/etc/vsftpd/vsftpd.conf"):
+            c = self._read_file(p)
+            if c:
+                ftp_conf = (p, c)
+                break
+
+        cmd = f"cat {ftp_conf[0] if ftp_conf else '/etc/vsftpd.conf'} 2>/dev/null"
+        _, out, _ = self._run_shell(cmd)
+
+        if ftp_conf is None:
+            self.skipped(cid, name, Severity.MEDIUM, desc,
+                         "vsftpd 미설치 또는 설정 파일 없음 — N/A",
+                         rec, command=cmd, cmd_output=out or "(없음)")
+            return
+
+        path, content = ftp_conf
+        issues = []
+
+        # U-53: ftpd_banner 설정 확인 (기본값은 서버 버전 포함)
+        has_banner = any("ftpd_banner" in l and not l.strip().startswith("#")
+                         for l in content.splitlines())
+        if not has_banner:
+            issues.append("U-53: ftpd_banner 미설정 — FTP 배너에 버전 정보 노출 가능")
+
+        # U-54: SSL/TLS 활성화 여부
+        ssl_enabled = any("ssl_enable=yes" in l.lower() and not l.strip().startswith("#")
+                          for l in content.splitlines())
+        if not ssl_enabled:
+            issues.append("U-54: ssl_enable=NO — 평문 FTP 사용 중 (FTPS 미적용)")
+
+        # U-55: tcp_wrappers 또는 접근 제어
+        tcp_wrap = any("tcp_wrappers=yes" in l.lower() and not l.strip().startswith("#")
+                       for l in content.splitlines())
+        hosts_allow = self._read_file("/etc/hosts.allow") or ""
+        has_ftp_acl = tcp_wrap or "vsftpd" in hosts_allow or "ftp" in hosts_allow
+        if not has_ftp_acl:
+            issues.append("U-55: FTP 접근 제어(tcp_wrappers, hosts.allow) 미설정")
+
+        if issues:
+            self.vulnerable(cid, name, Severity.MEDIUM, desc,
+                            f"{path} 설정 문제:\n" + "\n".join(issues),
+                            rec, command=cmd, cmd_output=content[:600] or out)
+        else:
+            self.safe(cid, name, Severity.MEDIUM, desc,
+                      "FTP 배너 제한·SSL·접근 제어 모두 양호",
+                      rec, command=cmd, cmd_output=content[:400] or out)
+
+    def _c14(self):
+        """3.14 SNMP 보안 설정 (U-59/61 신규 — 2026)"""
+        cid, name = "3.14", "안전한 SNMP 버전 및 접근 제어 설정"
+        desc = ("SNMP 서비스 사용 시 SNMPv3 사용 여부와 접근 제어(ACL) 설정을 점검합니다.\n"
+                "  U-59: 안전한 SNMP 버전 사용 (v3 권고)\n"
+                "  U-61: SNMP Access Control 설정 (community string default 변경)")
+        rec  = ("snmpd.conf:\n"
+                "  SNMPv3 사용: createUser authUser MD5 <passwd> DES <enckey>\n"
+                "  community string 기본값(public/private) 변경 또는 제거\n"
+                "  com2sec 로 접근 IP 제한: com2sec local localhost <community>")
+
+        snmp_conf = None
+        for p in ("/etc/snmp/snmpd.conf", "/etc/snmpd.conf"):
+            c = self._read_file(p)
+            if c:
+                snmp_conf = (p, c)
+                break
+
+        cmd1 = "ps -ef 2>/dev/null | grep snmpd | grep -v grep"
+        _, ps_out, _ = self._run_shell(cmd1)
+        cmd2 = f"cat {snmp_conf[0] if snmp_conf else '/etc/snmp/snmpd.conf'} 2>/dev/null"
+        _, out, _ = self._run_shell(cmd2)
+
+        if not ps_out.strip() and snmp_conf is None:
+            self.skipped(cid, name, Severity.HIGH, desc,
+                         "SNMP(snmpd) 미실행 — N/A",
+                         rec, command=f"{cmd1}\n{cmd2}", cmd_output=f"[snmpd]\n{ps_out or '(없음)'}")
+            return
+
+        if snmp_conf is None:
+            self.manual(cid, name, Severity.HIGH, desc,
+                        "snmpd.conf 읽기 실패 — 수동 확인 필요",
+                        rec, command=f"{cmd1}\n{cmd2}", cmd_output=ps_out or "")
+            return
+
+        path, content = snmp_conf
+        issues = []
+
+        # U-59: SNMPv3 사용 여부
+        has_v3 = any("createUser" in l or "rouser" in l or "rwuser" in l
+                     for l in content.splitlines()
+                     if not l.strip().startswith("#"))
+        # v1/v2c만 사용 중인지 확인
+        has_v1v2 = any("rocommunity" in l.lower() or "rwcommunity" in l.lower()
+                       for l in content.splitlines()
+                       if not l.strip().startswith("#"))
+
+        if not has_v3:
+            issues.append("U-59: SNMPv3 설정 없음 — v1/v2c는 평문 community string 사용으로 취약")
+
+        # U-61: 기본 community string 사용 여부
+        for line in content.splitlines():
+            s = line.strip().lower()
+            if s.startswith("#"):
+                continue
+            if ("rocommunity public" in s or "rwcommunity public" in s or
+                    "rocommunity private" in s or "rwcommunity private" in s):
+                issues.append(f"U-61: 기본 community string 사용 중: {line.strip()}")
+
+        if issues:
+            self.vulnerable(cid, name, Severity.HIGH, desc,
+                            "\n".join(issues),
+                            rec, command=f"{cmd1}\n{cmd2}",
+                            cmd_output=f"[snmpd 프로세스]\n{ps_out}\n\n[{path}]\n{content[:500]}")
+        else:
+            self.safe(cid, name, Severity.HIGH, desc,
+                      f"SNMP v3 설정 및 기본 community string 미사용 양호 ({path})",
+                      rec, command=f"{cmd1}\n{cmd2}",
+                      cmd_output=f"[snmpd]\n{ps_out}\n\n[{path}]\n{content[:300]}")
+
+    def _c15(self):
+        """3.15 sudo 명령어 접근 관리 (U-63 신규 — 2026)"""
+        cid, name = "3.15", "sudo 명령어 접근 관리"
+        desc = ("/etc/sudoers에서 ALL=(ALL) ALL 또는 NOPASSWD 설정으로 "
+                "불필요한 sudo 권한이 부여되어 있는지 점검합니다.")
+        rec  = ("visudo로 편집:\n"
+                "  특정 명령만 허용: username ALL=(ALL) /usr/bin/systemctl\n"
+                "  NOPASSWD 제거 또는 최소 범위로 제한\n"
+                "  %wheel ALL=(ALL) ALL  (wheel 그룹만 허용)")
+
+        cmd = "cat /etc/sudoers 2>/dev/null; cat /etc/sudoers.d/* 2>/dev/null"
+        _, out, _ = self._run_shell(cmd)
+
+        if not out.strip():
+            self.manual(cid, name, Severity.MEDIUM, desc,
+                        "/etc/sudoers 읽기 실패 — root 권한으로 수동 확인 필요",
+                        rec, command=cmd, cmd_output="")
+            return
+
+        issues = []
+        for line in out.splitlines():
+            s = line.strip()
+            if s.startswith("#") or not s:
+                continue
+            # ALL=(ALL) ALL 설정 (root가 아닌 일반 계정에)
+            if "ALL=(ALL) ALL" in s and not s.startswith("root") and not s.startswith("%wheel"):
+                issues.append(f"광범위한 sudo 권한: {s}")
+            # NOPASSWD 설정
+            if "NOPASSWD" in s and not s.startswith("#"):
+                issues.append(f"패스워드 없이 sudo 실행: {s}")
+
+        if issues:
+            self.vulnerable(cid, name, Severity.MEDIUM, desc,
+                            f"과도한 sudo 권한 설정 {len(issues)}건:\n" + "\n".join(issues[:10]),
+                            rec, command=cmd, cmd_output=out[:600])
+        else:
+            self.safe(cid, name, Severity.MEDIUM, desc,
+                      "sudo 권한이 최소한으로 설정됨 (양호)",
+                      rec, command=cmd, cmd_output=out[:400])
+
     # ══════════════════════════════════════════════════════════
     # 4. 로그 관리
     # ══════════════════════════════════════════════════════════
@@ -1838,6 +2237,105 @@ grep "pam_unix.so" /etc/pam.d/system-auth 2>/dev/null | grep "remember" """
 
         self.manual(cid, name, Severity.MEDIUM, desc,
                     "담당자 인터뷰 필요 — 로그 저장 기간 및 정기 백업 수행 여부 확인", rec)
+
+    def _d04(self):
+        """4.4 로그 디렉터리 소유자 및 권한 설정 (U-67 신규 — 2026)"""
+        cid, name = "4.4", "로그 디렉터리 소유자 및 권한 설정"
+        desc = ("/var/log 디렉터리 및 주요 로그 파일의 소유자가 root이고 "
+                "권한이 적절한지 점검합니다.\n"
+                "권고: /var/log 는 755 이하, 로그 파일은 640 이하")
+        rec  = ("chown root /var/log && chmod 755 /var/log\n"
+                "chmod 640 /var/log/messages /var/log/secure /var/log/auth.log 등")
+
+        cmd = "ls -al /var/log 2>/dev/null | head -30"
+        _, out, _ = self._run_shell(cmd)
+
+        # /var/log 디렉터리 자체 권한
+        r = self._stat("/var/log")
+        issues = []
+        if r:
+            perm, owner = r
+            if owner != "root":
+                issues.append(f"/var/log: 소유자 {owner} (root 권고)")
+            try:
+                if int(perm, 8) > 0o755:
+                    issues.append(f"/var/log: 권한 {perm} (755 초과)")
+            except ValueError:
+                pass
+
+        # 주요 로그 파일 권한 확인
+        log_files = ["/var/log/messages", "/var/log/secure",
+                     "/var/log/auth.log", "/var/log/syslog",
+                     "/var/log/kern.log", "/var/log/wtmp"]
+        for lf in log_files:
+            rf = self._stat(lf)
+            if rf is None:
+                continue
+            perm, owner = rf
+            if owner != "root":
+                issues.append(f"{lf}: 소유자 {owner} (root 권고)")
+            try:
+                if int(perm, 8) > 0o640:
+                    issues.append(f"{lf}: 권한 {perm} (640 초과)")
+            except ValueError:
+                pass
+
+        if issues:
+            self.vulnerable(cid, name, Severity.MEDIUM, desc,
+                            f"권한 문제 {len(issues)}건:\n" + "\n".join(issues),
+                            rec, command=cmd, cmd_output=out or "(출력 없음)")
+        else:
+            self.safe(cid, name, Severity.MEDIUM, desc,
+                      "/var/log 디렉터리 및 주요 로그 파일 권한 양호",
+                      rec, command=cmd, cmd_output=out or "(출력 없음)")
+
+    def _d05(self):
+        """4.5 NTP 시각 동기화 설정 (U-65 신규 — 2026)"""
+        cid, name = "4.5", "NTP 시각 동기화 설정"
+        desc = ("NTP(Network Time Protocol)가 설정되어 시스템 시각이 동기화되고 있는지 점검합니다.\n"
+                "로그 분석·포렌식·감사 추적의 신뢰성을 위해 필수")
+        rec  = ("NTP 동기화 설정:\n"
+                "  systemctl enable --now chronyd  (또는 ntpd)\n"
+                "  /etc/chrony.conf 또는 /etc/ntp.conf에 신뢰할 수 있는 NTP 서버 추가\n"
+                "  timedatectl set-ntp true")
+
+        cmd1 = "timedatectl status 2>/dev/null"
+        cmd2 = "chronyc tracking 2>/dev/null | head -5"
+        cmd3 = "ntpq -p 2>/dev/null | head -5"
+        combined_cmd = f"{cmd1}\n{cmd2}\n{cmd3}"
+        _, out1, _ = self._run_shell(cmd1)
+        _, out2, _ = self._run_shell(cmd2)
+        _, out3, _ = self._run_shell(cmd3)
+        combined_out = (f"[timedatectl]\n{out1 or '(없음)'}\n\n"
+                        f"[chrony tracking]\n{out2 or '(없음)'}\n\n"
+                        f"[ntpq]\n{out3 or '(없음)'}")
+
+        # NTP 동기화 여부 판단
+        ntp_synced = False
+        if out1:
+            for line in out1.splitlines():
+                if "NTP synchronized: yes" in line or "NTP service: active" in line:
+                    ntp_synced = True
+                    break
+        if out2.strip():  # chrony 응답 있으면 동기화 중
+            ntp_synced = True
+        if out3.strip():  # ntpq 응답 있으면 동기화 중
+            ntp_synced = True
+
+        if ntp_synced:
+            self.safe(cid, name, Severity.MEDIUM, desc,
+                      "NTP 시각 동기화 설정 및 동작 중 (양호)",
+                      rec, command=combined_cmd, cmd_output=combined_out)
+        else:
+            # timedatectl이 없는 경우 수동 확인
+            if not out1.strip():
+                self.manual(cid, name, Severity.MEDIUM, desc,
+                            "NTP 동기화 상태 확인 불가 — 수동 점검 필요",
+                            rec, command=combined_cmd, cmd_output=combined_out)
+            else:
+                self.vulnerable(cid, name, Severity.MEDIUM, desc,
+                                "NTP 동기화 미설정 또는 비활성화 상태",
+                                rec, command=combined_cmd, cmd_output=combined_out)
 
     # ══════════════════════════════════════════════════════════
     # 5. 주요 응용 설정

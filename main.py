@@ -27,12 +27,18 @@ YELLOW = lambda t: _color(t, "33")
 CYAN   = lambda t: _color(t, "36")
 BOLD   = lambda t: _color(t, "1")
 
-# ── 메뉴 정의 ────────────────────────────────────────────────────────────────
+# ── 가이드별 모듈 정의 ───────────────────────────────────────────────────────
 
-MODULES = {
+GUIDES = {
+    "1": "SK Shieldus 표준 보안 가이드",
+    "2": "주요정보통신기반시설 기술적 취약점 분석·평가 가이드",
+}
+
+# 가이드별 모듈 로더 (SK vs 주통기)
+_MODULES_SK = {
     "1": {
         "name": "OS - Linux",
-        "desc": "계정/패스워드, 파일 권한, SSH, 서비스, 로그, 커널",
+        "desc": "계정/패스워드, 파일 권한, SSH, 서비스, 로그, 커널  [58개 항목]",
         "loader": lambda: __import__("modules.os.linux_scanner", fromlist=["LinuxScanner"]).LinuxScanner,
     },
     "2": {
@@ -60,7 +66,53 @@ MODULES = {
         "desc": "계정/권한/보안설정/환경파일/감사 — 서버·Docker·AWS RDS 지원",
         "loader": lambda: __import__("modules.dbms.oracle_scanner", fromlist=["OracleScanner"]).OracleScanner,
     },
+    "7": {
+        "name": "Cloud - AWS",
+        "desc": "IAM · 보안그룹 · S3 · RDS · CloudTrail · VPC · 백업",
+        "loader": lambda: __import__("modules.cloud.aws_scanner", fromlist=["AWSScanner"]).AWSScanner,
+    },
 }
+
+_MODULES_JTK = {
+    "1": {
+        "name": "OS - Linux",
+        "desc": "계정/패스워드, 파일 권한, SSH, 서비스, 로그, 커널  [67개 항목, 주통기 2026]",
+        "loader": lambda: __import__("modules.os.linux_scanner_jtk", fromlist=["LinuxScanner"]).LinuxScanner,
+    },
+    "2": {
+        "name": "OS - Windows",
+        "desc": "계정 정책, 레지스트리, 감사 정책, RDP, SMB  [주통기 2026 추가 6개]",
+        "loader": lambda: __import__("modules.os.windows_scanner_jtk", fromlist=["WindowsScanner"]).WindowsScanner,
+    },
+    "3": {
+        "name": "WebServer - Nginx",
+        "desc": "버전 노출, 디렉토리 리스팅, SSL/TLS, 보안 헤더, 설정 권한",
+        "loader": lambda: __import__("modules.webserver.nginx_scanner", fromlist=["NginxScanner"]).NginxScanner,
+    },
+    "4": {
+        "name": "WebServer - IIS",
+        "desc": "디렉토리 브라우징, 버전 노출, HTTP 메서드, 로그, SSL",
+        "loader": lambda: __import__("modules.webserver.iis_scanner", fromlist=["IISScanner"]).IISScanner,
+    },
+    "5": {
+        "name": "DBMS (MySQL / PostgreSQL / MSSQL)",
+        "desc": "포트 노출, 기본 계정, 원격 root, 감사 로그  [주통기 2026 추가 5개]",
+        "loader": lambda: __import__("modules.dbms.dbms_scanner_jtk", fromlist=["DBMSScanner"]).DBMSScanner,
+    },
+    "6": {
+        "name": "DBMS - Oracle (11g/12c/18c/19c/21c)",
+        "desc": "계정/권한/보안설정/환경파일/감사 — 서버·Docker·AWS RDS 지원",
+        "loader": lambda: __import__("modules.dbms.oracle_scanner", fromlist=["OracleScanner"]).OracleScanner,
+    },
+    "7": {
+        "name": "Cloud - AWS",
+        "desc": "IAM · 보안그룹 · S3 · RDS · CloudTrail · VPC · 백업  [주통기 2026 추가 3개]",
+        "loader": lambda: __import__("modules.cloud.aws_scanner_jtk", fromlist=["AWSScanner"]).AWSScanner,
+    },
+}
+
+# 실행 시 선택된 가이드에 따라 MODULES가 결정됨
+MODULES = _MODULES_SK  # 기본값 (main()에서 교체)
 
 REPORT_FORMATS = {
     "1": ("Excel (.xlsx)", reporter.save_excel),
@@ -103,6 +155,29 @@ def _ask_secret(prompt: str) -> str:
     except (KeyboardInterrupt, EOFError):
         print("\n\n종료합니다.")
         sys.exit(0)
+
+def _select_guide() -> str:
+    """진단 기준 가이드 선택 → 'sk' 또는 'jtk' 반환"""
+    global MODULES
+    print(BOLD("진단 기준 가이드 선택"))
+    _hr()
+    print(f"  {BOLD('1')}) SK Shieldus 표준 보안 가이드")
+    print(f"     └ SK 내부 보안 가이드라인 기준 (원본 기준)")
+    print(f"  {BOLD('2')}) 주요정보통신기반시설 기술적 취약점 분석·평가 가이드")
+    print(f"     └ 과학기술정보통신부 주통기 가이드 기준 (2026 개정 반영)")
+    print()
+    while True:
+        choice = _ask("번호 선택", "1")
+        if choice == "1":
+            MODULES = _MODULES_SK
+            print(f"\n  {GREEN('✓')} SK Shieldus 표준 보안 가이드 선택됨")
+            return "sk"
+        if choice == "2":
+            MODULES = _MODULES_JTK
+            print(f"\n  {GREEN('✓')} 주요정보통신기반시설 가이드 선택됨")
+            return "jtk"
+        print(RED("  잘못된 선택입니다."))
+
 
 def _select_connection() -> str:
     print(BOLD("연결 방식 선택"))
@@ -339,6 +414,10 @@ def _run_scan(mod: dict, opts: dict) -> ScanReport:
 def main():
     _banner()
 
+    # 0. 진단 가이드 선택
+    guide = _select_guide()
+    print()
+
     # 1. 연결 방식 선택
     conn_mode = _select_connection()
     print()
@@ -356,6 +435,7 @@ def main():
     opts = _collect_options(mod["name"], target)
     if executor is not None:
         opts["executor"] = executor
+    opts["guide"] = guide  # 리포트에 가이드 정보 포함
 
     # 4. 리포트 형식
     formats = _select_report_format()
