@@ -58,10 +58,10 @@ spring:
 
 logging:
   level:
-    org.hibernate.SQL: WARN
-    org.springframework.security: INFO
-    org.springframework.web: INFO
-    com.rookies.sk: INFO
+    org.hibernate.SQL: DEBUG
+    org.springframework.security: DEBUG
+    org.springframework.web: DEBUG
+    com.rookies.sk: DEBUG
 
 jwt:
   secret: ${JWT_SECRET:your-very-secure-secret-key-at-least-256-bits-long}
